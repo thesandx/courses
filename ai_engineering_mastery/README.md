@@ -43,9 +43,13 @@ instead of fighting SDKs.
 | 07 | **[Context, Memory & Evals](module_07_context_memory_evals/README.md)** | Context-window budgeting, short/long-term memory, summarization, and a real eval harness (exact match, grounding, LLM-as-judge) |
 | 08 | **[Production AI Engineering](module_08_production/README.md)** | LLM gateway (routing, fallback), semantic caching, OpenTelemetry-style tracing, cost accounting, hallucination detection, honest benchmarking |
 | 🏆 | **[Capstone](capstone/README.md)** | *DeskMate* — a support-desk agentic RAG pipeline that applies every module, with evals and traces to prove it works |
+| 🌍 | **[Real-World API Track](real_world_track/README.md)** | The bridge to production: the same patterns against a live LLM API (OpenRouter / OpenAI-compatible) — real calls, real RAG with citations, real tool-calling agents, LLM-as-judge evals, LangChain workflows, real MCP, and a multi-agent swarm |
 
 ## Prerequisites & Tooling
-Python 3.11+ and a terminal — no third-party packages, no API keys.
+Python 3.11+ and a terminal — no third-party packages, no API keys for modules
+1–8 and the capstone. The [Real-World API Track](real_world_track/README.md) is
+the exception by design: it needs `pip install openai` (+ `langchain`, `mcp` for
+its later exercises) and an OpenRouter API key.
 
 ```bash
 python3 --version                                   # 3.11 or newer
