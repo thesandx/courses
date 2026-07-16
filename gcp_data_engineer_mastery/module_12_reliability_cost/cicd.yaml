@@ -1,0 +1,66 @@
+# ============================================================================
+# Module 12: CI/CD for data pipelines — Cloud Build
+#   Trigger: on PR -> validate + plan; on merge to main -> apply.
+#   gcloud builds submit --config cicd.yaml
+# ============================================================================
+steps:
+  # 1. Validate Terraform formatting & syntax.
+  - id: tf-fmt-validate
+    name: hashicorp/terraform:1.9
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        terraform fmt -check -recursive
+        terraform init -backend=false
+        terraform validate
+
+  # 2. Lint the Airflow DAGs (import-time errors fail the build).
+  - id: dag-lint
+    name: python:3.11
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        pip install 'apache-airflow-providers-google' >/dev/null
+        python -m py_compile dags/*.py
+
+  # 3. Plan (always) — the diff is attached to the PR for review.
+  - id: tf-plan
+    name: hashicorp/terraform:1.9
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        terraform init
+        terraform plan -out=tfplan -var project_id=$PROJECT_ID
+
+  # 4. Apply ONLY on the main branch (post-merge). Guarded by branch substitution.
+  - id: tf-apply
+    name: hashicorp/terraform:1.9
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        if [ "$BRANCH_NAME" = "main" ]; then
+          terraform apply -auto-approve tfplan
+        else
+          echo "Not main branch ($BRANCH_NAME) — skipping apply."
+        fi
+
+  # 5. Deploy DAGs to the Composer bucket (main only).
+  - id: deploy-dags
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        if [ "$BRANCH_NAME" = "main" ]; then
+          gcloud storage cp dags/*.py "$_DAG_BUCKET"
+        fi
+
+substitutions:
+  _DAG_BUCKET: "gs://REPLACE-with-dag_gcs_prefix"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
