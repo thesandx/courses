@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 05 — Spark on Dataproc: RAW→ODP→FDP, SCD2 &amp; Surrogate Keys ⑤⑥ (v0.5.0) · Data Platform Mastery</title>
+<meta name="description" content="Data Platform Mastery — build an open-source metadata-driven ETL platform on GCP.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚒️</text></svg>">
+<link rel="stylesheet" href="style.css">
+<script>
+  (function () {
+    var t = localStorage.getItem("dpm-theme");
+    if (!t) t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+</head>
+<body>
+<button class="menu-btn" id="menuBtn" aria-label="Toggle navigation">☰</button>
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">⚒️</span>
+      <span>
+        <span class="brand-title">Data Platform Mastery</span>
+        <span class="brand-sub">Build PipeForge on GCP</span>
+      </span>
+    </a>
+    <nav><div class="nav-group">Start Here</div>
+<a class="nav-item" href="index.html">Course Overview</a>
+<a class="nav-item" href="project-charter.html">Project Charter</a>
+<a class="nav-item" href="interview-map.html">Interview Map</a>
+<div class="nav-group">Build Phases</div>
+<a class="nav-item" href="phase-00.html">00 · Orientation</a>
+<a class="nav-item" href="phase-01.html">01 · Foundation<span class="tag">v0.1.0</span></a>
+<a class="nav-item" href="phase-02.html">02 · Metadata Core<span class="tag">v0.2.0</span></a>
+<a class="nav-item" href="phase-03.html">03 · Batch Ingestion<span class="tag">v0.3.0</span></a>
+<a class="nav-item" href="phase-04.html">04 · Streaming &amp; Kafka<span class="tag">v0.4.0</span></a>
+<a class="nav-item active" href="phase-05.html">05 · Spark Processing<span class="tag">v0.5.0</span></a>
+<a class="nav-item" href="phase-06.html">06 · BigQuery Serving<span class="tag">v0.6.0</span></a>
+<a class="nav-item" href="phase-07.html">07 · Orchestration<span class="tag">v0.7.0</span></a>
+<a class="nav-item" href="phase-08.html">08 · Quality &amp; Recon<span class="tag">v0.8.0</span></a>
+<a class="nav-item" href="phase-09.html">09 · Governance<span class="tag">v0.9.0</span></a>
+<a class="nav-item" href="phase-10.html">10 · Observability &amp; FinOps<span class="tag">v0.10.0</span></a>
+<a class="nav-item" href="phase-11.html">11 · Streamlit Control Plane<span class="tag">v0.11.0</span></a>
+<a class="nav-item" href="phase-12.html">12 · Platform APIs<span class="tag">v0.12.0</span></a>
+<a class="nav-item" href="phase-13.html">13 · Scale &amp; Hardening<span class="tag">v0.13.0</span></a>
+<a class="nav-item" href="phase-14.html">14 · Open-Source Launch<span class="tag">v1.0.0</span></a>
+<div class="nav-group">Endgame</div>
+<a class="nav-item" href="interview-gauntlet.html">Interview Gauntlet<span class="tag">🎯</span></a></nav>
+    <div class="sidebar-foot">
+      <button id="themeBtn" class="theme-btn" title="Toggle dark mode">🌗 Theme</button>
+      <a href="https://github.com/thesandx/courses/tree/master/data_platform_mastery">GitHub ↗</a>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="crumbs">
+      <span class="crumb-group">Build Phases</span>
+      <span class="crumb-sep">/</span>
+      <span class="crumb-page">05 · Spark Processing</span>
+      <span class="badge">v0.5.0</span>
+    </header>
+    <div class="content-wrap">
+      <main class="content">
+<h1 id="phase-05-spark-on-dataproc-rawodpfdp-scd2-surrogate-keys-56-v050">Phase 05 — Spark on Dataproc: RAW→ODP→FDP, SCD2 &amp; Surrogate Keys ⑤⑥ (<code>v0.5.0</code>)<a class="headerlink" href="#phase-05-spark-on-dataproc-rawodpfdp-scd2-surrogate-keys-56-v050" title="Link to this section">#</a></h1>
+<blockquote>
+<p><strong>Mission:</strong> distributed processing enters the platform. PySpark jobs on
+<strong>Dataproc Serverless</strong> promote RAW to a typed, deduplicated, event-date-
+partitioned ODP (Parquet on GCS, exposed to BigQuery via BigLake), and build the
+FDP layer with <strong>SCD Type-2 history</strong> and <strong>surrogate keys</strong> using the
+Spark-computes / BigQuery-MERGEs hybrid pattern. Late data handled by design.</p>
+</blockquote>
+<h2 id="1-concepts">1. Concepts<a class="headerlink" href="#1-concepts" title="Link to this section">#</a></h2>
+<p>Read notes <strong>§29 (Spark internals)</strong>, <strong>§17 (late data)</strong>, <strong>§18 (dedup)</strong>,
+<strong>§22 (medallion)</strong>, <strong>§6 (SCD strategy)</strong>; GCP <strong>M08 (Dataproc)</strong>.</p>
+<p><strong>Layer semantics you are implementing (charter §3):</strong></p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Transition</th>
+<th>What happens</th>
+<th>Write pattern</th>
+<th>Partitioning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RAW→ODP</td>
+<td>parse, type-cast per contract, normalize names, <strong>dedup</strong>, add <code>_pf_*</code> audit cols</td>
+<td><strong>dynamic partition overwrite</strong></td>
+<td>by <strong>event_date</strong> (business time starts here — §17)</td>
+</tr>
+<tr>
+<td>ODP→FDP</td>
+<td>conform, <strong>SCD2</strong> for dims, surrogate keys, tokenized PII (P09)</td>
+<td>staging + <strong>MERGE</strong></td>
+<td>business date / current-flag</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Why the ingestion-date→event-date flip at ODP?</strong> RAW partitions by when data
+<em>arrived</em> (predictable, append-safe). Analytics needs <em>when it happened</em>. The
+promotion job reads arrival-partitioned input and writes event-partitioned output —
+and because late events land in old event_date partitions, the job processes a
+<strong>lookback window</strong>: running for execution_date D rewrites event_date partitions
+[D−2, D]. That one sentence is the §17 "append &amp; compact + grace period" strategy
+in production form.</p>
+<p><strong>The dedup you promised in Phase 4</strong> — the ROW_NUMBER pattern (§18), verbatim:</p>
+<div class="highlight"><pre><span></span><code><span class="n">w</span> <span class="o">=</span> <span class="n">Window</span><span class="o">.</span><span class="n">partitionBy</span><span class="p">(</span><span class="s2">&quot;event_id&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">orderBy</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s2">&quot;event_ts&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">desc</span><span class="p">(),</span>
+                                           <span class="n">F</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s2">&quot;_pf_ingested_at&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">desc</span><span class="p">())</span>
+<span class="n">deduped</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">withColumn</span><span class="p">(</span><span class="s2">&quot;rn&quot;</span><span class="p">,</span> <span class="n">F</span><span class="o">.</span><span class="n">row_number</span><span class="p">()</span><span class="o">.</span><span class="n">over</span><span class="p">(</span><span class="n">w</span><span class="p">))</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="s2">&quot;rn = 1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="s2">&quot;rn&quot;</span><span class="p">)</span>
+</code></pre></div>
+<p><strong>SCD2 (⑤):</strong> dims keep full history with <code>effective_from</code>, <code>effective_to</code>,
+<code>is_current</code>. Use it where reporting accuracy depends on historical attribute
+values (customer tier at <em>order time</em> — §6). You'll join facts to dims <em>as-of
+event time</em> in Phase 6, the late-arriving-fact pattern (§17).</p>
+<p><strong>Surrogate keys (⑥):</strong> deterministic hash of (tenant, natural key):
+<code>sha256("novamart|customer|C123")[:16]</code>. Why hash over sequence? Idempotent
+(re-runs produce identical keys — no coordination state), parallel-safe, stable
+across backfills. Tradeoff to be able to recite: theoretical collisions
+(negligible at 64+ bits for your cardinality — do the birthday math), and keys are
+opaque/wide vs compact ints. A <code>key_map</code> table in FDP records natural→surrogate
+for debugging and GDPR lookups.</p>
+<p><strong>Spark-computes / BigQuery-MERGEs:</strong> the Spark BigQuery connector can't run
+<code>MERGE</code>. So Spark writes the <em>change set</em> to a BQ staging table, then the
+framework executes one atomic <code>MERGE</code> in BigQuery. Heavy lifting distributed,
+mutation atomic — a genuinely common production pattern, and a tidy answer to
+"how do you get idempotent upserts out of Spark?"</p>
+<h2 id="2-build">2. Build<a class="headerlink" href="#2-build" title="Link to this section">#</a></h2>
+<h3 id="21-terraform-for-dataproc-serverless">2.1 Terraform for Dataproc Serverless<a class="headerlink" href="#21-terraform-for-dataproc-serverless" title="Link to this section">#</a></h3>
+<p>Serverless batches need a subnet with Private Google Access; add a <code>network</code>
+module (VPC + subnet + PGA + firewall) and a <code>dataproc</code> module granting the
+pipeline SA <code>roles/dataproc.worker</code>, plus a BQ dataset <code>odp</code> and the BigLake
+connection for external tables. Also grant the SA <code>roles/bigquery.jobUser</code> and
+dataset-level write on <code>fdp_staging</code>/<code>fdp</code>.</p>
+<h3 id="22-job-scaffolding-srcpipeforgeprocessingspark">2.2 Job scaffolding — <code>src/pipeforge/processing/spark/</code><a class="headerlink" href="#22-job-scaffolding-srcpipeforgeprocessingspark" title="Link to this section">#</a></h3>
+<p><code>session.py</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">spark_session</span><span class="p">(</span><span class="n">app</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SparkSession</span><span class="p">:</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">SparkSession</span><span class="o">.</span><span class="n">builder</span><span class="o">.</span><span class="n">appName</span><span class="p">(</span><span class="n">app</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">config</span><span class="p">(</span><span class="s2">&quot;spark.sql.sources.partitionOverwriteMode&quot;</span><span class="p">,</span> <span class="s2">&quot;dynamic&quot;</span><span class="p">)</span>  <span class="c1"># idempotent partition writes</span>
+        <span class="o">.</span><span class="n">config</span><span class="p">(</span><span class="s2">&quot;spark.sql.adaptive.enabled&quot;</span><span class="p">,</span> <span class="s2">&quot;true&quot;</span><span class="p">)</span>                   <span class="c1"># AQE: runtime coalesce/skew (§29)</span>
+        <span class="o">.</span><span class="n">config</span><span class="p">(</span><span class="s2">&quot;spark.sql.session.timeZone&quot;</span><span class="p">,</span> <span class="s2">&quot;UTC&quot;</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">getOrCreate</span><span class="p">())</span>
+</code></pre></div>
+<p><code>standardize.py</code> (RAW→ODP, one job for ALL datasets — parameter-driven):</p>
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="n">dataset_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">execution_date</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">lookback_days</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">ds</span><span class="p">,</span> <span class="n">contract</span> <span class="o">=</span> <span class="n">load_registry</span><span class="p">(</span><span class="n">dataset_name</span><span class="p">)</span>          <span class="c1"># reads Phase-2 metadata</span>
+    <span class="n">spark</span> <span class="o">=</span> <span class="n">spark_session</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;odp-</span><span class="si">{</span><span class="n">dataset_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="c1"># 1. Read only complete batches for the window (manifests are the source of truth)</span>
+    <span class="n">paths</span> <span class="o">=</span> <span class="n">latest_complete_batches</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="n">execution_date</span><span class="p">,</span> <span class="n">lookback_days</span><span class="p">)</span>
+    <span class="n">raw</span> <span class="o">=</span> <span class="n">read_source_native</span><span class="p">(</span><span class="n">spark</span><span class="p">,</span> <span class="n">ds</span><span class="p">,</span> <span class="n">paths</span><span class="p">)</span>          <span class="c1"># csv/jsonl/parquet per contract</span>
+
+    <span class="c1"># 2. Type-cast from the contract (contract-driven casting = zero per-dataset code)</span>
+    <span class="n">typed</span> <span class="o">=</span> <span class="n">cast_per_contract</span><span class="p">(</span><span class="n">raw</span><span class="p">,</span> <span class="n">contract</span><span class="p">)</span>            <span class="c1"># bad casts -&gt; _pf_cast_errors column</span>
+
+    <span class="c1"># 3. Audit columns</span>
+    <span class="n">typed</span> <span class="o">=</span> <span class="p">(</span><span class="n">typed</span>
+        <span class="o">.</span><span class="n">withColumn</span><span class="p">(</span><span class="s2">&quot;_pf_ingested_at&quot;</span><span class="p">,</span> <span class="n">F</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s2">&quot;_pf_ingested_at&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="s2">&quot;timestamp&quot;</span><span class="p">))</span>
+        <span class="o">.</span><span class="n">withColumn</span><span class="p">(</span><span class="s2">&quot;_pf_batch_id&quot;</span><span class="p">,</span> <span class="n">F</span><span class="o">.</span><span class="n">input_file_name</span><span class="p">())</span>
+        <span class="o">.</span><span class="n">withColumn</span><span class="p">(</span><span class="s2">&quot;event_date&quot;</span><span class="p">,</span> <span class="n">F</span><span class="o">.</span><span class="n">to_date</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="n">ds</span><span class="o">.</span><span class="n">business_date_column</span><span class="p">))))</span>
+
+    <span class="c1"># 4. Dedup (ROW_NUMBER pattern) on primary keys</span>
+    <span class="n">deduped</span><span class="p">,</span> <span class="n">dup_count</span> <span class="o">=</span> <span class="n">dedup</span><span class="p">(</span><span class="n">typed</span><span class="p">,</span> <span class="n">ds</span><span class="o">.</span><span class="n">primary_keys</span><span class="p">,</span> <span class="n">order_col</span><span class="o">=</span><span class="n">ds</span><span class="o">.</span><span class="n">business_date_column</span><span class="p">)</span>
+
+    <span class="c1"># 5. Write: dynamic partition overwrite of ONLY the touched event_date partitions</span>
+    <span class="p">(</span><span class="n">deduped</span><span class="o">.</span><span class="n">write</span><span class="o">.</span><span class="n">mode</span><span class="p">(</span><span class="s2">&quot;overwrite&quot;</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">partitionBy</span><span class="p">(</span><span class="s2">&quot;event_date&quot;</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">parquet</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;gs://</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">odp_bucket</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">dataset_name</span><span class="si">}</span><span class="s2">/&quot;</span><span class="p">))</span>
+
+    <span class="n">emit_audit</span><span class="p">(</span><span class="n">rows_read</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">count</span><span class="p">(),</span> <span class="n">rows_written</span><span class="o">=</span><span class="n">deduped</span><span class="o">.</span><span class="n">count</span><span class="p">(),</span>
+               <span class="n">rows_deduped</span><span class="o">=</span><span class="n">dup_count</span><span class="p">)</span>                  <span class="c1"># -&gt; pipeline_run</span>
+</code></pre></div>
+<p>Target file sizes while writing: aim for the 100 MB–1 GB sweet spot (§11);
+<code>coalesce()</code> small datasets to 1 file — streaming micro-batches will otherwise
+give you the <strong>small-file problem</strong>; schedule a weekly compaction of clickstream
+ODP partitions (this is your §11 "compaction is mandatory" checkbox).</p>
+<p><code>scd2.py</code> (ODP→FDP for dims) — the algorithm, which you should be able to
+whiteboard cold by the end of this phase:</p>
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">build_scd2_changeset</span><span class="p">(</span><span class="n">spark</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">execution_date</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compare today&#39;s ODP snapshot of a dim against current FDP rows.</span>
+<span class="sd">    Emit a changeset with row_action in {INSERT_NEW, CLOSE_AND_INSERT}.&quot;&quot;&quot;</span>
+    <span class="n">incoming</span> <span class="o">=</span> <span class="n">spark</span><span class="o">.</span><span class="n">read</span><span class="o">.</span><span class="n">parquet</span><span class="p">(</span><span class="n">odp_path</span><span class="p">(</span><span class="n">dataset</span><span class="p">))</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;event_date &lt;= &#39;</span><span class="si">{</span><span class="n">execution_date</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
+    <span class="n">incoming</span> <span class="o">=</span> <span class="n">latest_per_key</span><span class="p">(</span><span class="n">incoming</span><span class="p">,</span> <span class="n">dataset</span><span class="o">.</span><span class="n">primary_keys</span><span class="p">)</span>        <span class="c1"># ROW_NUMBER again</span>
+    <span class="n">incoming</span> <span class="o">=</span> <span class="n">incoming</span><span class="o">.</span><span class="n">withColumn</span><span class="p">(</span><span class="s2">&quot;sk&quot;</span><span class="p">,</span> <span class="n">surrogate_key</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="o">*</span><span class="n">dataset</span><span class="o">.</span><span class="n">primary_keys</span><span class="p">))</span> \
+                       <span class="o">.</span><span class="n">withColumn</span><span class="p">(</span><span class="s2">&quot;attr_hash&quot;</span><span class="p">,</span> <span class="n">F</span><span class="o">.</span><span class="n">sha2</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">concat_ws</span><span class="p">(</span><span class="s2">&quot;|&quot;</span><span class="p">,</span> <span class="o">*</span><span class="n">tracked_attrs</span><span class="p">),</span> <span class="mi">256</span><span class="p">))</span>
+
+    <span class="n">current</span> <span class="o">=</span> <span class="n">read_bq</span><span class="p">(</span><span class="n">spark</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;fdp.dim_</span><span class="si">{</span><span class="n">dataset</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="s2">&quot;is_current&quot;</span><span class="p">)</span>
+
+    <span class="n">joined</span> <span class="o">=</span> <span class="n">incoming</span><span class="o">.</span><span class="n">alias</span><span class="p">(</span><span class="s2">&quot;n&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">current</span><span class="o">.</span><span class="n">alias</span><span class="p">(</span><span class="s2">&quot;c&quot;</span><span class="p">),</span>
+                                      <span class="n">on</span><span class="o">=</span><span class="n">dataset</span><span class="o">.</span><span class="n">primary_keys</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">)</span>
+    <span class="n">new_keys</span>  <span class="o">=</span> <span class="n">joined</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="s2">&quot;c.sk IS NULL&quot;</span><span class="p">)</span>                          <span class="c1"># never seen</span>
+    <span class="n">changed</span>   <span class="o">=</span> <span class="n">joined</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="s2">&quot;c.sk IS NOT NULL AND n.attr_hash != c.attr_hash&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">new_keys</span><span class="p">,</span> <span class="n">changed</span>
+</code></pre></div>
+<p>Then the framework runs the atomic close-and-insert in BigQuery (one script,
+<code>serving/sql/scd2_merge.sql.j2</code>, rendered per dataset):</p>
+<div class="highlight"><pre><span></span><code><span class="n">MERGE</span><span class="w"> </span><span class="o">`</span><span class="n">fdp</span><span class="p">.</span><span class="n">dim_</span><span class="err">{{</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="err">}}</span><span class="o">`</span><span class="w"> </span><span class="n">t</span>
+<span class="k">USING</span><span class="w"> </span><span class="o">`</span><span class="n">fdp_staging</span><span class="p">.</span><span class="n">dim_</span><span class="err">{{</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="err">}}</span><span class="n">_changes_</span><span class="err">{{</span><span class="w"> </span><span class="n">ds_nodash</span><span class="w"> </span><span class="err">}}</span><span class="o">`</span><span class="w"> </span><span class="n">s</span>
+<span class="k">ON</span><span class="w"> </span><span class="n">t</span><span class="p">.</span><span class="err">{{</span><span class="w"> </span><span class="n">nk</span><span class="w"> </span><span class="err">}}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">s</span><span class="p">.</span><span class="err">{{</span><span class="w"> </span><span class="n">nk</span><span class="w"> </span><span class="err">}}</span><span class="w"> </span><span class="k">AND</span><span class="w"> </span><span class="n">t</span><span class="p">.</span><span class="n">is_current</span>
+<span class="k">WHEN</span><span class="w"> </span><span class="n">MATCHED</span><span class="w"> </span><span class="k">AND</span><span class="w"> </span><span class="n">s</span><span class="p">.</span><span class="n">row_action</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;CLOSE_AND_INSERT&#39;</span><span class="w"> </span><span class="k">THEN</span>
+<span class="w">  </span><span class="k">UPDATE</span><span class="w"> </span><span class="k">SET</span><span class="w"> </span><span class="n">t</span><span class="p">.</span><span class="n">is_current</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">FALSE</span><span class="p">,</span><span class="w"> </span><span class="n">t</span><span class="p">.</span><span class="n">effective_to</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">s</span><span class="p">.</span><span class="n">effective_from</span>
+<span class="k">WHEN</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="n">MATCHED</span><span class="w"> </span><span class="k">BY</span><span class="w"> </span><span class="n">TARGET</span><span class="w"> </span><span class="k">THEN</span>
+<span class="w">  </span><span class="k">INSERT</span><span class="w"> </span><span class="p">(</span><span class="err">{{</span><span class="w"> </span><span class="n">cols</span><span class="w"> </span><span class="err">}}</span><span class="p">,</span><span class="w"> </span><span class="n">effective_from</span><span class="p">,</span><span class="w"> </span><span class="n">effective_to</span><span class="p">,</span><span class="w"> </span><span class="n">is_current</span><span class="p">)</span>
+<span class="w">  </span><span class="k">VALUES</span><span class="w"> </span><span class="p">(</span><span class="err">{{</span><span class="w"> </span><span class="n">cols</span><span class="w"> </span><span class="err">}}</span><span class="p">,</span><span class="w"> </span><span class="n">s</span><span class="p">.</span><span class="n">effective_from</span><span class="p">,</span><span class="w"> </span><span class="k">TIMESTAMP</span><span class="w"> </span><span class="s1">&#39;9999-12-31&#39;</span><span class="p">,</span><span class="w"> </span><span class="k">TRUE</span><span class="p">);</span>
+<span class="c1">-- Second statement inserts the new versions for CLOSE_AND_INSERT keys;</span>
+<span class="c1">-- both run in one multi-statement transaction =&gt; atomic, re-runnable.</span>
+</code></pre></div>
+<p>Re-run safety: the changeset for a re-run is empty (attr_hash matches) — SCD2 via
+MERGE is idempotent <em>by construction</em>. That's the interview line.</p>
+<p><code>sessionize.py</code> (clickstream ODP→FDP <code>fct_sessions</code>): sessions = gaps &gt; 30 min per
+customer — lag/window functions, event-time based. This job is your shuffle/skew
+laboratory (a handful of bot customers with 100x events — you'll fix them in P13).</p>
+<h3 id="23-submitting-to-dataproc-serverless">2.3 Submitting to Dataproc Serverless<a class="headerlink" href="#23-submitting-to-dataproc-serverless" title="Link to this section">#</a></h3>
+<div class="highlight"><pre><span></span><code>gcloud<span class="w"> </span>dataproc<span class="w"> </span>batches<span class="w"> </span>submit<span class="w"> </span>pyspark<span class="w"> </span>src/pipeforge/processing/spark/standardize.py<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--project<span class="w"> </span><span class="nv">$PROJECT_ID</span><span class="w"> </span>--region<span class="w"> </span>us-central1<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--deps-bucket<span class="w"> </span>gs://<span class="nv">$PROJECT_ID</span>-pf-dev-artifacts<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--subnet<span class="w"> </span>pf-dev-subnet<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--service-account<span class="w"> </span>pf-dev-pipeline@<span class="nv">$PROJECT_ID</span>.iam.gserviceaccount.com<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--properties<span class="w"> </span>spark.executor.instances<span class="o">=</span><span class="m">2</span>,spark.driver.memory<span class="o">=</span>4g<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--<span class="w"> </span>--dataset<span class="w"> </span>clickstream<span class="w"> </span>--execution-date<span class="w"> </span><span class="m">2026</span>-07-15
+</code></pre></div>
+<p>Wrap it as <code>pipeforge spark submit --job standardize --dataset clickstream
+--execution-date …</code> (packages your wheel to the artifacts bucket first). Also
+support <code>--local</code> (spark-submit against local files) — the dev loop must not cost
+money or minutes.</p>
+<p><strong>Read the Spark UI once per job</strong> (Dataproc batch → "View Spark UI"): find the
+shuffle boundary of the dedup (Exchange in the plan), note task counts, spot the
+sessionization skew in the task-duration histogram. Interviews love "in the Spark
+UI I saw…" sentences (§29).</p>
+<h3 id="24-biglake-external-tables-over-odp">2.4 BigLake external tables over ODP<a class="headerlink" href="#24-biglake-external-tables-over-odp" title="Link to this section">#</a></h3>
+<p>Terraform <code>google_bigquery_table</code> with <code>external_data_configuration</code>
+(hive partitioning on <code>event_date</code>) for each ODP dataset → analysts can
+<code>SELECT … WHERE event_date = …</code> and BigQuery prunes partitions. Compare bytes
+scanned with/without the filter (<code>--dry_run</code>) and write the numbers in the ADR.</p>
+<h3 id="25-ship-it">2.5 Ship it<a class="headerlink" href="#25-ship-it" title="Link to this section">#</a></h3>
+<p>Tests (run Spark locally in pytest — <code>pyspark</code> is just a pip dep): dedup keeps the
+right row, contract casting quarantines bad types, SCD2 changeset on a crafted
+day-1/day-2 fixture (new key, changed attr, unchanged, re-run ⇒ empty), surrogate
+keys stable across runs. Tag <code>v0.5.0</code>.</p>
+<h2 id="3-prove-it">3. Prove it<a class="headerlink" href="#3-prove-it" title="Link to this section">#</a></h2>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> ODP clickstream: zero duplicate <code>event_id</code> (<code>SELECT event_id, COUNT(*) … HAVING COUNT(*)&gt;1</code> → empty) even though RAW had Phase-4 rebalance duplicates — <strong>effectively-once demonstrated</strong></li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Late rows landed in D−1/D−2 event_date partitions (generator <code>--late-fraction</code>)</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <code>dim_customers</code> SCD2: churned customer has 2 rows, old one closed with <code>effective_to</code> = new <code>effective_from</code>, one <code>is_current</code></li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Re-run FDP job for same date twice → identical table state (row counts + checksums)</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Same natural key → same surrogate key across two independent backfill runs</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Dataproc batch completes with 2 executors; you can screenshot the shuffle stage</li>
+</ul>
+<h2 id="4-break-it">4. Break it<a class="headerlink" href="#4-break-it" title="Link to this section">#</a></h2>
+<ol>
+<li><strong>The 2x-revenue classic (§7):</strong> temporarily switch ODP write mode to <code>append</code>,
+   run the same date twice, watch counts double in a scratch copy. Revert. Now you
+   have <em>personally caused</em> the incident every interviewer asks about.
+   <code>docs/incidents/005-append-double-count.md</code>.</li>
+<li>Feed a <code>products</code> file where <code>unit_price_usd</code> becomes <code>unit_price</code> (the Phase-2
+   rename prediction): watch contract casting quarantine 100% of rows and the run
+   fail its volume check. The prediction file from Phase 2 gets its "verified" note.</li>
+</ol>
+<h2 id="5-interview-corner">5. Interview corner<a class="headerlink" href="#5-interview-corner" title="Link to this section">#</a></h2>
+<ul>
+<li>Whiteboard SCD2 end-to-end in &lt; 5 min: changeset (hash compare) → atomic
+  close-and-insert MERGE → as-of join. Include <code>effective_from/to</code>, <code>is_current</code>.</li>
+<li><em>"How do you handle late data?"</em> → event-time partitioning + lookback rewrite +
+  "data complete through X" honesty (§17) — with your <code>--late-fraction</code> demo as proof.</li>
+<li><em>"Why not process everything in BigQuery SQL?"</em> / <em>"Why not all Spark?"</em> — the
+  hybrid: distributed transform where Python/complexity lives, atomic MERGE where
+  the warehouse is strongest. Also know the pure-ELT (dbt) counter-position (§32).</li>
+<li>Recite the four dedup layers (§18) — you now run all four.</li>
+</ul>
+<h2 id="6-stretch-goals">6. Stretch goals<a class="headerlink" href="#6-stretch-goals" title="Link to this section">#</a></h2>
+<ul>
+<li><strong>Iceberg on BigLake metastore</strong>: rebuild ODP as Iceberg tables; Spark
+  <code>MERGE INTO</code> natively; time-travel a bad write away (§35). Compare with the
+  staging+MERGE hybrid in an ADR.</li>
+<li>CDC realism: run Debezium in docker against the MySQL source, land the change
+  stream to Kafka, and extend <code>scd2.py</code> to consume op-coded events (§23, §37) —
+  including the delete events your watermark loader misses.</li>
+<li><code>EXPLAIN</code> both MERGE strategies in BQ; measure slot-time.</li>
+</ul>
+        <nav class="pager">
+          <a class="prev" href="phase-04.html"><span class="dir">← Previous</span><span class="label">04 · Streaming &amp; Kafka</span></a>
+          <a class="next" href="phase-06.html"><span class="dir">Next →</span><span class="label">06 · BigQuery Serving</span></a>
+        </nav>
+        <footer class="page-foot">
+          Generated from <a href="https://github.com/thesandx/courses/blob/master/data_platform_mastery/phase_05_spark_processing/README.md"><code>data_platform_mastery/phase_05_spark_processing/README.md</code></a> ·
+          Part of the <a href="index.html">Data Platform Mastery</a> course.
+        </footer>
+      </main>
+      <aside class="toc-rail"><div class="toc-title">On this page</div>
+<a href="#1-concepts">1. Concepts</a>
+<a href="#2-build">2. Build</a>
+<a href="#3-prove-it">3. Prove it</a>
+<a href="#4-break-it">4. Break it</a>
+<a href="#5-interview-corner">5. Interview corner</a>
+<a href="#6-stretch-goals">6. Stretch goals</a></aside>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById("themeBtn").addEventListener("click", function () {
+    var cur = document.documentElement.getAttribute("data-theme");
+    localStorage.setItem("dpm-theme", cur === "dark" ? "light" : "dark");
+    location.reload();   // simplest way to re-render mermaid + pygments in the new theme
+  });
+  document.getElementById("menuBtn").addEventListener("click", function () {
+    document.getElementById("sidebar").classList.toggle("open");
+  });
+</script>
+</body>
+</html>

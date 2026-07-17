@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Data Platform Mastery — Build an Open-Source ETL Platform on GCP · Data Platform Mastery</title>
+<meta name="description" content="Data Platform Mastery — build an open-source metadata-driven ETL platform on GCP.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚒️</text></svg>">
+<link rel="stylesheet" href="style.css">
+<script>
+  (function () {
+    var t = localStorage.getItem("dpm-theme");
+    if (!t) t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+</head>
+<body>
+<button class="menu-btn" id="menuBtn" aria-label="Toggle navigation">☰</button>
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">⚒️</span>
+      <span>
+        <span class="brand-title">Data Platform Mastery</span>
+        <span class="brand-sub">Build PipeForge on GCP</span>
+      </span>
+    </a>
+    <nav><div class="nav-group">Start Here</div>
+<a class="nav-item active" href="index.html">Course Overview</a>
+<a class="nav-item" href="project-charter.html">Project Charter</a>
+<a class="nav-item" href="interview-map.html">Interview Map</a>
+<div class="nav-group">Build Phases</div>
+<a class="nav-item" href="phase-00.html">00 · Orientation</a>
+<a class="nav-item" href="phase-01.html">01 · Foundation<span class="tag">v0.1.0</span></a>
+<a class="nav-item" href="phase-02.html">02 · Metadata Core<span class="tag">v0.2.0</span></a>
+<a class="nav-item" href="phase-03.html">03 · Batch Ingestion<span class="tag">v0.3.0</span></a>
+<a class="nav-item" href="phase-04.html">04 · Streaming &amp; Kafka<span class="tag">v0.4.0</span></a>
+<a class="nav-item" href="phase-05.html">05 · Spark Processing<span class="tag">v0.5.0</span></a>
+<a class="nav-item" href="phase-06.html">06 · BigQuery Serving<span class="tag">v0.6.0</span></a>
+<a class="nav-item" href="phase-07.html">07 · Orchestration<span class="tag">v0.7.0</span></a>
+<a class="nav-item" href="phase-08.html">08 · Quality &amp; Recon<span class="tag">v0.8.0</span></a>
+<a class="nav-item" href="phase-09.html">09 · Governance<span class="tag">v0.9.0</span></a>
+<a class="nav-item" href="phase-10.html">10 · Observability &amp; FinOps<span class="tag">v0.10.0</span></a>
+<a class="nav-item" href="phase-11.html">11 · Streamlit Control Plane<span class="tag">v0.11.0</span></a>
+<a class="nav-item" href="phase-12.html">12 · Platform APIs<span class="tag">v0.12.0</span></a>
+<a class="nav-item" href="phase-13.html">13 · Scale &amp; Hardening<span class="tag">v0.13.0</span></a>
+<a class="nav-item" href="phase-14.html">14 · Open-Source Launch<span class="tag">v1.0.0</span></a>
+<div class="nav-group">Endgame</div>
+<a class="nav-item" href="interview-gauntlet.html">Interview Gauntlet<span class="tag">🎯</span></a></nav>
+    <div class="sidebar-foot">
+      <button id="themeBtn" class="theme-btn" title="Toggle dark mode">🌗 Theme</button>
+      <a href="https://github.com/thesandx/courses/tree/master/data_platform_mastery">GitHub ↗</a>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="crumbs">
+      <span class="crumb-group">Start Here</span>
+      <span class="crumb-sep">/</span>
+      <span class="crumb-page">Course Overview</span>
+      
+    </header>
+    <div class="content-wrap">
+      <main class="content">
+<h1 id="data-platform-mastery-build-an-open-source-etl-platform-on-gcp">Data Platform Mastery — Build an Open-Source ETL Platform on GCP<a class="headerlink" href="#data-platform-mastery-build-an-open-source-etl-platform-on-gcp" title="Link to this section">#</a></h1>
+<blockquote>
+<p><strong>One project. Every concept. Staff-level depth.</strong></p>
+<p>This course fuses two resources into one intensive, hands-on program:
+1. <strong><a href="https://github.com/thesandx/DE_interview/blob/main/SystemDesign/system_design_notes.md">DE System Design Notes</a></strong> — the 7-step interview framework, core concepts (partitioning, ingestion patterns, backfill, dedup, contracts, late data), architecture patterns (Lambda/Kappa/Medallion/CDC), and the 20-question interview bank.
+2. <strong><a href="https://github.com/thesandx/courses/blob/master/gcp_data_engineer_mastery/README.md">GCP Data Engineer Mastery</a></strong> — the GCP service catalog: Cloud Storage, BigQuery, Pub/Sub, Dataflow, Dataproc, Composer, governance, reliability, cost.</p>
+<p>Instead of reading about these ideas, <strong>you will build them</strong> — starting from an
+<strong>empty GitHub repository</strong> and ending with <strong>PipeForge</strong>: a real, open-source,
+metadata-driven data platform on GCP that you own, can demo live in interviews,
+and can put at the top of your resume.</p>
+<p>📖 <strong>Prefer a book-style reading experience?</strong> Every page of this course is also
+rendered as a styled HTML site in <a href="index.html"><code>docs/data_platform_mastery/</code></a>
+(regenerate with <code>python data_platform_mastery/tools/build_docs.py</code>). Enable GitHub
+Pages (Settings → Pages → branch <code>master</code>, folder <code>/docs</code>) to browse it online at
+<code>https://&lt;your-username&gt;.github.io/courses/data_platform_mastery/</code>.</p>
+</blockquote>
+<hr>
+<h2 id="what-you-will-build-pipeforge">What You Will Build: PipeForge<a class="headerlink" href="#what-you-will-build-pipeforge" title="Link to this section">#</a></h2>
+<p><strong>PipeForge</strong> is an open-source, config-driven ETL/ELT platform. You register a data
+source once (a file drop, a database, an API, a Kafka topic) and the platform
+generates everything else: the ingestion pipeline, the Airflow DAG, the data-quality
+gates, the SCD2 history tables, the reconciliation checks, the audit trail, the
+lineage graph, and the entry in the searchable catalog — all visible in a Streamlit
+control plane and all provisioned with Terraform.</p>
+<p>That is exactly the system asked about in the most common staff-level interview
+question — <em>"Design an ETL framework that can onboard 100 sources without writing
+100 pipelines"</em> (Q7 in the question bank) — except you'll have actually built it.</p>
+<h3 id="reference-architecture">Reference architecture<a class="headerlink" href="#reference-architecture" title="Link to this section">#</a></h3>
+<p>The course follows the same enterprise architecture used by large banks' data
+platforms (see the two reference images this course was designed from): sources flow
+through a <strong>registration portal</strong> into a <strong>parameter-driven ingestion framework</strong>,
+land in a <strong>RAW</strong> zone, and are promoted through <strong>ODP → FDP → CDP</strong> data-product
+layers with cross-cutting <strong>DQ, reconciliation, audit, archival, tokenization,
+lineage and catalog</strong> services — fronted by APIs and a UI.</p>
+<pre class="mermaid">flowchart LR
+    subgraph SOURCES[&quot;SORs / Sources&quot;]
+      DB[(OLTP DBs)]
+      FILES[File drops&lt;br/&gt;CSV / JSON / Parquet]
+      API[REST APIs]
+      EVT[Event streams&lt;br/&gt;Kafka]
+    end
+
+    subgraph REG[&quot;Registration Framework ①&quot;]
+      META[(Metadata DB&lt;br/&gt;Cloud SQL Postgres)]
+      PORTAL[Streamlit portal + FastAPI]
+    end
+
+    subgraph INGEST[&quot;Ingestion Framework ② — parameter-driven&quot;]
+      BATCH[Batch connectors&lt;br/&gt;file / JDBC / API]
+      STREAM[Streaming consumers&lt;br/&gt;Kafka → GCS/BQ]
+    end
+
+    subgraph LAKE[&quot;GCS Lake + BigQuery&quot;]
+      RAW[(RAW / landing&lt;br/&gt;as-is, ingestion-date partitioned)]
+      ODP[(ODP — Operational&lt;br/&gt;typed, deduped ≈ Bronze→Silver)]
+      FDP[(FDP — Foundation&lt;br/&gt;conformed, SCD2, surrogate keys)]
+      CDP[(CDP — Consumption&lt;br/&gt;star schemas, rollups ≈ Gold)]
+    end
+
+    subgraph SERVE[&quot;Consumption&quot;]
+      BI[Looker Studio / BI]
+      ML[BigQuery ML / notebooks]
+      APPS[Reverse ETL / APIs]
+      UI[Streamlit control plane:&lt;br/&gt;catalog · DQ scorecard · ops]
+    end
+
+    SOURCES --&gt; INGEST --&gt; RAW --&gt; ODP --&gt; FDP --&gt; CDP --&gt; SERVE
+    REG -. drives every pipeline .-&gt; INGEST
+    REG -.-&gt; LAKE
+
+    subgraph XCUT[&quot;Cross-cutting services&quot;]
+      DQ[DQ Framework ④&lt;br/&gt;6 dimensions]
+      RECON[Reconciliation ⑦]
+      AUDIT[Audit model ⑧&lt;br/&gt;operational metadata]
+      TOK[Tokenization ③ DLP/KMS]
+      ARCH[Archival &amp; Purge ⑨]
+      WF[Workflow ⑩ Airflow]
+      CAT[Catalog &amp; Lineage ⑪&lt;br/&gt;Dataplex / OpenLineage]
+    end
+    XCUT -.applied at every layer.-&gt; LAKE</pre>
+<h3 id="the-11-platform-capabilities-your-feature-checklist">The 11 platform capabilities (your feature checklist)<a class="headerlink" href="#the-11-platform-capabilities-your-feature-checklist" title="Link to this section">#</a></h3>
+<p>These are the numbered capabilities from the reference architecture. Every one of
+them is a course phase deliverable — when all 11 are checked, PipeForge is done:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Capability</th>
+<th>What it means in PipeForge</th>
+<th>Built in</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>①</td>
+<td><strong>Data Registration Framework</strong></td>
+<td>Metadata DB + CLI/API/UI to onboard a source in minutes</td>
+<td>Phase 2, 11, 12</td>
+</tr>
+<tr>
+<td>②</td>
+<td><strong>Ingestion Framework</strong> — parameter-driven, integrated with the registration portal</td>
+<td>One generic engine; N sources = N rows of config, not N pipelines</td>
+<td>Phase 3, 4</td>
+</tr>
+<tr>
+<td>③</td>
+<td><strong>Data anonymization — Tokenization</strong></td>
+<td>Deterministic tokenization of PII with KMS/DLP before data leaves RAW</td>
+<td>Phase 9</td>
+</tr>
+<tr>
+<td>④</td>
+<td><strong>Data Quality Framework — 6 dimensions</strong></td>
+<td>Completeness, accuracy, consistency, timeliness, validity, uniqueness — rules as metadata, gates in every DAG</td>
+<td>Phase 8</td>
+</tr>
+<tr>
+<td>⑤</td>
+<td><strong>Change Data Capture — Type 2</strong></td>
+<td>CDC ingestion + SCD Type-2 history in FDP via Spark/BigQuery MERGE</td>
+<td>Phase 5</td>
+</tr>
+<tr>
+<td>⑥</td>
+<td><strong>Surrogate Key Generation</strong></td>
+<td>Deterministic hash keys + key-mapping tables for dims</td>
+<td>Phase 5, 6</td>
+</tr>
+<tr>
+<td>⑦</td>
+<td><strong>Reconciliation Framework</strong></td>
+<td>Source↔RAW↔ODP↔FDP↔CDP counts/sums/checksums, divergence alerts</td>
+<td>Phase 8</td>
+</tr>
+<tr>
+<td>⑧</td>
+<td><strong>Audit Model — Operational Metadata Capture</strong></td>
+<td>Every run, task, row count, byte count, duration → audit tables</td>
+<td>Phase 2, 8, 10</td>
+</tr>
+<tr>
+<td>⑨</td>
+<td><strong>Data Archival &amp; Purge Framework</strong></td>
+<td>Lifecycle tiers, partition expiry, GDPR right-to-delete</td>
+<td>Phase 9</td>
+</tr>
+<tr>
+<td>⑩</td>
+<td><strong>Workflow</strong></td>
+<td>Airflow DAG <strong>factory</strong> — DAGs generated from metadata</td>
+<td>Phase 7</td>
+</tr>
+<tr>
+<td>⑪</td>
+<td><strong>Catalog Integration</strong> (Collibra-equivalent)</td>
+<td>Dataplex catalog + OpenLineage lineage + searchable Streamlit catalog</td>
+<td>Phase 9, 11</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="final-tech-stack">Final tech stack<a class="headerlink" href="#final-tech-stack" title="Link to this section">#</a></h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Technology</th>
+<th>Why (always tied to a requirement — the interview habit)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>IaC</td>
+<td><strong>Terraform</strong></td>
+<td>Reproducible envs, reviewable infra, destroy = cost control</td>
+</tr>
+<tr>
+<td>Landing/lake</td>
+<td><strong>GCS</strong> (+ BigLake/Iceberg)</td>
+<td>Cheap replayable raw zone — your backfill insurance policy</td>
+</tr>
+<tr>
+<td>Warehouse</td>
+<td><strong>BigQuery</strong></td>
+<td>Serving layer for BI/ML; partition+cluster for cost</td>
+</tr>
+<tr>
+<td>Metadata DB</td>
+<td><strong>Cloud SQL (Postgres)</strong></td>
+<td>OLTP-shaped workload: registry, audit, DQ results</td>
+</tr>
+<tr>
+<td>Streaming</td>
+<td><strong>Kafka</strong> (local + VM) with a <strong>Pub/Sub</strong> bridge</td>
+<td>Learn real Kafka ops <em>and</em> the managed-GCP answer</td>
+</tr>
+<tr>
+<td>Batch/stream processing</td>
+<td><strong>PySpark on Dataproc Serverless</strong></td>
+<td>Distributed transforms, SCD2 MERGE, dedup at scale</td>
+</tr>
+<tr>
+<td>Orchestration</td>
+<td><strong>Airflow</strong> (local Docker → optional Composer)</td>
+<td>DAG factory, backfills, idempotent scheduling</td>
+</tr>
+<tr>
+<td>Control plane</td>
+<td><strong>FastAPI + Streamlit</strong> on Cloud Run</td>
+<td>Registration API + catalog/DQ/ops UI</td>
+</tr>
+<tr>
+<td>Governance</td>
+<td><strong>DLP, KMS, Dataplex, OpenLineage</strong></td>
+<td>Tokenization, CMEK, catalog, lineage</td>
+</tr>
+<tr>
+<td>Observability</td>
+<td><strong>Cloud Monitoring + billing export to BQ</strong></td>
+<td>Freshness SLAs, alerting, FinOps dashboard</td>
+</tr>
+<tr>
+<td>CI/CD</td>
+<td><strong>GitHub Actions</strong></td>
+<td>Tests, lint, terraform plan, container builds</td>
+</tr>
+</tbody>
+</table></div>
+<hr>
+<h2 id="who-this-is-for-and-the-promise">Who this is for, and the promise<a class="headerlink" href="#who-this-is-for-and-the-promise" title="Link to this section">#</a></h2>
+<p>You should already be comfortable with Python and SQL and have skimmed both source
+resources at least once. The promise, if you complete every phase honestly:</p>
+<ul>
+<li><strong>You can crack senior/staff DE system-design interviews.</strong> Every concept in the
+  interview notes is something you will have <em>implemented</em>, broken, and fixed. You
+  won't recite "idempotency"; you'll describe the night your backfill double-counted
+  revenue in <code>fct_orders</code> and how <code>MERGE</code> + partition overwrite fixed it — in <em>your</em>
+  repo, with the commit to prove it.</li>
+<li><strong>You own a real open-source project</strong> with releases, docs, CI, an architecture
+  README, and a live demo — a resume line that survives any depth of questioning.</li>
+<li><strong>You are production-fluent on GCP</strong> across storage, compute, streaming,
+  orchestration, governance, and cost.</li>
+</ul>
+<h2 id="course-structure">Course structure<a class="headerlink" href="#course-structure" title="Link to this section">#</a></h2>
+<p>Sixteen units. Each phase = one milestone release of PipeForge (<code>v0.1.0 → v1.0.0</code>).
+Every phase README follows the same rhythm:</p>
+<ol>
+<li><strong>Mission</strong> — what you ship this phase and the git tag you cut.</li>
+<li><strong>Concepts</strong> — the theory, cross-referenced to the system-design notes (§) and GCP course modules (M).</li>
+<li><strong>Build</strong> — numbered, hands-on steps with real code you commit to <em>your</em> repo.</li>
+<li><strong>Prove it</strong> — verification checklist (commands + expected output).</li>
+<li><strong>Break it</strong> — a deliberate failure drill (staff engineers are made in incidents).</li>
+<li><strong>Interview corner</strong> — how to narrate what you just built in an interview, with the exact vocabulary from the notes.</li>
+<li><strong>Stretch goals</strong> — optional depth for overachievers.</li>
+</ol>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Title</th>
+<th>You ship</th>
+<th>Tag</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="phase-00.html">00</a></td>
+<td>Orientation &amp; Ground School</td>
+<td>GCP project, budgets, tooling, the plan</td>
+<td>—</td>
+</tr>
+<tr>
+<td><a href="phase-01.html">01</a></td>
+<td>Empty Repo → Engineering Foundation</td>
+<td>Repo, CI, Terraform bootstrap, envs</td>
+<td><code>v0.1.0</code></td>
+</tr>
+<tr>
+<td><a href="phase-02.html">02</a></td>
+<td>The Metadata Core (Registration Framework ①⑧)</td>
+<td>Cloud SQL registry, data contracts, CLI</td>
+<td><code>v0.2.0</code></td>
+</tr>
+<tr>
+<td><a href="phase-03.html">03</a></td>
+<td>Batch Ingestion Framework ②</td>
+<td>File/JDBC/API connectors → RAW, quarantine, manifests</td>
+<td><code>v0.3.0</code></td>
+</tr>
+<tr>
+<td><a href="phase-04.html">04</a></td>
+<td>Streaming Ingestion with Kafka ②</td>
+<td>Kafka + Schema Registry, consumers → GCS/BQ, DLQ, Pub/Sub bridge</td>
+<td><code>v0.4.0</code></td>
+</tr>
+<tr>
+<td><a href="phase-05.html">05</a></td>
+<td>Spark on Dataproc: ODP→FDP (⑤⑥)</td>
+<td>Dedup, SCD2, surrogate keys, late data</td>
+<td><code>v0.5.0</code></td>
+</tr>
+<tr>
+<td><a href="phase-06.html">06</a></td>
+<td>BigQuery Serving: FDP→CDP</td>
+<td>Dim/Fact builder, star schema, rollups, cost tuning</td>
+<td><code>v0.6.0</code></td>
+</tr>
+<tr>
+<td><a href="phase-07.html">07</a></td>
+<td>Orchestration: the DAG Factory ⑩</td>
+<td>Metadata-generated Airflow DAGs, backfill CLI</td>
+<td><code>v0.7.0</code></td>
+</tr>
+<tr>
+<td><a href="phase-08.html">08</a></td>
+<td>Data Quality &amp; Reconciliation ④⑦</td>
+<td>6-dimension DQ engine, quarantine, recon framework</td>
+<td><code>v0.8.0</code></td>
+</tr>
+<tr>
+<td><a href="phase-09.html">09</a></td>
+<td>Governance: Tokenization, Lineage, Archival, Catalog ③⑨⑪</td>
+<td>DLP tokenization, OpenLineage, purge framework, Dataplex</td>
+<td><code>v0.9.0</code></td>
+</tr>
+<tr>
+<td><a href="phase-10.html">10</a></td>
+<td>Observability &amp; FinOps</td>
+<td>Freshness SLAs, alerting, cost dashboard</td>
+<td><code>v0.10.0</code></td>
+</tr>
+<tr>
+<td><a href="phase-11.html">11</a></td>
+<td>The Streamlit Control Plane</td>
+<td>Catalog search, DQ scorecard, ops console, onboarding wizard</td>
+<td><code>v0.11.0</code></td>
+</tr>
+<tr>
+<td><a href="phase-12.html">12</a></td>
+<td>Platform APIs &amp; Multi-Tenancy</td>
+<td>FastAPI control plane, Secret Manager, Cloud Run, tenants</td>
+<td><code>v0.12.0</code></td>
+</tr>
+<tr>
+<td><a href="phase-13.html">13</a></td>
+<td>Scale, Hardening &amp; Chaos Drills</td>
+<td>10x load, skew fixes, failure drills, runbooks</td>
+<td><code>v0.13.0</code></td>
+</tr>
+<tr>
+<td><a href="phase-14.html">14</a></td>
+<td>Open-Source Launch &amp; Resume</td>
+<td>Docs site, demo mode, release v1.0, resume bullets</td>
+<td><code>v1.0.0</code></td>
+</tr>
+<tr>
+<td><a href="interview-gauntlet.html">🎯</a></td>
+<td>The Interview Gauntlet</td>
+<td>All 20 question-bank drills answered <em>with your platform</em></td>
+<td>—</td>
+</tr>
+</tbody>
+</table></div>
+<p>Also read <strong><a href="project-charter.html">PROJECT_CHARTER.md</a></strong> (the full product spec of
+PipeForge — treat it like the design doc you'd write at work) and
+<strong><a href="interview-map.html">INTERVIEW_MAP.md</a></strong> (every interview topic → where you built it).</p>
+<h3 id="suggested-pacing">Suggested pacing<a class="headerlink" href="#suggested-pacing" title="Link to this section">#</a></h3>
+<ul>
+<li><strong>Intensive:</strong> 8 weeks full-time (phase ≈ 3–4 days; phases 5, 7, 8 deserve a full week between them).</li>
+<li><strong>Sustainable:</strong> 16 weeks at ~12 hrs/week — one phase per week, gauntlet drills every weekend from phase 5 onward.</li>
+</ul>
+<p>Never move on with a red "Prove it" checklist. The platform is cumulative; debt compounds.</p>
+<h2 id="cost-guardrails-read-before-touching-gcp">Cost guardrails (read before touching GCP)<a class="headerlink" href="#cost-guardrails-read-before-touching-gcp" title="Link to this section">#</a></h2>
+<p>Everything is designed to run on a <strong>few dollars a week</strong> if you follow the rules:</p>
+<ol>
+<li><strong>Phase 0 creates a budget alert before anything else.</strong> Non-negotiable.</li>
+<li>Heavy things are <strong>ephemeral</strong>: Dataproc Serverless (per-second), Kafka on a
+   preemptible <code>e2-small</code> you stop when idle, Airflow runs <strong>locally in Docker</strong>
+   (Composer is an optional one-day excursion — it costs ~$300+/mo if left up).</li>
+<li>Cloud SQL uses the smallest tier (<code>db-f1-micro</code>) and is stopped when idle.</li>
+<li>Every phase ends with a <strong>Cleanup</strong> section; <code>terraform destroy -target=...</code> is a skill, practice it.</li>
+<li>BigQuery: partition + cluster from day one, and set <code>maximum_bytes_billed</code> on every query profile you create.</li>
+</ol>
+<p>Typical spend if you're disciplined: <strong>$5–25/month</strong>. The expensive mistakes are
+always: idle Composer, idle Cloud SQL at a big tier, an unpartitioned table scanned
+by a dashboard, and a forgotten Dataproc <em>cluster</em> (which is why we use Serverless).</p>
+<h2 id="ground-rules">Ground rules<a class="headerlink" href="#ground-rules" title="Link to this section">#</a></h2>
+<ol>
+<li><strong>Everything is code.</strong> If you clicked it in the console, reproduce it in Terraform before moving on.</li>
+<li><strong>Every pipeline is idempotent and backfillable from day one</strong> — parameterized by execution date, partition-overwrite or MERGE writes. This is the single most-tested property in interviews (§7, §13).</li>
+<li><strong>Metadata drives everything.</strong> If you find yourself writing a per-source pipeline, stop — add config, not code.</li>
+<li><strong>Narrate as you build.</strong> After each phase, do the "Interview corner" out loud with a 45-minute timer. Building without narrating is half the course.</li>
+<li><strong>Commit like a professional.</strong> Small commits, meaningful messages, PRs to your own repo with self-review, tagged releases. The repo <em>is</em> the resume.</li>
+<li><strong>Cost is a requirement</strong>, not an afterthought. Know what every resource costs before you <code>terraform apply</code>.</li>
+</ol>
+<h2 id="how-the-two-source-resources-are-woven-in">How the two source resources are woven in<a class="headerlink" href="#how-the-two-source-resources-are-woven-in" title="Link to this section">#</a></h2>
+<ul>
+<li>Each phase's <strong>Concepts</strong> section cites the system-design notes by section number
+  (e.g., "§12 Ingestion Patterns", "§18 Deduplication") — reread the cited sections
+  <em>before</em> the build, then again after. They will read completely differently once
+  you've hit the problems they describe.</li>
+<li>Each phase cites GCP course modules (e.g., "M04 BigQuery at Scale") for the
+  service-level depth and exam-style tradeoffs. Do those modules' practice questions
+  when cited — the PDE cert is a free by-product of this course.</li>
+<li>The <strong>Interview Gauntlet</strong> re-runs the full 20-question bank (Part E of the notes)
+  and forces you to answer each one using PipeForge as your evidence base.</li>
+</ul>
+<p>Start with <strong><a href="phase-00.html">Phase 00 — Orientation</a></strong>.</p>
+        <nav class="pager">
+          <span></span>
+          <a class="next" href="project-charter.html"><span class="dir">Next →</span><span class="label">Project Charter</span></a>
+        </nav>
+        <footer class="page-foot">
+          Generated from <a href="https://github.com/thesandx/courses/blob/master/data_platform_mastery/README.md"><code>data_platform_mastery/README.md</code></a> ·
+          Part of the <a href="index.html">Data Platform Mastery</a> course.
+        </footer>
+      </main>
+      <aside class="toc-rail"><div class="toc-title">On this page</div>
+<a href="#what-you-will-build-pipeforge">What You Will Build: PipeForge</a>
+<a href="#who-this-is-for-and-the-promise">Who this is for, and the promise</a>
+<a href="#course-structure">Course structure</a>
+<a href="#cost-guardrails-read-before-touching-gcp">Cost guardrails (read before touching GCP)</a>
+<a href="#ground-rules">Ground rules</a>
+<a href="#how-the-two-source-resources-are-woven-in">How the two source resources are woven in</a></aside>
+    </div>
+  </div>
+</div>
+<script src="mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "neutral",
+    themeVariables: { fontFamily: "inherit" }
+  });
+</script>
+<script>
+  document.getElementById("themeBtn").addEventListener("click", function () {
+    var cur = document.documentElement.getAttribute("data-theme");
+    localStorage.setItem("dpm-theme", cur === "dark" ? "light" : "dark");
+    location.reload();   // simplest way to re-render mermaid + pygments in the new theme
+  });
+  document.getElementById("menuBtn").addEventListener("click", function () {
+    document.getElementById("sidebar").classList.toggle("open");
+  });
+</script>
+</body>
+</html>

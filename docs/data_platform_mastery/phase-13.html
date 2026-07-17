@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 13 — Scale, Hardening &amp; Chaos Drills (v0.13.0) · Data Platform Mastery</title>
+<meta name="description" content="Data Platform Mastery — build an open-source metadata-driven ETL platform on GCP.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚒️</text></svg>">
+<link rel="stylesheet" href="style.css">
+<script>
+  (function () {
+    var t = localStorage.getItem("dpm-theme");
+    if (!t) t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+</head>
+<body>
+<button class="menu-btn" id="menuBtn" aria-label="Toggle navigation">☰</button>
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">⚒️</span>
+      <span>
+        <span class="brand-title">Data Platform Mastery</span>
+        <span class="brand-sub">Build PipeForge on GCP</span>
+      </span>
+    </a>
+    <nav><div class="nav-group">Start Here</div>
+<a class="nav-item" href="index.html">Course Overview</a>
+<a class="nav-item" href="project-charter.html">Project Charter</a>
+<a class="nav-item" href="interview-map.html">Interview Map</a>
+<div class="nav-group">Build Phases</div>
+<a class="nav-item" href="phase-00.html">00 · Orientation</a>
+<a class="nav-item" href="phase-01.html">01 · Foundation<span class="tag">v0.1.0</span></a>
+<a class="nav-item" href="phase-02.html">02 · Metadata Core<span class="tag">v0.2.0</span></a>
+<a class="nav-item" href="phase-03.html">03 · Batch Ingestion<span class="tag">v0.3.0</span></a>
+<a class="nav-item" href="phase-04.html">04 · Streaming &amp; Kafka<span class="tag">v0.4.0</span></a>
+<a class="nav-item" href="phase-05.html">05 · Spark Processing<span class="tag">v0.5.0</span></a>
+<a class="nav-item" href="phase-06.html">06 · BigQuery Serving<span class="tag">v0.6.0</span></a>
+<a class="nav-item" href="phase-07.html">07 · Orchestration<span class="tag">v0.7.0</span></a>
+<a class="nav-item" href="phase-08.html">08 · Quality &amp; Recon<span class="tag">v0.8.0</span></a>
+<a class="nav-item" href="phase-09.html">09 · Governance<span class="tag">v0.9.0</span></a>
+<a class="nav-item" href="phase-10.html">10 · Observability &amp; FinOps<span class="tag">v0.10.0</span></a>
+<a class="nav-item" href="phase-11.html">11 · Streamlit Control Plane<span class="tag">v0.11.0</span></a>
+<a class="nav-item" href="phase-12.html">12 · Platform APIs<span class="tag">v0.12.0</span></a>
+<a class="nav-item active" href="phase-13.html">13 · Scale &amp; Hardening<span class="tag">v0.13.0</span></a>
+<a class="nav-item" href="phase-14.html">14 · Open-Source Launch<span class="tag">v1.0.0</span></a>
+<div class="nav-group">Endgame</div>
+<a class="nav-item" href="interview-gauntlet.html">Interview Gauntlet<span class="tag">🎯</span></a></nav>
+    <div class="sidebar-foot">
+      <button id="themeBtn" class="theme-btn" title="Toggle dark mode">🌗 Theme</button>
+      <a href="https://github.com/thesandx/courses/tree/master/data_platform_mastery">GitHub ↗</a>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="crumbs">
+      <span class="crumb-group">Build Phases</span>
+      <span class="crumb-sep">/</span>
+      <span class="crumb-page">13 · Scale &amp; Hardening</span>
+      <span class="badge">v0.13.0</span>
+    </header>
+    <div class="content-wrap">
+      <main class="content">
+<h1 id="phase-13-scale-hardening-chaos-drills-v0130">Phase 13 — Scale, Hardening &amp; Chaos Drills (<code>v0.13.0</code>)<a class="headerlink" href="#phase-13-scale-hardening-chaos-drills-v0130" title="Link to this section">#</a></h1>
+<blockquote>
+<p><strong>Mission:</strong> stop trusting the platform; attack it. Run 10x load and find the
+real bottlenecks, fix skew with your own hands, rehearse the §8 failure domains
+as live chaos drills, and write the runbooks. This phase converts twelve phases
+of building into the scar tissue that interviews (and pages) actually test.</p>
+</blockquote>
+<h2 id="1-concepts">1. Concepts<a class="headerlink" href="#1-concepts" title="Link to this section">#</a></h2>
+<p>Reread notes <strong>§8 (deep dives)</strong> — it is the syllabus for this phase — plus
+<strong>§19 (numbers)</strong> and <strong>§29 (skew/AQE)</strong>.</p>
+<ul>
+<li><strong>10x is an engineering problem, 100x is an architecture problem (§8).</strong> You'll
+  prove the first half empirically and <em>argue</em> the second half in a design doc —
+  which is exactly the split interviews expect: measured facts near 10x,
+  structured reasoning at 100x.</li>
+<li><strong>Bottleneck first, fix second.</strong> The §8 answer structure: identify the
+  bottleneck → incremental fix → acknowledge the ceiling → quantify cost →
+  timeline. Every drill below ends with those five sentences written down.</li>
+<li><strong>Chaos drills = war stories on demand.</strong> The interview question "tell me about
+  a production incident" is unanswerable from tutorials. After this phase you'll
+  have ten first-person incidents in <code>docs/incidents/</code>, each in the §8 shape:
+  what broke → impact → detection → fix → prevention.</li>
+</ul>
+<h2 id="2-build">2. Build<a class="headerlink" href="#2-build" title="Link to this section">#</a></h2>
+<h3 id="21-the-10x-load-test">2.1 The 10x load test<a class="headerlink" href="#21-the-10x-load-test" title="Link to this section">#</a></h3>
+<p>Crank the generators: clickstream <code>--eps 2000</code> for 2 hours (≈15M events), orders
+×10 (1M lines/day), churn ×10. Before running, <strong>write predictions</strong> (where will
+it hurt first? Kafka? consumer flush? Spark shuffle? BQ MERGE? Cloud SQL audit
+writes?). Then run and measure against predictions — the gap between your model
+and reality is the lesson.</p>
+<p>Measure (and record in <code>docs/scale-report.md</code> — a genuinely great README artifact):</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Metric</th>
+<th>1x</th>
+<th>10x</th>
+<th>Bottleneck?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Kafka produce</td>
+<td>msgs/s, p99 latency</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Consumer</td>
+<td>lag drain time, flush duration</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>RAW→ODP Spark</td>
+<td>wall time, shuffle bytes, task skew</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>SCD2 changeset + MERGE</td>
+<td>wall time, slot-ms</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>CDP build</td>
+<td>bytes billed, wall time</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Audit DB</td>
+<td>write latency, connections</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table></div>
+<p>Likely findings (verify, don't assume): consumer GCS-write flushes become the
+lag driver (fix: more partitions + consumers, bigger flush buffers); small-file
+explosion in ODP (fix: compaction cadence); Cloud SQL audit inserts become chatty
+(fix: batch the writes); one BQ model missing a partition filter (fix: you know).</p>
+<h3 id="22-skew-surgery-29-prepared-since-phase-5">2.2 Skew surgery (§29, prepared since Phase 5)<a class="headerlink" href="#22-skew-surgery-29-prepared-since-phase-5" title="Link to this section">#</a></h3>
+<p>The sessionization job's bot customers (100x events) make a handful of tasks run
+minutes while 199 finish in seconds. Do all three fixes and compare wall time:
+1. <strong>AQE on</strong> (already) — measure how far <code>skewJoin</code> gets you alone.
+2. <strong>Salting</strong>: explode hot keys into <code>customer_id || '_' || rand(0..15)</code>,
+   aggregate twice (partial per salt → final). Classic, fiddly, worth doing once by hand.
+3. <strong>Isolate-and-broadcast</strong>: split hot keys into their own small frame,
+   broadcast-join it, union results.</p>
+<p>Write the numbers. "I fixed a 40-minute skewed stage down to 6 with salting, and
+AQE alone got me to 15" is an interview sentence money can't buy.</p>
+<h3 id="23-chaos-drills-the-8-failure-domains-live">2.3 Chaos drills — the §8 failure domains, live<a class="headerlink" href="#23-chaos-drills-the-8-failure-domains-live" title="Link to this section">#</a></h3>
+<p>Run each as a formal game day (predict → break → observe detection latency →
+recover → write the incident file). You built the safety nets; now certify them:</p>
+<ol>
+<li><strong>Source down:</strong> stop MySQL for 6 hours through two schedule windows. Circuit
+   breaker (P07) should open; other datasets unaffected (graceful degradation);
+   recovery = watermark catch-up with zero manual steps.</li>
+<li><strong>Poison at volume:</strong> 20% malformed clickstream for 30 min. DLQ absorbs;
+   good-path latency unaffected; quarantine conservation law holds.</li>
+<li><strong>Mid-write kill:</strong> SIGKILL the Spark ODP job repeatedly at random offsets.
+   Partitions never half-visible (dynamic overwrite is atomic per partition);
+   retries converge; audit shows attempt trail.</li>
+<li><strong>Schema break at the gate:</strong> producer bumps clickstream to an incompatible v3.
+   Registry + Schema Registry both reject; pipeline keeps consuming v2; the
+   <em>change protocol</em> (§16) — not heroics — unblocks it.</li>
+<li><strong>The silent stale (THE DE failure mode, §1):</strong> disable the orders DAG on a
+   Friday evening. How long until a human knows? (Freshness monitor: ≤15 min past
+   SLO. Without it: Monday.) Feel that difference; it's the reason Phase 10 exists.</li>
+<li><strong>Backfill under load:</strong> 30-day backfill <em>while</em> daily schedules run. Pools
+   protect the dailies; recent-first ordering heals dashboards first; no
+   duplicate rows anywhere afterward (spot-check with the recon forensic mode).</li>
+</ol>
+<h3 id="24-the-100x-design-doc-docsdesign100xmd">2.4 The 100x design doc — <code>docs/design/100x.md</code><a class="headerlink" href="#24-the-100x-design-doc-docsdesign100xmd" title="Link to this section">#</a></h3>
+<p>You will not build 100x; you will <em>design</em> it, with numbers (§4/§19 math shown):
+clickstream 50K ev/s, orders 100M lines/day, 50 tenants. Address, with chosen
+options and rejected alternatives: regional sharding, Kafka scaling (partitions,
+tiered storage) vs Pub/Sub, Flink vs bigger micro-batch for the hot path,
+Iceberg/lakehouse for ODP/FDP, BQ slot reservations vs on-demand, metadata DB
+scale-out (the registry becomes the hot spot — read replicas? cache? move audit
+to BQ?), and org design (platform team vs mesh, §25). 3–5 pages, ADR tone. This
+document is Q10/Q18/Q20-grade preparation and the single best thing to bring up
+in a staff interview when asked "how would your system scale?"</p>
+<h3 id="25-runbooks-on-call-pack">2.5 Runbooks + on-call pack<a class="headerlink" href="#25-runbooks-on-call-pack" title="Link to this section">#</a></h3>
+<p>For the top 5 alerts: symptom → dashboard link → diagnosis queries → remediation
+→ escalation. Test one by handing it to a friend (or following it yourself,
+cold, at the terminal) — a runbook you haven't executed is fiction. Tag <code>v0.13.0</code>.</p>
+<h2 id="3-prove-it">3. Prove it<a class="headerlink" href="#3-prove-it" title="Link to this section">#</a></h2>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <code>docs/scale-report.md</code> with real 1x/10x numbers and 3 identified bottlenecks, each with its five-sentence §8 analysis</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Skew: three fixes measured; you can explain <em>why</em> AQE alone wasn't enough for your case</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> All 6 chaos drills have incident files with detection latency measured</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Recon + dedup checks pass after every drill (correctness survived the violence — the point of the whole course)</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <code>docs/design/100x.md</code> reviewed out loud against a 45-minute timer</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> A stranger could handle your top alert with runbook alone</li>
+</ul>
+<h2 id="4-break-it">4. Break it<a class="headerlink" href="#4-break-it" title="Link to this section">#</a></h2>
+<p>This phase <em>is</em> Break It. Meta-drill: pick the one component you're most
+confident in and design a failure you haven't tested. Confidence without a drill
+is exactly where production bites.</p>
+<h2 id="5-interview-corner">5. Interview corner<a class="headerlink" href="#5-interview-corner" title="Link to this section">#</a></h2>
+<ul>
+<li>You now hold <strong>ten first-person war stories</strong>. Practice telling three of them
+  in 2 minutes each (what broke → impact → detection → fix → prevention). This is
+  the highest-leverage interview asset you own.</li>
+<li><em>"What happens at 10x?"</em> — answer with measurements, then pivot: "at 100x the
+  architecture changes — here's my design" (your doc). The measured-then-designed
+  structure reads unmistakably staff.</li>
+<li>Run <strong>Q10 (Uber surge — the final boss)</strong> and <strong>Q18 (ad click stream)</strong> as full
+  mock sessions now; your late-data, dedup, skew, and hot-path/cold-path
+  experience maps directly.</li>
+</ul>
+<h2 id="6-stretch-goals">6. Stretch goals<a class="headerlink" href="#6-stretch-goals" title="Link to this section">#</a></h2>
+<ul>
+<li>Locust/k6 load test against the Phase-12 API (control planes have SLOs too).</li>
+<li>A <code>pipeforge chaos</code> command that injects the drills reproducibly (chaos-as-code — superb README material).</li>
+<li>Cost the 10x run precisely from the FinOps pipeline: $ per extra million events; extrapolate to 100x and sanity-check your design doc's budget.</li>
+</ul>
+        <nav class="pager">
+          <a class="prev" href="phase-12.html"><span class="dir">← Previous</span><span class="label">12 · Platform APIs</span></a>
+          <a class="next" href="phase-14.html"><span class="dir">Next →</span><span class="label">14 · Open-Source Launch</span></a>
+        </nav>
+        <footer class="page-foot">
+          Generated from <a href="https://github.com/thesandx/courses/blob/master/data_platform_mastery/phase_13_scale_hardening/README.md"><code>data_platform_mastery/phase_13_scale_hardening/README.md</code></a> ·
+          Part of the <a href="index.html">Data Platform Mastery</a> course.
+        </footer>
+      </main>
+      <aside class="toc-rail"><div class="toc-title">On this page</div>
+<a href="#1-concepts">1. Concepts</a>
+<a href="#2-build">2. Build</a>
+<a href="#3-prove-it">3. Prove it</a>
+<a href="#4-break-it">4. Break it</a>
+<a href="#5-interview-corner">5. Interview corner</a>
+<a href="#6-stretch-goals">6. Stretch goals</a></aside>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById("themeBtn").addEventListener("click", function () {
+    var cur = document.documentElement.getAttribute("data-theme");
+    localStorage.setItem("dpm-theme", cur === "dark" ? "light" : "dark");
+    location.reload();   // simplest way to re-render mermaid + pygments in the new theme
+  });
+  document.getElementById("menuBtn").addEventListener("click", function () {
+    document.getElementById("sidebar").classList.toggle("open");
+  });
+</script>
+</body>
+</html>

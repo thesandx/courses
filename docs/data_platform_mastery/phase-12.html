@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 12 — Platform APIs, Secrets &amp; Multi-Tenancy (v0.12.0) · Data Platform Mastery</title>
+<meta name="description" content="Data Platform Mastery — build an open-source metadata-driven ETL platform on GCP.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚒️</text></svg>">
+<link rel="stylesheet" href="style.css">
+<script>
+  (function () {
+    var t = localStorage.getItem("dpm-theme");
+    if (!t) t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+</head>
+<body>
+<button class="menu-btn" id="menuBtn" aria-label="Toggle navigation">☰</button>
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">⚒️</span>
+      <span>
+        <span class="brand-title">Data Platform Mastery</span>
+        <span class="brand-sub">Build PipeForge on GCP</span>
+      </span>
+    </a>
+    <nav><div class="nav-group">Start Here</div>
+<a class="nav-item" href="index.html">Course Overview</a>
+<a class="nav-item" href="project-charter.html">Project Charter</a>
+<a class="nav-item" href="interview-map.html">Interview Map</a>
+<div class="nav-group">Build Phases</div>
+<a class="nav-item" href="phase-00.html">00 · Orientation</a>
+<a class="nav-item" href="phase-01.html">01 · Foundation<span class="tag">v0.1.0</span></a>
+<a class="nav-item" href="phase-02.html">02 · Metadata Core<span class="tag">v0.2.0</span></a>
+<a class="nav-item" href="phase-03.html">03 · Batch Ingestion<span class="tag">v0.3.0</span></a>
+<a class="nav-item" href="phase-04.html">04 · Streaming &amp; Kafka<span class="tag">v0.4.0</span></a>
+<a class="nav-item" href="phase-05.html">05 · Spark Processing<span class="tag">v0.5.0</span></a>
+<a class="nav-item" href="phase-06.html">06 · BigQuery Serving<span class="tag">v0.6.0</span></a>
+<a class="nav-item" href="phase-07.html">07 · Orchestration<span class="tag">v0.7.0</span></a>
+<a class="nav-item" href="phase-08.html">08 · Quality &amp; Recon<span class="tag">v0.8.0</span></a>
+<a class="nav-item" href="phase-09.html">09 · Governance<span class="tag">v0.9.0</span></a>
+<a class="nav-item" href="phase-10.html">10 · Observability &amp; FinOps<span class="tag">v0.10.0</span></a>
+<a class="nav-item" href="phase-11.html">11 · Streamlit Control Plane<span class="tag">v0.11.0</span></a>
+<a class="nav-item active" href="phase-12.html">12 · Platform APIs<span class="tag">v0.12.0</span></a>
+<a class="nav-item" href="phase-13.html">13 · Scale &amp; Hardening<span class="tag">v0.13.0</span></a>
+<a class="nav-item" href="phase-14.html">14 · Open-Source Launch<span class="tag">v1.0.0</span></a>
+<div class="nav-group">Endgame</div>
+<a class="nav-item" href="interview-gauntlet.html">Interview Gauntlet<span class="tag">🎯</span></a></nav>
+    <div class="sidebar-foot">
+      <button id="themeBtn" class="theme-btn" title="Toggle dark mode">🌗 Theme</button>
+      <a href="https://github.com/thesandx/courses/tree/master/data_platform_mastery">GitHub ↗</a>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="crumbs">
+      <span class="crumb-group">Build Phases</span>
+      <span class="crumb-sep">/</span>
+      <span class="crumb-page">12 · Platform APIs</span>
+      <span class="badge">v0.12.0</span>
+    </header>
+    <div class="content-wrap">
+      <main class="content">
+<h1 id="phase-12-platform-apis-secrets-multi-tenancy-v0120">Phase 12 — Platform APIs, Secrets &amp; Multi-Tenancy (<code>v0.12.0</code>)<a class="headerlink" href="#phase-12-platform-apis-secrets-multi-tenancy-v0120" title="Link to this section">#</a></h1>
+<blockquote>
+<p><strong>Mission:</strong> promote PipeForge from "my tool" to "a platform other teams could
+use". A FastAPI control plane (the Registration / Transformation / Workflow
+APIs from the reference architecture's second diagram), secrets done right
+(Secret Manager, the Vault stand-in), machine auth, and a real multi-tenancy
+model with quotas and isolation. This phase is where Q15 (multi-tenant SaaS
+platform) and Q19 (data mesh platform) stop being theory.</p>
+</blockquote>
+<h2 id="1-concepts">1. Concepts<a class="headerlink" href="#1-concepts" title="Link to this section">#</a></h2>
+<ul>
+<li><strong>The reference architecture's control plane</strong> (image 2): Registration UX/API,
+  Transformation API, Workflow service, Vault, tenant namespaces on GKE. You'll
+  build the same shape with cheaper primitives: Cloud Run instead of GKE+Istio,
+  Secret Manager instead of Vault, IAM instead of mTLS meshes. Being able to say
+  "same architecture, right-sized runtime — here's what GKE would buy me and when
+  I'd move (sidecars, network policy, long-running consumers, per-tenant node
+  pools)" is precisely the staff-level judgment interviews probe.</li>
+<li><strong>Multi-tenancy is an isolation spectrum</strong> (Q15 — memorize the ladder):</li>
+<li><strong>Row-level</strong> (tenant column + row-access policies) — cheapest, weakest blast-radius story;</li>
+<li><strong>Schema/dataset-level</strong> (per-tenant BQ datasets, buckets prefixes, pools) — the pragmatic middle <strong>← PipeForge's choice</strong>;</li>
+<li><strong>Project-level</strong> (per-tenant GCP project) — hard isolation, hard ops;</li>
+<li><strong>Deployment-level</strong> (per-tenant everything) — enterprise/regulated.
+  Defend the choice by failure domain, noisy neighbors, compliance, and cost —
+  not by fashion.</li>
+<li><strong>Secrets:</strong> connection secrets were <code>connection_ref</code> strings since Phase 2 —
+  that indirection now pays off: refs resolve to Secret Manager at runtime,
+  per-tenant access via IAM conditions, rotation without touching metadata.</li>
+<li><strong>AuthN/Z for machines:</strong> service-to-service on GCP = OIDC ID tokens, verified
+  audience, caller identity mapped to tenant + role. No API keys in headers.</li>
+</ul>
+<h2 id="2-build">2. Build<a class="headerlink" href="#2-build" title="Link to this section">#</a></h2>
+<h3 id="21-fastapi-control-plane-api">2.1 FastAPI control plane — <code>api/</code><a class="headerlink" href="#21-fastapi-control-plane-api" title="Link to this section">#</a></h3>
+<div class="highlight"><pre><span></span><code>api/
+├── main.py            # FastAPI app, OIDC verification middleware
+├── routers/
+│   ├── registration.py    # POST /sources, /datasets, /contracts (compat-checked)
+│   ├── transformation.py  # POST /models  (register a CDP model), GET /models/{id}
+│   ├── workflow.py        # POST /runs {dataset, execution_date}, POST /backfills, GET /runs/{id}
+│   ├── quality.py         # GET /datasets/{id}/dq, POST /datasets/{id}/rules
+│   └── catalog.py         # GET /datasets?q=..., GET /datasets/{id}/lineage
+└── schemas.py         # Pydantic request/response models — the API&#39;s own contract
+</code></pre></div>
+<p>Design rules (each is an interview line):
+- <strong>The API is the only writer to the registry from now on.</strong> CLI and UI become
+  API clients. One write path = one place for validation, authz, and audit
+  (<code>api_audit_log</code>: caller, tenant, action, payload hash, timestamp).
+- Contracts in, contracts out: request models are versioned Pydantic schemas;
+  breaking the API contract follows the same §16 protocol as data contracts.
+  Platforms eat their own dogfood.
+- Idempotency keys on POST /runs and /backfills (client retries must not
+  double-trigger — the §7 idempotency principle applied to control planes).
+- 202 + status polling for long operations (a backfill is a job, not a request).</p>
+<h3 id="22-secret-manager-migration">2.2 Secret Manager migration<a class="headerlink" href="#22-secret-manager-migration" title="Link to this section">#</a></h3>
+<ul>
+<li>Terraform: secrets for MySQL source creds, metadata DB, Kafka SASL (if VM),
+  webhook URLs; IAM bindings per accessor SA with <strong>conditions on secret name
+  prefix</strong> (<code>tenant-a-*</code> readable only by tenant-a runners).</li>
+<li><code>connection_ref: sm://novamart-mysql</code> now resolves via a <code>SecretResolver</code> in
+  <code>core/</code> (cached, TTL, audit-logged access). Delete every password from <code>.env</code>
+  and Terraform state where possible — do the sweep, it's always embarrassing.</li>
+<li>Rotation drill: rotate the MySQL password via Terraform, confirm pipelines pick
+  it up with zero metadata changes. Rotation-without-redeploy is the whole point
+  of the indirection.</li>
+</ul>
+<h3 id="23-multi-tenancy-tenant-becomes-real">2.3 Multi-tenancy: <code>tenant</code> becomes real<a class="headerlink" href="#23-multi-tenancy-tenant-becomes-real" title="Link to this section">#</a></h3>
+<p><code>tenant</code> has been a column since Phase 2. Now enforce it end to end:
+1. <strong>Onboard a second tenant</strong> ("acmecorp") with one dataset (any public CSV).
+2. <strong>Storage isolation:</strong> per-tenant BQ datasets (<code>cdp_novamart</code>, <code>cdp_acmecorp</code>)
+   and GCS prefixes; Terraform generates them from a <code>tenants.yaml</code> (<code>for_each</code> —
+   adding a tenant is a PR with one YAML line — say that sentence in interviews).
+3. <strong>Compute fairness:</strong> per-tenant Airflow pools (P07 groundwork) + per-tenant
+   Dataproc batch quotas (max concurrent batches in dataset config).
+4. <strong>Access:</strong> per-tenant reader groups; API resolves caller→tenant and scopes
+   every query (<code>WHERE tenant = :caller_tenant</code> enforced in the repo layer, not
+   ad hoc in routes — one chokepoint).
+5. <strong>Cost attribution:</strong> <code>tenant</code> label on every GCP resource your Terraform
+   creates + every Dataproc batch → the Phase-10 FinOps model now reports
+   <strong>cost per tenant</strong>. Chargeback-ready is a phrase platform interviewers love.</p>
+<h3 id="24-deploy-cicd-completion">2.4 Deploy + CI/CD completion<a class="headerlink" href="#24-deploy-cicd-completion" title="Link to this section">#</a></h3>
+<ul>
+<li><code>cloudrun_service</code> for the API (min 0, <code>--no-allow-unauthenticated</code>); UI calls
+  it with an ID token.</li>
+<li>GitHub Actions: build+push images on tag, <code>terraform plan</code> on PR via
+  <strong>Workload Identity Federation</strong> (no SA keys in GitHub — keyless CI is current
+  best practice and a strong interview aside), apply on merge with manual approval
+  environment.</li>
+</ul>
+<h3 id="25-ship-it">2.5 Ship it<a class="headerlink" href="#25-ship-it" title="Link to this section">#</a></h3>
+<p>Tests: authz (tenant A token cannot read tenant B dataset — write the test that
+proves it), idempotency-key replay, secret resolver caching, contract-versioned
+API schemas. Tag <code>v0.12.0</code>.</p>
+<h2 id="3-prove-it">3. Prove it<a class="headerlink" href="#3-prove-it" title="Link to this section">#</a></h2>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <code>curl</code> with tenant-A ID token: sees only tenant-A datasets; tenant-B's return 404 (not 403 — don't leak existence; small detail, real security habit)</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Wizard (P11) now writes through the API; <code>api_audit_log</code> shows the human's action chain</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Both tenants' DAGs run concurrently; pools prevent starvation when tenant A backfills 30 days</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> FinOps dashboard shows cost split by tenant</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Password rotation with zero pipeline edits</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <code>git grep -iE 'password|secret_key'</code> finds nothing but Secret Manager refs</li>
+</ul>
+<h2 id="4-break-it">4. Break it<a class="headerlink" href="#4-break-it" title="Link to this section">#</a></h2>
+<p>Noisy-neighbor drill: give tenant B a pathological dataset (10x volume, a
+cross-join-ish model) and run both tenants' schedules. Where does contention
+actually appear first — Airflow pool? Dataproc quota? BQ slots? Cloud SQL
+connections? Measure, fix the weakest fence, write
+<code>docs/incidents/013-noisy-neighbor.md</code>. (Interviewers ask "how do you isolate
+tenants?" — you'll answer with where isolation <em>actually broke first</em>.)</p>
+<h2 id="5-interview-corner">5. Interview corner<a class="headerlink" href="#5-interview-corner" title="Link to this section">#</a></h2>
+<ul>
+<li><strong>Q15 (multi-tenant SaaS data platform)</strong> — full 45-min run. Your isolation
+  ladder + the noisy-neighbor incident + per-tenant cost attribution is a
+  staff-grade answer; most candidates have never operated tenancy at all.</li>
+<li><strong>Q19 (data mesh)</strong> — you now hold all four pillars concretely: domain
+  ownership (owner per dataset), data-as-product (catalog cards + SLAs),
+  self-serve platform (wizard/API), federated governance (contracts + policy tags</li>
+<li>central DQ minimums). Argue <em>when mesh is premature</em> (§25's &lt;50-engineer rule)
+  — restraint impresses more than enthusiasm.</li>
+<li><em>"How do services authenticate to each other on GCP?"</em> — SA identity + OIDC ID
+  tokens + audience verification; secrets only for third-party systems.</li>
+</ul>
+<h2 id="6-stretch-goals">6. Stretch goals<a class="headerlink" href="#6-stretch-goals" title="Link to this section">#</a></h2>
+<ul>
+<li>Reverse ETL (§28): <code>POST /syncs</code> pushing a CDP segment to a mock CRM webhook, idempotent upserts on business key, rate-limited.</li>
+<li>Per-tenant CMEK (tenant-supplied keys) — the enterprise ask; design doc even if you don't build it.</li>
+<li>Migrate the API+UI to GKE Autopilot with the Terraform module — experience the reference architecture's actual runtime, then destroy it.</li>
+</ul>
+        <nav class="pager">
+          <a class="prev" href="phase-11.html"><span class="dir">← Previous</span><span class="label">11 · Streamlit Control Plane</span></a>
+          <a class="next" href="phase-13.html"><span class="dir">Next →</span><span class="label">13 · Scale &amp; Hardening</span></a>
+        </nav>
+        <footer class="page-foot">
+          Generated from <a href="https://github.com/thesandx/courses/blob/master/data_platform_mastery/phase_12_platform_apis/README.md"><code>data_platform_mastery/phase_12_platform_apis/README.md</code></a> ·
+          Part of the <a href="index.html">Data Platform Mastery</a> course.
+        </footer>
+      </main>
+      <aside class="toc-rail"><div class="toc-title">On this page</div>
+<a href="#1-concepts">1. Concepts</a>
+<a href="#2-build">2. Build</a>
+<a href="#3-prove-it">3. Prove it</a>
+<a href="#4-break-it">4. Break it</a>
+<a href="#5-interview-corner">5. Interview corner</a>
+<a href="#6-stretch-goals">6. Stretch goals</a></aside>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById("themeBtn").addEventListener("click", function () {
+    var cur = document.documentElement.getAttribute("data-theme");
+    localStorage.setItem("dpm-theme", cur === "dark" ? "light" : "dark");
+    location.reload();   // simplest way to re-render mermaid + pygments in the new theme
+  });
+  document.getElementById("menuBtn").addEventListener("click", function () {
+    document.getElementById("sidebar").classList.toggle("open");
+  });
+</script>
+</body>
+</html>

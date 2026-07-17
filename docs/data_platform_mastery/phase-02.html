@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 02 — The Metadata Core: Registration Framework ①⑧ (v0.2.0) · Data Platform Mastery</title>
+<meta name="description" content="Data Platform Mastery — build an open-source metadata-driven ETL platform on GCP.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚒️</text></svg>">
+<link rel="stylesheet" href="style.css">
+<script>
+  (function () {
+    var t = localStorage.getItem("dpm-theme");
+    if (!t) t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+</head>
+<body>
+<button class="menu-btn" id="menuBtn" aria-label="Toggle navigation">☰</button>
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">⚒️</span>
+      <span>
+        <span class="brand-title">Data Platform Mastery</span>
+        <span class="brand-sub">Build PipeForge on GCP</span>
+      </span>
+    </a>
+    <nav><div class="nav-group">Start Here</div>
+<a class="nav-item" href="index.html">Course Overview</a>
+<a class="nav-item" href="project-charter.html">Project Charter</a>
+<a class="nav-item" href="interview-map.html">Interview Map</a>
+<div class="nav-group">Build Phases</div>
+<a class="nav-item" href="phase-00.html">00 · Orientation</a>
+<a class="nav-item" href="phase-01.html">01 · Foundation<span class="tag">v0.1.0</span></a>
+<a class="nav-item active" href="phase-02.html">02 · Metadata Core<span class="tag">v0.2.0</span></a>
+<a class="nav-item" href="phase-03.html">03 · Batch Ingestion<span class="tag">v0.3.0</span></a>
+<a class="nav-item" href="phase-04.html">04 · Streaming &amp; Kafka<span class="tag">v0.4.0</span></a>
+<a class="nav-item" href="phase-05.html">05 · Spark Processing<span class="tag">v0.5.0</span></a>
+<a class="nav-item" href="phase-06.html">06 · BigQuery Serving<span class="tag">v0.6.0</span></a>
+<a class="nav-item" href="phase-07.html">07 · Orchestration<span class="tag">v0.7.0</span></a>
+<a class="nav-item" href="phase-08.html">08 · Quality &amp; Recon<span class="tag">v0.8.0</span></a>
+<a class="nav-item" href="phase-09.html">09 · Governance<span class="tag">v0.9.0</span></a>
+<a class="nav-item" href="phase-10.html">10 · Observability &amp; FinOps<span class="tag">v0.10.0</span></a>
+<a class="nav-item" href="phase-11.html">11 · Streamlit Control Plane<span class="tag">v0.11.0</span></a>
+<a class="nav-item" href="phase-12.html">12 · Platform APIs<span class="tag">v0.12.0</span></a>
+<a class="nav-item" href="phase-13.html">13 · Scale &amp; Hardening<span class="tag">v0.13.0</span></a>
+<a class="nav-item" href="phase-14.html">14 · Open-Source Launch<span class="tag">v1.0.0</span></a>
+<div class="nav-group">Endgame</div>
+<a class="nav-item" href="interview-gauntlet.html">Interview Gauntlet<span class="tag">🎯</span></a></nav>
+    <div class="sidebar-foot">
+      <button id="themeBtn" class="theme-btn" title="Toggle dark mode">🌗 Theme</button>
+      <a href="https://github.com/thesandx/courses/tree/master/data_platform_mastery">GitHub ↗</a>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="crumbs">
+      <span class="crumb-group">Build Phases</span>
+      <span class="crumb-sep">/</span>
+      <span class="crumb-page">02 · Metadata Core</span>
+      <span class="badge">v0.2.0</span>
+    </header>
+    <div class="content-wrap">
+      <main class="content">
+<h1 id="phase-02-the-metadata-core-registration-framework-18-v020">Phase 02 — The Metadata Core: Registration Framework ①⑧ (<code>v0.2.0</code>)<a class="headerlink" href="#phase-02-the-metadata-core-registration-framework-18-v020" title="Link to this section">#</a></h1>
+<blockquote>
+<p><strong>Mission:</strong> build the brain. A Cloud SQL Postgres registry holds every source,
+dataset, schema contract, and (soon) DQ rule and run record. A <code>pipeforge</code>
+CLI registers the four NovaMart sources. From this phase on, <strong>no component is
+allowed to know anything that isn't in this database.</strong></p>
+</blockquote>
+<h2 id="1-concepts">1. Concepts<a class="headerlink" href="#1-concepts" title="Link to this section">#</a></h2>
+<ul>
+<li>Notes <strong>§16 (Data contracts &amp; schema validation)</strong> — you implement versioned
+  contracts with compatibility checking today.</li>
+<li>Notes <strong>Q7 (ETL framework for 100 sources)</strong> — reread the breakdown; the registry
+  you're building is its core answer.</li>
+<li>GCP course <strong>M05 (choosing a database)</strong> — <em>why Postgres here?</em> The registry is a
+  low-volume, relational, transactional workload with joins and constraints:
+  classic Cloud SQL. Not BigQuery (OLAP, no OLTP semantics), not Firestore (you
+  want FK integrity + SQL reporting on audit data). Being able to defend this
+  choice <strong>is</strong> the M05 exam skill.</li>
+<li>The <strong>audit model ⑧</strong> starts here: <code>pipeline_run</code> is an append-only table every
+  future component writes to. Operational metadata capture is what turns "a bunch
+  of jobs" into "a platform" — it feeds the recon framework (P08), observability
+  (P10), and the ops console (P11).</li>
+</ul>
+<p><strong>Registration = a data contract ceremony.</strong> Onboarding isn't "give me creds";
+it's: declare schema, keys, business date, PII columns, freshness SLA, retention.
+Forcing this at registration time is what makes every downstream framework
+(quality, tokenization, archival, SLA monitoring) automatic.</p>
+<h2 id="2-build">2. Build<a class="headerlink" href="#2-build" title="Link to this section">#</a></h2>
+<h3 id="21-terraform-cloud-sql-smallest-possible">2.1 Terraform: Cloud SQL (smallest possible)<a class="headerlink" href="#21-terraform-cloud-sql-smallest-possible" title="Link to this section">#</a></h3>
+<p><code>terraform/modules/cloudsql_metadata/main.tf</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="kr">variable</span><span class="w"> </span><span class="nv">&quot;project_id&quot;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="na">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="p">}</span>
+<span class="kr">variable</span><span class="w"> </span><span class="nv">&quot;region&quot;</span><span class="w">     </span><span class="p">{</span><span class="w"> </span><span class="na">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="p">}</span>
+<span class="kr">variable</span><span class="w"> </span><span class="nv">&quot;env&quot;</span><span class="w">        </span><span class="p">{</span><span class="w"> </span><span class="na">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="p">}</span>
+
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;google_sql_database_instance&quot;</span><span class="w"> </span><span class="nv">&quot;metadata&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">name</span><span class="w">             </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;pf-${var.env}-metadata&quot;</span>
+<span class="w">  </span><span class="na">database_version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;POSTGRES_15&quot;</span>
+<span class="w">  </span><span class="na">region</span><span class="w">           </span><span class="o">=</span><span class="w"> </span><span class="nv">var.region</span>
+<span class="w">  </span><span class="nb">settings</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">tier</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;db-f1-micro&quot;</span><span class="c1">          # ~$9/mo — and you&#39;ll stop it when idle</span>
+<span class="w">    </span><span class="na">edition</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;ENTERPRISE&quot;</span>
+<span class="w">    </span><span class="nb">ip_configuration</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="na">ipv4_enabled</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="no">true</span><span class="c1">            # dev convenience; Phase 12 moves this private</span>
+<span class="w">      </span><span class="nb">authorized_networks</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="na">name</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;dev-machine&quot;</span>
+<span class="w">        </span><span class="na">value</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.dev_ip_cidr</span><span class="c1">      # your IP/32 — never 0.0.0.0/0</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="nb">backup_configuration</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="na">enabled</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="no">true</span><span class="w"> </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="w">  </span><span class="na">deletion_protection</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="no">false</span><span class="c1">        # this is a course; prod would be true</span>
+<span class="p">}</span>
+
+<span class="kr">variable</span><span class="w"> </span><span class="nv">&quot;dev_ip_cidr&quot;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="na">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="p">}</span>
+
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;google_sql_database&quot;</span><span class="w"> </span><span class="nv">&quot;pipeforge&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">name</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;pipeforge&quot;</span>
+<span class="w">  </span><span class="na">instance</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">google_sql_database_instance.metadata.name</span>
+<span class="p">}</span>
+
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;google_sql_user&quot;</span><span class="w"> </span><span class="nv">&quot;app&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">name</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;pipeforge_app&quot;</span>
+<span class="w">  </span><span class="na">instance</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">google_sql_database_instance.metadata.name</span>
+<span class="w">  </span><span class="na">password</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.db_password</span><span class="c1">         # dev only; Phase 12 swaps to Secret Manager + IAM auth</span>
+<span class="p">}</span>
+
+<span class="kr">variable</span><span class="w"> </span><span class="nv">&quot;db_password&quot;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="na">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="na">sensitive</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="no">true</span><span class="w"> </span><span class="p">}</span>
+
+<span class="kr">output</span><span class="w"> </span><span class="nv">&quot;connection_ip&quot;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="na">value</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">google_sql_database_instance.metadata.public_ip_address</span><span class="w"> </span><span class="p">}</span>
+<span class="kr">output</span><span class="w"> </span><span class="nv">&quot;instance_name&quot;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="na">value</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">google_sql_database_instance.metadata.name</span><span class="w"> </span><span class="p">}</span>
+</code></pre></div>
+<p>Wire it into <code>envs/dev/main.tf</code>, apply, then:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;PF_METADATA_DB_URL=postgresql+psycopg://pipeforge_app:&lt;pw&gt;@&lt;ip&gt;/pipeforge&quot;</span><span class="w"> </span>&gt;&gt;<span class="w"> </span>.env
+<span class="c1"># Idle cost control (memorize these two):</span>
+gcloud<span class="w"> </span>sql<span class="w"> </span>instances<span class="w"> </span>patch<span class="w"> </span>pf-dev-metadata<span class="w"> </span>--activation-policy<span class="o">=</span>NEVER<span class="w">    </span><span class="c1"># stop</span>
+gcloud<span class="w"> </span>sql<span class="w"> </span>instances<span class="w"> </span>patch<span class="w"> </span>pf-dev-metadata<span class="w"> </span>--activation-policy<span class="o">=</span>ALWAYS<span class="w">   </span><span class="c1"># start</span>
+</code></pre></div>
+<h3 id="22-sqlalchemy-models-srcpipeforgemetadatamodelspy">2.2 SQLAlchemy models — <code>src/pipeforge/metadata/models.py</code><a class="headerlink" href="#22-sqlalchemy-models-srcpipeforgemetadatamodelspy" title="Link to this section">#</a></h3>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">enum</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">uuid</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">datetime</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">sqlalchemy</span><span class="w"> </span><span class="kn">import</span> <span class="n">ForeignKey</span><span class="p">,</span> <span class="n">JSON</span><span class="p">,</span> <span class="n">String</span><span class="p">,</span> <span class="n">Text</span><span class="p">,</span> <span class="n">UniqueConstraint</span><span class="p">,</span> <span class="n">func</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sqlalchemy.orm</span><span class="w"> </span><span class="kn">import</span> <span class="n">DeclarativeBase</span><span class="p">,</span> <span class="n">Mapped</span><span class="p">,</span> <span class="n">mapped_column</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Base</span><span class="p">(</span><span class="n">DeclarativeBase</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_uuid</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">SourceKind</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">enum</span><span class="o">.</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">db</span> <span class="o">=</span> <span class="s2">&quot;db&quot;</span><span class="p">;</span> <span class="n">file</span> <span class="o">=</span> <span class="s2">&quot;file&quot;</span><span class="p">;</span> <span class="n">api</span> <span class="o">=</span> <span class="s2">&quot;api&quot;</span><span class="p">;</span> <span class="n">stream</span> <span class="o">=</span> <span class="s2">&quot;stream&quot;</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">LoadPattern</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">enum</span><span class="o">.</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">full</span> <span class="o">=</span> <span class="s2">&quot;full&quot;</span><span class="p">;</span> <span class="n">incremental</span> <span class="o">=</span> <span class="s2">&quot;incremental&quot;</span><span class="p">;</span> <span class="n">cdc</span> <span class="o">=</span> <span class="s2">&quot;cdc&quot;</span><span class="p">;</span> <span class="n">stream</span> <span class="o">=</span> <span class="s2">&quot;stream&quot;</span><span class="p">;</span> <span class="n">api</span> <span class="o">=</span> <span class="s2">&quot;api&quot;</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">SourceSystem</span><span class="p">(</span><span class="n">Base</span><span class="p">):</span>
+    <span class="n">__tablename__</span> <span class="o">=</span> <span class="s2">&quot;source_system&quot;</span>
+    <span class="n">source_id</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">primary_key</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">_uuid</span><span class="p">)</span>
+    <span class="n">name</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">String</span><span class="p">(</span><span class="mi">100</span><span class="p">),</span> <span class="n">unique</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">kind</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="n">SourceKind</span><span class="p">]</span>
+    <span class="n">connection_ref</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span>
+        <span class="n">String</span><span class="p">(</span><span class="mi">200</span><span class="p">),</span> <span class="n">doc</span><span class="o">=</span><span class="s2">&quot;Secret Manager key or docker alias — NEVER credentials&quot;</span><span class="p">)</span>
+    <span class="n">owner_email</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">String</span><span class="p">(</span><span class="mi">200</span><span class="p">))</span>
+    <span class="n">tenant</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">String</span><span class="p">(</span><span class="mi">50</span><span class="p">),</span> <span class="n">default</span><span class="o">=</span><span class="s2">&quot;novamart&quot;</span><span class="p">)</span>
+    <span class="n">created_at</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="n">datetime</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">server_default</span><span class="o">=</span><span class="n">func</span><span class="o">.</span><span class="n">now</span><span class="p">())</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Dataset</span><span class="p">(</span><span class="n">Base</span><span class="p">):</span>
+    <span class="n">__tablename__</span> <span class="o">=</span> <span class="s2">&quot;dataset&quot;</span>
+    <span class="n">__table_args__</span> <span class="o">=</span> <span class="p">(</span><span class="n">UniqueConstraint</span><span class="p">(</span><span class="s2">&quot;source_id&quot;</span><span class="p">,</span> <span class="s2">&quot;name&quot;</span><span class="p">),)</span>
+    <span class="n">dataset_id</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">primary_key</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">_uuid</span><span class="p">)</span>
+    <span class="n">source_id</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">ForeignKey</span><span class="p">(</span><span class="s2">&quot;source_system.source_id&quot;</span><span class="p">))</span>
+    <span class="n">name</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">String</span><span class="p">(</span><span class="mi">100</span><span class="p">))</span>
+    <span class="n">load_pattern</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="n">LoadPattern</span><span class="p">]</span>
+    <span class="n">schedule_cron</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">String</span><span class="p">(</span><span class="mi">50</span><span class="p">))</span>
+    <span class="n">watermark_column</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">String</span><span class="p">(</span><span class="mi">100</span><span class="p">))</span>
+    <span class="n">primary_keys</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">list</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">JSON</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+    <span class="n">business_date_column</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">String</span><span class="p">(</span><span class="mi">100</span><span class="p">))</span>
+    <span class="n">scd_type</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">pii_columns</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">list</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">JSON</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+    <span class="n">sla_freshness_minutes</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="mi">1440</span><span class="p">)</span>
+    <span class="n">retention_days</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="mi">365</span><span class="p">)</span>
+    <span class="n">active</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">SchemaContract</span><span class="p">(</span><span class="n">Base</span><span class="p">):</span>
+    <span class="n">__tablename__</span> <span class="o">=</span> <span class="s2">&quot;schema_contract&quot;</span>
+    <span class="n">__table_args__</span> <span class="o">=</span> <span class="p">(</span><span class="n">UniqueConstraint</span><span class="p">(</span><span class="s2">&quot;dataset_id&quot;</span><span class="p">,</span> <span class="s2">&quot;version&quot;</span><span class="p">),)</span>
+    <span class="n">contract_id</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">primary_key</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">_uuid</span><span class="p">)</span>
+    <span class="n">dataset_id</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">ForeignKey</span><span class="p">(</span><span class="s2">&quot;dataset.dataset_id&quot;</span><span class="p">))</span>
+    <span class="n">version</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span>
+    <span class="nb">format</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">String</span><span class="p">(</span><span class="mi">20</span><span class="p">),</span> <span class="n">default</span><span class="o">=</span><span class="s2">&quot;jsonschema&quot;</span><span class="p">)</span>
+    <span class="n">definition</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">JSON</span><span class="p">)</span>
+    <span class="n">compatibility</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">String</span><span class="p">(</span><span class="mi">20</span><span class="p">),</span> <span class="n">default</span><span class="o">=</span><span class="s2">&quot;backward&quot;</span><span class="p">)</span>
+    <span class="n">created_at</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="n">datetime</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">server_default</span><span class="o">=</span><span class="n">func</span><span class="o">.</span><span class="n">now</span><span class="p">())</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">PipelineRun</span><span class="p">(</span><span class="n">Base</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;⑧ Audit model — APPEND ONLY. No UPDATEs except closing the row you opened.&quot;&quot;&quot;</span>
+    <span class="n">__tablename__</span> <span class="o">=</span> <span class="s2">&quot;pipeline_run&quot;</span>
+    <span class="n">run_id</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">primary_key</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">_uuid</span><span class="p">)</span>
+    <span class="n">dataset_id</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">ForeignKey</span><span class="p">(</span><span class="s2">&quot;dataset.dataset_id&quot;</span><span class="p">))</span>
+    <span class="n">execution_date</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">String</span><span class="p">(</span><span class="mi">10</span><span class="p">))</span>     <span class="c1"># YYYY-MM-DD, the idempotency key</span>
+    <span class="n">layer</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">String</span><span class="p">(</span><span class="mi">10</span><span class="p">))</span>              <span class="c1"># raw|odp|fdp|cdp</span>
+    <span class="n">status</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">String</span><span class="p">(</span><span class="mi">20</span><span class="p">),</span> <span class="n">default</span><span class="o">=</span><span class="s2">&quot;running&quot;</span><span class="p">)</span>
+    <span class="n">started_at</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="n">datetime</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">server_default</span><span class="o">=</span><span class="n">func</span><span class="o">.</span><span class="n">now</span><span class="p">())</span>
+    <span class="n">finished_at</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="n">datetime</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span>
+    <span class="n">rows_read</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span>
+    <span class="n">rows_written</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span>
+    <span class="n">rows_quarantined</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span>
+    <span class="n">bytes_written</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span>
+    <span class="n">error</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">Text</span><span class="p">)</span>
+    <span class="n">airflow_dag_id</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">String</span><span class="p">(</span><span class="mi">200</span><span class="p">))</span>
+    <span class="n">airflow_run_id</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">String</span><span class="p">(</span><span class="mi">200</span><span class="p">))</span>
+</code></pre></div>
+<p>Set up <strong>Alembic</strong> (<code>alembic init src/pipeforge/metadata/alembic</code>, point it at
+<code>Base.metadata</code>, autogenerate the first migration, <code>alembic upgrade head</code>).
+Migrations-from-day-one is the professional habit: your schema will change 8 more
+times this course, and <code>alembic upgrade head</code> is how every env keeps up.</p>
+<h3 id="23-repository-layer-run-context-srcpipeforgemetadatarepopy">2.3 Repository layer + run-context — <code>src/pipeforge/metadata/repo.py</code><a class="headerlink" href="#23-repository-layer-run-context-srcpipeforgemetadatarepopy" title="Link to this section">#</a></h3>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">contextlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">contextmanager</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">datetime</span><span class="p">,</span> <span class="n">timezone</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">sqlalchemy</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_engine</span><span class="p">,</span> <span class="n">select</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sqlalchemy.orm</span><span class="w"> </span><span class="kn">import</span> <span class="n">Session</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">pipeforge.core.settings</span><span class="w"> </span><span class="kn">import</span> <span class="n">settings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pipeforge.metadata.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">PipelineRun</span><span class="p">,</span> <span class="n">SchemaContract</span><span class="p">,</span> <span class="n">SourceSystem</span>
+
+<span class="n">_engine</span> <span class="o">=</span> <span class="kc">None</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">engine</span><span class="p">():</span>
+    <span class="k">global</span> <span class="n">_engine</span>
+    <span class="k">if</span> <span class="n">_engine</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">_engine</span> <span class="o">=</span> <span class="n">create_engine</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">metadata_db_url</span><span class="p">,</span> <span class="n">pool_pre_ping</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_engine</span>
+
+
+<span class="nd">@contextmanager</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">session</span><span class="p">():</span>
+    <span class="k">with</span> <span class="n">Session</span><span class="p">(</span><span class="n">engine</span><span class="p">())</span> <span class="k">as</span> <span class="n">s</span><span class="p">,</span> <span class="n">s</span><span class="o">.</span><span class="n">begin</span><span class="p">():</span>
+        <span class="k">yield</span> <span class="n">s</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">get_dataset</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dataset</span><span class="p">:</span>
+    <span class="k">with</span> <span class="n">session</span><span class="p">()</span> <span class="k">as</span> <span class="n">s</span><span class="p">:</span>
+        <span class="n">ds</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">select</span><span class="p">(</span><span class="n">Dataset</span><span class="p">)</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">Dataset</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="n">name</span><span class="p">))</span><span class="o">.</span><span class="n">scalar_one</span><span class="p">()</span>
+        <span class="n">s</span><span class="o">.</span><span class="n">expunge</span><span class="p">(</span><span class="n">ds</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">ds</span>
+
+
+<span class="nd">@contextmanager</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">run_context</span><span class="p">(</span><span class="n">dataset_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">execution_date</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">layer</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Audit wrapper: every unit of work in PipeForge runs inside one of these.&quot;&quot;&quot;</span>
+    <span class="k">with</span> <span class="n">session</span><span class="p">()</span> <span class="k">as</span> <span class="n">s</span><span class="p">:</span>
+        <span class="n">run</span> <span class="o">=</span> <span class="n">PipelineRun</span><span class="p">(</span><span class="n">dataset_id</span><span class="o">=</span><span class="n">dataset_id</span><span class="p">,</span> <span class="n">execution_date</span><span class="o">=</span><span class="n">execution_date</span><span class="p">,</span> <span class="n">layer</span><span class="o">=</span><span class="n">layer</span><span class="p">)</span>
+        <span class="n">s</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">run</span><span class="p">);</span> <span class="n">s</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>
+        <span class="n">run_id</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">run_id</span>
+    <span class="n">metrics</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">yield</span> <span class="n">run_id</span><span class="p">,</span> <span class="n">metrics</span>
+        <span class="n">status</span><span class="p">,</span> <span class="n">error</span> <span class="o">=</span> <span class="s2">&quot;success&quot;</span><span class="p">,</span> <span class="kc">None</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="n">status</span><span class="p">,</span> <span class="n">error</span> <span class="o">=</span> <span class="s2">&quot;failed&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">)[:</span><span class="mi">2000</span><span class="p">]</span>
+        <span class="k">raise</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="k">with</span> <span class="n">session</span><span class="p">()</span> <span class="k">as</span> <span class="n">s</span><span class="p">:</span>
+            <span class="n">run</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">PipelineRun</span><span class="p">,</span> <span class="n">run_id</span><span class="p">)</span>
+            <span class="n">run</span><span class="o">.</span><span class="n">status</span><span class="p">,</span> <span class="n">run</span><span class="o">.</span><span class="n">error</span> <span class="o">=</span> <span class="n">status</span><span class="p">,</span> <span class="n">error</span>
+            <span class="n">run</span><span class="o">.</span><span class="n">finished_at</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">(</span><span class="n">timezone</span><span class="o">.</span><span class="n">utc</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;rows_read&quot;</span><span class="p">,</span> <span class="s2">&quot;rows_written&quot;</span><span class="p">,</span> <span class="s2">&quot;rows_quarantined&quot;</span><span class="p">,</span> <span class="s2">&quot;bytes_written&quot;</span><span class="p">):</span>
+                <span class="nb">setattr</span><span class="p">(</span><span class="n">run</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">metrics</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">k</span><span class="p">))</span>
+</code></pre></div>
+<h3 id="24-contract-compatibility-srcpipeforgecontractscompatpy">2.4 Contract compatibility — <code>src/pipeforge/contracts/compat.py</code><a class="headerlink" href="#24-contract-compatibility-srcpipeforgecontractscompatpy" title="Link to this section">#</a></h3>
+<p>Implement the §16 rules as code (this is a fantastic unit-test target):</p>
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">check_backward_compatible</span><span class="p">(</span><span class="n">old</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">new</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;JSON-Schema flavored: new readers must read old data.</span>
+<span class="sd">    Violations: removing a field that was required, changing a type,</span>
+<span class="sd">    adding a NEW required field without default. A RENAME = remove + add = breaking.</span>
+<span class="sd">    Returns list of violations (empty = compatible).&quot;&quot;&quot;</span>
+    <span class="n">violations</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">old_props</span><span class="p">,</span> <span class="n">new_props</span> <span class="o">=</span> <span class="n">old</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;properties&quot;</span><span class="p">,</span> <span class="p">{}),</span> <span class="n">new</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;properties&quot;</span><span class="p">,</span> <span class="p">{})</span>
+    <span class="k">for</span> <span class="n">field</span><span class="p">,</span> <span class="n">spec</span> <span class="ow">in</span> <span class="n">old_props</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">field</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">new_props</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">old</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;required&quot;</span><span class="p">,</span> <span class="p">[]):</span>
+                <span class="n">violations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;removed required field &#39;</span><span class="si">{</span><span class="n">field</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">new_props</span><span class="p">[</span><span class="n">field</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">)</span> <span class="o">!=</span> <span class="n">spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">):</span>
+            <span class="n">violations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;type change on &#39;</span><span class="si">{</span><span class="n">field</span><span class="si">}</span><span class="s2">&#39;: </span><span class="si">{</span><span class="n">spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;type&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2"> -&gt; </span><span class="si">{</span><span class="n">new_props</span><span class="p">[</span><span class="n">field</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;type&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">new</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;required&quot;</span><span class="p">,</span> <span class="p">[]):</span>
+        <span class="k">if</span> <span class="n">field</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">old</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;required&quot;</span><span class="p">,</span> <span class="p">[])</span> <span class="ow">and</span> <span class="s2">&quot;default&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">new_props</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="p">{}):</span>
+            <span class="n">violations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;new required field &#39;</span><span class="si">{</span><span class="n">field</span><span class="si">}</span><span class="s2">&#39; without default&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">violations</span>
+</code></pre></div>
+<p>Registration of contract v2 <strong>refuses</strong> to save if violations exist (unless
+<code>--force-breaking</code>, which requires a deprecation note — the §16 change protocol).</p>
+<h3 id="25-cli-registration-commands">2.5 CLI — registration commands<a class="headerlink" href="#25-cli-registration-commands" title="Link to this section">#</a></h3>
+<p>Add to <code>cli.py</code> a <code>register</code> sub-app:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># pipeforge register source --name novamart_oltp --kind db --connection-ref sm://novamart-mysql --owner you@x.com</span>
+<span class="c1"># pipeforge register dataset --source novamart_oltp --name customers --pattern incremental \</span>
+<span class="c1">#     --watermark-column updated_at --pk customer_id --scd-type 2 \</span>
+<span class="c1">#     --pii email,phone --business-date-column updated_at --schedule &quot;0 2 * * *&quot;</span>
+<span class="c1"># pipeforge register contract --dataset customers --file contracts/customers.v1.json</span>
+<span class="c1"># pipeforge registry show --dataset customers        # pretty-print everything known</span>
+</code></pre></div>
+<h3 id="26-register-the-four-novamart-sources">2.6 Register the four NovaMart sources<a class="headerlink" href="#26-register-the-four-novamart-sources" title="Link to this section">#</a></h3>
+<p>Create <code>contracts/</code> JSON-Schema files for <code>orders</code>, <code>customers</code>, <code>products</code>,
+<code>clickstream</code>, <code>fx_rates</code> (write them yourself — deciding required fields, types,
+and PII flags <em>is</em> the exercise), then register all sources/datasets. Example
+<code>contracts/orders.v1.json</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;$id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;novamart.orders.v1&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;object&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;required&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;order_id&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;order_line_id&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;customer_id&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;product_id&quot;</span><span class="p">,</span>
+<span class="w">               </span><span class="s2">&quot;order_ts&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;quantity&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;unit_price_usd&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;status&quot;</span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;properties&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;order_id&quot;</span><span class="p">:</span><span class="w">        </span><span class="p">{</span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;string&quot;</span><span class="p">},</span>
+<span class="w">    </span><span class="nt">&quot;order_line_id&quot;</span><span class="p">:</span><span class="w">   </span><span class="p">{</span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;string&quot;</span><span class="p">},</span>
+<span class="w">    </span><span class="nt">&quot;customer_id&quot;</span><span class="p">:</span><span class="w">     </span><span class="p">{</span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;string&quot;</span><span class="p">},</span>
+<span class="w">    </span><span class="nt">&quot;product_id&quot;</span><span class="p">:</span><span class="w">      </span><span class="p">{</span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;string&quot;</span><span class="p">},</span>
+<span class="w">    </span><span class="nt">&quot;order_ts&quot;</span><span class="p">:</span><span class="w">        </span><span class="p">{</span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;string&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;format&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;date-time&quot;</span><span class="p">},</span>
+<span class="w">    </span><span class="nt">&quot;quantity&quot;</span><span class="p">:</span><span class="w">        </span><span class="p">{</span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;integer&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;minimum&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">},</span>
+<span class="w">    </span><span class="nt">&quot;unit_price_usd&quot;</span><span class="p">:</span><span class="w">  </span><span class="p">{</span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;number&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;minimum&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">},</span>
+<span class="w">    </span><span class="nt">&quot;currency&quot;</span><span class="p">:</span><span class="w">        </span><span class="p">{</span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;string&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;default&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;USD&quot;</span><span class="p">},</span>
+<span class="w">    </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w">          </span><span class="p">{</span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;string&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;enum&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;placed&quot;</span><span class="p">,</span><span class="s2">&quot;paid&quot;</span><span class="p">,</span><span class="s2">&quot;shipped&quot;</span><span class="p">,</span><span class="s2">&quot;cancelled&quot;</span><span class="p">,</span><span class="s2">&quot;returned&quot;</span><span class="p">]}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+<h3 id="27-ship-it">2.7 Ship it<a class="headerlink" href="#27-ship-it" title="Link to this section">#</a></h3>
+<p>Tests to write before tagging: models round-trip, <code>run_context</code> writes
+success/failed rows correctly, compatibility checker (≥6 cases: add optional ✅,
+remove optional ✅, remove required ❌, type change ❌, rename ❌, new required
+without default ❌). Tag <code>v0.2.0</code>.</p>
+<h2 id="3-prove-it">3. Prove it<a class="headerlink" href="#3-prove-it" title="Link to this section">#</a></h2>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <code>alembic upgrade head</code> from scratch creates all tables</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <code>pipeforge registry show --dataset customers</code> prints source, pattern, keys, PII, SLA, contract v1</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Registering an incompatible contract v2 is rejected with the exact violation listed</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <code>pytest</code> ≥ 12 tests green in CI</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Cloud SQL stopped when you walk away (<code>activation-policy=NEVER</code>)</li>
+</ul>
+<h2 id="4-break-it">4. Break it<a class="headerlink" href="#4-break-it" title="Link to this section">#</a></h2>
+<p>Simulate the classic Friday-4pm incident (§16): change <code>customers.v2</code> to rename
+<code>email → email_address</code> and register with <code>--force-breaking</code>. Note what <em>will</em>
+break downstream (nothing exists yet — but write the prediction in
+<code>docs/incidents/002-contract-rename.md</code>). Revisit this file in Phase 8 when the DQ
+gate actually catches it. Predict-then-verify is how you build systems intuition.</p>
+<h2 id="5-interview-corner">5. Interview corner<a class="headerlink" href="#5-interview-corner" title="Link to this section">#</a></h2>
+<ul>
+<li><em>"How would you onboard 100 sources?"</em> — you now answer with a schema diagram you
+  designed: "registration writes to a registry; every engine is parameter-driven
+  off it; onboarding = INSERT, not code." (Q7)</li>
+<li><em>"What's in a data contract?"</em> — schema <strong>+ semantics + quality guarantees +
+  change protocol + ownership</strong> (§16). You built the enforcement, so mention the
+  compatibility matrix (backward/forward/full) and that <strong>a rename is a breaking change</strong>.</li>
+<li><em>"Why Postgres and not BigQuery for metadata?"</em> — transactional integrity, FKs,
+  point lookups, tiny volume. Match the store to the access pattern (M05).</li>
+</ul>
+<h2 id="6-stretch-goals">6. Stretch goals<a class="headerlink" href="#6-stretch-goals" title="Link to this section">#</a></h2>
+<ul>
+<li><code>pipeforge registry export --format json</code> → the seed of the Phase 11 catalog page.</li>
+<li>Add a <code>tags</code> JSONB column (domain, criticality) — Data-Mesh-ish product metadata (§25).</li>
+<li>Property-based tests (hypothesis) for the compatibility checker.</li>
+</ul>
+        <nav class="pager">
+          <a class="prev" href="phase-01.html"><span class="dir">← Previous</span><span class="label">01 · Foundation</span></a>
+          <a class="next" href="phase-03.html"><span class="dir">Next →</span><span class="label">03 · Batch Ingestion</span></a>
+        </nav>
+        <footer class="page-foot">
+          Generated from <a href="https://github.com/thesandx/courses/blob/master/data_platform_mastery/phase_02_metadata_core/README.md"><code>data_platform_mastery/phase_02_metadata_core/README.md</code></a> ·
+          Part of the <a href="index.html">Data Platform Mastery</a> course.
+        </footer>
+      </main>
+      <aside class="toc-rail"><div class="toc-title">On this page</div>
+<a href="#1-concepts">1. Concepts</a>
+<a href="#2-build">2. Build</a>
+<a href="#3-prove-it">3. Prove it</a>
+<a href="#4-break-it">4. Break it</a>
+<a href="#5-interview-corner">5. Interview corner</a>
+<a href="#6-stretch-goals">6. Stretch goals</a></aside>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById("themeBtn").addEventListener("click", function () {
+    var cur = document.documentElement.getAttribute("data-theme");
+    localStorage.setItem("dpm-theme", cur === "dark" ? "light" : "dark");
+    location.reload();   // simplest way to re-render mermaid + pygments in the new theme
+  });
+  document.getElementById("menuBtn").addEventListener("click", function () {
+    document.getElementById("sidebar").classList.toggle("open");
+  });
+</script>
+</body>
+</html>

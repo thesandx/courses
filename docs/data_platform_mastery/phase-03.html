@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 03 — Batch Ingestion Framework ② (v0.3.0) · Data Platform Mastery</title>
+<meta name="description" content="Data Platform Mastery — build an open-source metadata-driven ETL platform on GCP.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚒️</text></svg>">
+<link rel="stylesheet" href="style.css">
+<script>
+  (function () {
+    var t = localStorage.getItem("dpm-theme");
+    if (!t) t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+</head>
+<body>
+<button class="menu-btn" id="menuBtn" aria-label="Toggle navigation">☰</button>
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">⚒️</span>
+      <span>
+        <span class="brand-title">Data Platform Mastery</span>
+        <span class="brand-sub">Build PipeForge on GCP</span>
+      </span>
+    </a>
+    <nav><div class="nav-group">Start Here</div>
+<a class="nav-item" href="index.html">Course Overview</a>
+<a class="nav-item" href="project-charter.html">Project Charter</a>
+<a class="nav-item" href="interview-map.html">Interview Map</a>
+<div class="nav-group">Build Phases</div>
+<a class="nav-item" href="phase-00.html">00 · Orientation</a>
+<a class="nav-item" href="phase-01.html">01 · Foundation<span class="tag">v0.1.0</span></a>
+<a class="nav-item" href="phase-02.html">02 · Metadata Core<span class="tag">v0.2.0</span></a>
+<a class="nav-item active" href="phase-03.html">03 · Batch Ingestion<span class="tag">v0.3.0</span></a>
+<a class="nav-item" href="phase-04.html">04 · Streaming &amp; Kafka<span class="tag">v0.4.0</span></a>
+<a class="nav-item" href="phase-05.html">05 · Spark Processing<span class="tag">v0.5.0</span></a>
+<a class="nav-item" href="phase-06.html">06 · BigQuery Serving<span class="tag">v0.6.0</span></a>
+<a class="nav-item" href="phase-07.html">07 · Orchestration<span class="tag">v0.7.0</span></a>
+<a class="nav-item" href="phase-08.html">08 · Quality &amp; Recon<span class="tag">v0.8.0</span></a>
+<a class="nav-item" href="phase-09.html">09 · Governance<span class="tag">v0.9.0</span></a>
+<a class="nav-item" href="phase-10.html">10 · Observability &amp; FinOps<span class="tag">v0.10.0</span></a>
+<a class="nav-item" href="phase-11.html">11 · Streamlit Control Plane<span class="tag">v0.11.0</span></a>
+<a class="nav-item" href="phase-12.html">12 · Platform APIs<span class="tag">v0.12.0</span></a>
+<a class="nav-item" href="phase-13.html">13 · Scale &amp; Hardening<span class="tag">v0.13.0</span></a>
+<a class="nav-item" href="phase-14.html">14 · Open-Source Launch<span class="tag">v1.0.0</span></a>
+<div class="nav-group">Endgame</div>
+<a class="nav-item" href="interview-gauntlet.html">Interview Gauntlet<span class="tag">🎯</span></a></nav>
+    <div class="sidebar-foot">
+      <button id="themeBtn" class="theme-btn" title="Toggle dark mode">🌗 Theme</button>
+      <a href="https://github.com/thesandx/courses/tree/master/data_platform_mastery">GitHub ↗</a>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="crumbs">
+      <span class="crumb-group">Build Phases</span>
+      <span class="crumb-sep">/</span>
+      <span class="crumb-page">03 · Batch Ingestion</span>
+      <span class="badge">v0.3.0</span>
+    </header>
+    <div class="content-wrap">
+      <main class="content">
+<h1 id="phase-03-batch-ingestion-framework-2-v030">Phase 03 — Batch Ingestion Framework ② (<code>v0.3.0</code>)<a class="headerlink" href="#phase-03-batch-ingestion-framework-2-v030" title="Link to this section">#</a></h1>
+<blockquote>
+<p><strong>Mission:</strong> one parameter-driven ingestion engine, three connector types
+(files, JDBC, REST API), all landing in the RAW zone with manifests, contract
+validation, quarantine, and audit rows. Plus the NovaMart data generators that
+feed the rest of the course.</p>
+</blockquote>
+<h2 id="1-concepts">1. Concepts<a class="headerlink" href="#1-concepts" title="Link to this section">#</a></h2>
+<p>Read notes <strong>§12 (ingestion patterns)</strong> and <strong>§4 (source categories)</strong> first —
+this phase implements the left half of both tables. Also GCP <strong>M02</strong> (lake zoning)
+and <strong>M03</strong> (loading BigQuery, external tables).</p>
+<p><strong>RAW zone rules (§5, §22 Bronze):</strong>
+- <strong>As-is.</strong> No cleaning, no typing, no renames. RAW is your replay/audit insurance.
+  "Making bronze a little clean" is the classic mistake — you lose the original.
+- <strong>Partition by <em>ingestion</em> date, not event date</strong> — late data makes event-date
+  partitioning of raw unpredictable (§1's practical-knowledge example, §11).
+- Append-only, with <strong>batch manifests</strong>: each landed batch writes
+  <code>_MANIFEST.json</code> (rows, bytes, source watermark, contract version, checksum).
+  Downstream promotion reads <em>the manifest</em>, not "whatever files are there" —
+  that's how you make append-only RAW + idempotent ODP coexist.</p>
+<p><strong>Layout convention (memorize — you'll say it in interviews):</strong></p>
+<div class="highlight"><pre><span></span><code>gs://&lt;raw&gt;/source=&lt;source&gt;/dataset=&lt;name&gt;/ingest_date=YYYY-MM-DD/batch_id=&lt;uuid&gt;/
+    part-000.csv            # or .jsonl / .parquet — source-native
+    _MANIFEST.json
+</code></pre></div>
+<p><strong>The idempotency contract of this phase:</strong> re-running ingestion for the same
+<code>execution_date</code> creates a <em>new</em> batch under the same <code>ingest_date=</code> prefix and
+marks it latest in the manifest index; promotion (Phase 5) always takes the latest
+<strong>complete</strong> batch per execution_date. Result: retries never corrupt, and RAW keeps
+full history. Compare this with the naive "overwrite raw on retry" and be able to
+argue both (§7).</p>
+<p><strong>Watermarks:</strong> incremental JDBC pulls <code>WHERE updated_at &gt; :last_watermark</code>. The
+watermark lives in the <strong>metadata DB</strong> (never in code, never in a local file). And
+say it with me (§12): <strong>incremental extraction misses hard deletes</strong> — we'll prove
+it in Phase 8 recon and fix the discussion with CDC in Phase 5.</p>
+<h2 id="2-build">2. Build<a class="headerlink" href="#2-build" title="Link to this section">#</a></h2>
+<h3 id="21-novamart-generators-generators">2.1 NovaMart generators — <code>generators/</code><a class="headerlink" href="#21-novamart-generators-generators" title="Link to this section">#</a></h3>
+<ol>
+<li><code>gen_orders.py</code> — writes a daily CSV of ~100k order lines to a <em>landing</em> bucket
+   (simulate a partner drop): 1–3% deliberately malformed rows (bad dates, negative
+   qty, null PKs — the DQ fodder), plus ~0.5% duplicate order_line_ids (dedup fodder),
+   and a <code>--late-fraction</code> flag that stamps some rows with yesterday's <code>order_ts</code>
+   (late-data fodder for Phase 5).</li>
+<li><code>docker/docker-compose.sources.yml</code> — a local <strong>MySQL 8</strong> container seeded with
+   <code>customers</code> (50k) and <code>products</code> (5k) tables, plus <code>gen_oltp_churn.py</code> that
+   updates ~2% of customers/day (tier changes, address moves — SCD2 fodder) and
+   <strong>hard-deletes</strong> a handful (the recon lesson).</li>
+<li><code>fx_rates</code> needs no generator — you'll pull https://api.frankfurter.dev (free, keyless).</li>
+</ol>
+<p>Add a <code>landing</code> bucket to the <code>gcs_lake</code> module (partner drops arrive here, outside RAW).</p>
+<h3 id="22-the-connector-interface-srcpipeforgeingestionbasepy">2.2 The connector interface — <code>src/pipeforge/ingestion/base.py</code><a class="headerlink" href="#22-the-connector-interface-srcpipeforgeingestionbasepy" title="Link to this section">#</a></h3>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">BatchResult</span><span class="p">:</span>
+    <span class="n">batch_id</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">rows_read</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">rows_landed</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">rows_quarantined</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">bytes_written</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">new_watermark</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Connector</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Every connector is constructed from a Dataset row — parameters, not code.&quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">contract</span><span class="p">,</span> <span class="n">execution_date</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ds</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">contract</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">execution_date</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">contract</span><span class="p">,</span> <span class="n">execution_date</span>
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">extract</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Iterator[dict]&quot;</span><span class="p">:</span> <span class="o">...</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">land</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BatchResult</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Template method: extract → validate against contract → write RAW + quarantine</span>
+<span class="sd">        + _MANIFEST.json. Subclasses only implement extract().&quot;&quot;&quot;</span>
+</code></pre></div>
+<p><code>land()</code> is where the framework earns its name: contract validation
+(<code>jsonschema.validate</code> per record, invalid → quarantine bucket with the violation
+attached), Hive-style pathing, manifest writing, and metrics into the
+<code>run_context</code> from Phase 2. Write it once; every connector inherits it.</p>
+<h3 id="23-three-connectors">2.3 Three connectors<a class="headerlink" href="#23-three-connectors" title="Link to this section">#</a></h3>
+<p><code>file.py</code> (GCS landing → RAW):</p>
+<div class="highlight"><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">FileConnector</span><span class="p">(</span><span class="n">Connector</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Moves partner file drops from landing/ to RAW with validation.</span>
+<span class="sd">    Config used: dataset.name, contract, expected filename pattern in params.&quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">extract</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">client</span> <span class="o">=</span> <span class="n">storage</span><span class="o">.</span><span class="n">Client</span><span class="p">()</span>
+        <span class="n">prefix</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;drops/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">ds</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">execution_date</span><span class="si">}</span><span class="s2">/&quot;</span>
+        <span class="n">blobs</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">client</span><span class="o">.</span><span class="n">list_blobs</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">landing_bucket</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="n">prefix</span><span class="p">))</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">blobs</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">SourceDataMissing</span><span class="p">(</span><span class="n">prefix</span><span class="p">)</span>     <span class="c1"># fail LOUD — silent skip = silent staleness (§1)</span>
+        <span class="k">for</span> <span class="n">blob</span> <span class="ow">in</span> <span class="n">blobs</span><span class="p">:</span>
+            <span class="k">yield from</span> <span class="n">csv</span><span class="o">.</span><span class="n">DictReader</span><span class="p">(</span><span class="n">io</span><span class="o">.</span><span class="n">TextIOWrapper</span><span class="p">(</span><span class="n">blob</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="s2">&quot;rb&quot;</span><span class="p">)))</span>
+</code></pre></div>
+<p><code>jdbc.py</code> (MySQL incremental) — key logic:</p>
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">extract</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="n">wm</span> <span class="o">=</span> <span class="n">repo</span><span class="o">.</span><span class="n">get_watermark</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ds</span><span class="o">.</span><span class="n">dataset_id</span><span class="p">)</span>            <span class="c1"># from ingestion_state table</span>
+    <span class="n">q</span> <span class="o">=</span> <span class="n">text</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;SELECT * FROM </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">ds</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> WHERE </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">ds</span><span class="o">.</span><span class="n">watermark_column</span><span class="si">}</span><span class="s2"> &gt; :wm &quot;</span>
+             <span class="sa">f</span><span class="s2">&quot;AND </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">ds</span><span class="o">.</span><span class="n">watermark_column</span><span class="si">}</span><span class="s2"> &lt;= :ceiling ORDER BY </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">ds</span><span class="o">.</span><span class="n">watermark_column</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="c1"># ceiling = execution_date 23:59:59 — a CLOSED window makes the run reproducible/backfillable.</span>
+    <span class="c1"># An open-ended query (&quot;&gt; wm&quot;) re-run tomorrow returns different rows = not idempotent.</span>
+    <span class="o">...</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_new_watermark</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">max_seen</span><span class="p">)</span>
+</code></pre></div>
+<p>After a successful land, <code>repo.advance_watermark(...)</code> — inside the same audit
+transaction. (Interview nugget: advance the watermark only after durable landing,
+or a crash between the two loses data.)</p>
+<p><code>rest_api.py</code> (fx_rates) — pagination loop, <code>tenacity</code> retries with exponential
+backoff + jitter, explicit timeout, and a politeness rate limit. Small data, but
+the <em>shape</em> (retry/backoff/pagination/closed date window) is what interviews ask about (§4 APIs).</p>
+<p>Add an <code>ingestion_state</code> table via a new Alembic migration (dataset_id PK,
+watermark_value, updated_at) — your first schema evolution, done properly.</p>
+<h3 id="24-cli-wiring">2.4 CLI + wiring<a class="headerlink" href="#24-cli-wiring" title="Link to this section">#</a></h3>
+<div class="highlight"><pre><span></span><code>pipeforge<span class="w"> </span>ingest<span class="w"> </span>--dataset<span class="w"> </span>orders<span class="w">     </span>--execution-date<span class="w"> </span><span class="m">2026</span>-07-15<span class="w">   </span><span class="c1"># file</span>
+pipeforge<span class="w"> </span>ingest<span class="w"> </span>--dataset<span class="w"> </span>customers<span class="w">  </span>--execution-date<span class="w"> </span><span class="m">2026</span>-07-15<span class="w">   </span><span class="c1"># jdbc incremental</span>
+pipeforge<span class="w"> </span>ingest<span class="w"> </span>--dataset<span class="w"> </span>fx_rates<span class="w">   </span>--execution-date<span class="w"> </span><span class="m">2026</span>-07-15<span class="w">   </span><span class="c1"># api</span>
+</code></pre></div>
+<p>The <code>ingest</code> command: look up dataset → pick connector class from
+<code>load_pattern</code> (a registry dict, not if/else chains) → run inside <code>run_context</code>.</p>
+<h3 id="25-see-it-in-bigquery-teaser-for-m03">2.5 See it in BigQuery (teaser for M03)<a class="headerlink" href="#25-see-it-in-bigquery-teaser-for-m03" title="Link to this section">#</a></h3>
+<p>Create dataset <code>raw_ext</code> in Terraform and one <strong>external table</strong> over
+<code>gs://…/source=partner_files/dataset=orders/*</code> with hive partitioning. Query your
+raw CSVs with SQL — and note the bytes scanned (external tables don't prune well;
+that's a <em>feature</em> here: it motivates ODP columnar in Phase 5).</p>
+<h3 id="26-ship-it">2.6 Ship it<a class="headerlink" href="#26-ship-it" title="Link to this section">#</a></h3>
+<p>Unit tests: contract-validation split (valid→raw, invalid→quarantine with reason),
+manifest correctness, watermark closed-window logic (freeze time, run twice, second
+run lands zero rows). Tag <code>v0.3.0</code>.</p>
+<h2 id="3-prove-it">3. Prove it<a class="headerlink" href="#3-prove-it" title="Link to this section">#</a></h2>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Three datasets land for today's date; <code>gsutil ls</code> shows the exact layout convention</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <code>_MANIFEST.json</code> rows == audit <code>pipeline_run.rows_written</code></li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Malformed rows are in quarantine <strong>with violation reasons</strong>, and
+      <code>rows_read = rows_landed + rows_quarantined</code> (conservation law — check it in SQL)</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Re-run same execution_date: new batch_id, watermark unmoved for jdbc (closed window), no duplication downstream risk</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <code>SELECT COUNT(*)</code> on the external table matches the manifest</li>
+</ul>
+<h2 id="4-break-it">4. Break it<a class="headerlink" href="#4-break-it" title="Link to this section">#</a></h2>
+<ol>
+<li>Delete the day's partner drop and run ingestion → confirm it fails loudly with
+   <code>SourceDataMissing</code>, audit row <code>failed</code>, not a silent success. (Silent failure is THE
+   DE failure mode — §1.)</li>
+<li>Kill the JDBC run mid-extract (Ctrl-C). Confirm: watermark did NOT advance,
+   re-run lands a complete batch, no gap. Write <code>docs/incidents/003-midrun-crash.md</code>.</li>
+</ol>
+<h2 id="5-interview-corner">5. Interview corner<a class="headerlink" href="#5-interview-corner" title="Link to this section">#</a></h2>
+<ul>
+<li>60-second answer to <em>"How do you ingest files reliably?"</em>: landing→validate against
+  contract→quarantine bad→manifest→RAW ingestion-date partitions→audit row→loud
+  failure on missing drop. That's a complete, senior answer.</li>
+<li><em>"Full vs incremental vs CDC?"</em> — you now have the 3-question decision tree (§12)
+  <strong>plus</strong> a personal example: "customers is incremental on <code>updated_at</code>; I know it
+  misses hard deletes — my recon framework catches that drift, and CDC is the fix."</li>
+<li>Say "closed watermark window" out loud in your answer. Interviewers notice.</li>
+</ul>
+<h2 id="6-stretch-goals">6. Stretch goals<a class="headerlink" href="#6-stretch-goals" title="Link to this section">#</a></h2>
+<ul>
+<li>Content checksum (SHA256) in manifests; verify on promotion (bit-rot paranoia).</li>
+<li>A <code>--dry-run</code> flag printing the plan (rows sampled, target paths) — ops love this.</li>
+<li>Handle <code>.csv.gz</code> transparently; add a JSONL file source.</li>
+</ul>
+        <nav class="pager">
+          <a class="prev" href="phase-02.html"><span class="dir">← Previous</span><span class="label">02 · Metadata Core</span></a>
+          <a class="next" href="phase-04.html"><span class="dir">Next →</span><span class="label">04 · Streaming &amp; Kafka</span></a>
+        </nav>
+        <footer class="page-foot">
+          Generated from <a href="https://github.com/thesandx/courses/blob/master/data_platform_mastery/phase_03_batch_ingestion/README.md"><code>data_platform_mastery/phase_03_batch_ingestion/README.md</code></a> ·
+          Part of the <a href="index.html">Data Platform Mastery</a> course.
+        </footer>
+      </main>
+      <aside class="toc-rail"><div class="toc-title">On this page</div>
+<a href="#1-concepts">1. Concepts</a>
+<a href="#2-build">2. Build</a>
+<a href="#3-prove-it">3. Prove it</a>
+<a href="#4-break-it">4. Break it</a>
+<a href="#5-interview-corner">5. Interview corner</a>
+<a href="#6-stretch-goals">6. Stretch goals</a></aside>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById("themeBtn").addEventListener("click", function () {
+    var cur = document.documentElement.getAttribute("data-theme");
+    localStorage.setItem("dpm-theme", cur === "dark" ? "light" : "dark");
+    location.reload();   // simplest way to re-render mermaid + pygments in the new theme
+  });
+  document.getElementById("menuBtn").addEventListener("click", function () {
+    document.getElementById("sidebar").classList.toggle("open");
+  });
+</script>
+</body>
+</html>

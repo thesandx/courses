@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 00 — Orientation &amp; Ground School · Data Platform Mastery</title>
+<meta name="description" content="Data Platform Mastery — build an open-source metadata-driven ETL platform on GCP.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚒️</text></svg>">
+<link rel="stylesheet" href="style.css">
+<script>
+  (function () {
+    var t = localStorage.getItem("dpm-theme");
+    if (!t) t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+</head>
+<body>
+<button class="menu-btn" id="menuBtn" aria-label="Toggle navigation">☰</button>
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">⚒️</span>
+      <span>
+        <span class="brand-title">Data Platform Mastery</span>
+        <span class="brand-sub">Build PipeForge on GCP</span>
+      </span>
+    </a>
+    <nav><div class="nav-group">Start Here</div>
+<a class="nav-item" href="index.html">Course Overview</a>
+<a class="nav-item" href="project-charter.html">Project Charter</a>
+<a class="nav-item" href="interview-map.html">Interview Map</a>
+<div class="nav-group">Build Phases</div>
+<a class="nav-item active" href="phase-00.html">00 · Orientation</a>
+<a class="nav-item" href="phase-01.html">01 · Foundation<span class="tag">v0.1.0</span></a>
+<a class="nav-item" href="phase-02.html">02 · Metadata Core<span class="tag">v0.2.0</span></a>
+<a class="nav-item" href="phase-03.html">03 · Batch Ingestion<span class="tag">v0.3.0</span></a>
+<a class="nav-item" href="phase-04.html">04 · Streaming &amp; Kafka<span class="tag">v0.4.0</span></a>
+<a class="nav-item" href="phase-05.html">05 · Spark Processing<span class="tag">v0.5.0</span></a>
+<a class="nav-item" href="phase-06.html">06 · BigQuery Serving<span class="tag">v0.6.0</span></a>
+<a class="nav-item" href="phase-07.html">07 · Orchestration<span class="tag">v0.7.0</span></a>
+<a class="nav-item" href="phase-08.html">08 · Quality &amp; Recon<span class="tag">v0.8.0</span></a>
+<a class="nav-item" href="phase-09.html">09 · Governance<span class="tag">v0.9.0</span></a>
+<a class="nav-item" href="phase-10.html">10 · Observability &amp; FinOps<span class="tag">v0.10.0</span></a>
+<a class="nav-item" href="phase-11.html">11 · Streamlit Control Plane<span class="tag">v0.11.0</span></a>
+<a class="nav-item" href="phase-12.html">12 · Platform APIs<span class="tag">v0.12.0</span></a>
+<a class="nav-item" href="phase-13.html">13 · Scale &amp; Hardening<span class="tag">v0.13.0</span></a>
+<a class="nav-item" href="phase-14.html">14 · Open-Source Launch<span class="tag">v1.0.0</span></a>
+<div class="nav-group">Endgame</div>
+<a class="nav-item" href="interview-gauntlet.html">Interview Gauntlet<span class="tag">🎯</span></a></nav>
+    <div class="sidebar-foot">
+      <button id="themeBtn" class="theme-btn" title="Toggle dark mode">🌗 Theme</button>
+      <a href="https://github.com/thesandx/courses/tree/master/data_platform_mastery">GitHub ↗</a>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="crumbs">
+      <span class="crumb-group">Build Phases</span>
+      <span class="crumb-sep">/</span>
+      <span class="crumb-page">00 · Orientation</span>
+      
+    </header>
+    <div class="content-wrap">
+      <main class="content">
+<h1 id="phase-00-orientation-ground-school">Phase 00 — Orientation &amp; Ground School<a class="headerlink" href="#phase-00-orientation-ground-school" title="Link to this section">#</a></h1>
+<blockquote>
+<p><strong>Mission:</strong> set up your machine, your GCP project, and your head. No PipeForge
+code yet — but you leave this phase with cost guardrails armed, tooling verified,
+the target architecture drawn from memory, and your first volume-estimation done.</p>
+</blockquote>
+<h2 id="1-concepts">1. Concepts<a class="headerlink" href="#1-concepts" title="Link to this section">#</a></h2>
+<p><strong>Read now (in this order):</strong>
+- System-design notes <strong>§1–§2</strong> — how DE interviews differ from SWE, and the 7-step framework. This course is the framework made physical.
+- Notes <strong>§5</strong> — the 6-layer architecture. PipeForge is that diagram.
+- GCP course <strong>M01 Foundations</strong> — projects, IAM, resource hierarchy, <code>gcloud</code>.
+- The two docs at the course root: <strong>PROJECT_CHARTER.md</strong> and <strong>INTERVIEW_MAP.md</strong>.</p>
+<p><strong>The mental model for the whole course:</strong></p>
+<blockquote>
+<p>DE system design starts from the <strong>source</strong> and works <strong>forward</strong> (§1). So does
+this course: phases 2–4 are sources and ingestion, 5–6 are processing and
+serving, 7–10 are the cross-cutting spine (orchestration, quality, governance,
+observability), 11–12 are the product surface, 13–14 are scale and launch.</p>
+</blockquote>
+<p><strong>Why "metadata-driven" is the theme:</strong> the staff-level version of almost every
+platform question (Q7, Q15, Q19) is "how do you make the <em>N+1th</em> source cost ~zero
+engineering?" The answer is always: a registry + a generic engine + generated
+orchestration. Hold that sentence; you'll implement it for 12 phases.</p>
+<h2 id="2-build">2. Build<a class="headerlink" href="#2-build" title="Link to this section">#</a></h2>
+<h3 id="21-local-tooling">2.1 Local tooling<a class="headerlink" href="#21-local-tooling" title="Link to this section">#</a></h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># Python 3.11+, uv (or pipx/poetry), Docker Desktop / Engine, Terraform &gt;= 1.7, git</span>
+python3<span class="w"> </span>--version<span class="w">          </span><span class="c1"># 3.11+</span>
+docker<span class="w"> </span>--version<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>docker<span class="w"> </span>compose<span class="w"> </span>version
+terraform<span class="w"> </span>-version
+<span class="c1"># gcloud CLI (includes bq + gsutil): https://cloud.google.com/sdk/docs/install</span>
+gcloud<span class="w"> </span>init
+gcloud<span class="w"> </span>auth<span class="w"> </span>login
+gcloud<span class="w"> </span>auth<span class="w"> </span>application-default<span class="w"> </span>login<span class="w">    </span><span class="c1"># ADC — what Terraform &amp; client libs use</span>
+</code></pre></div>
+<h3 id="22-gcp-project-the-budget-do-this-before-anything-else">2.2 GCP project + THE BUDGET (do this before anything else)<a class="headerlink" href="#22-gcp-project-the-budget-do-this-before-anything-else" title="Link to this section">#</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">PROJECT_ID</span><span class="o">=</span><span class="s2">&quot;pipeforge-</span><span class="k">$(</span>whoami<span class="k">)</span><span class="s2">-dev&quot;</span><span class="w">    </span><span class="c1"># must be globally unique</span>
+gcloud<span class="w"> </span>projects<span class="w"> </span>create<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$PROJECT_ID</span><span class="s2">&quot;</span>
+gcloud<span class="w"> </span>billing<span class="w"> </span>accounts<span class="w"> </span>list<span class="w">                    </span><span class="c1"># note ACCOUNT_ID</span>
+gcloud<span class="w"> </span>billing<span class="w"> </span>projects<span class="w"> </span>link<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$PROJECT_ID</span><span class="s2">&quot;</span><span class="w"> </span>--billing-account<span class="o">=</span>ACCOUNT_ID
+gcloud<span class="w"> </span>config<span class="w"> </span><span class="nb">set</span><span class="w"> </span>project<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$PROJECT_ID</span><span class="s2">&quot;</span>
+
+<span class="c1"># Budget with alerts at 50/90/100% of $25 — the seatbelt for the entire course</span>
+gcloud<span class="w"> </span>services<span class="w"> </span><span class="nb">enable</span><span class="w"> </span>billingbudgets.googleapis.com
+gcloud<span class="w"> </span>billing<span class="w"> </span>budgets<span class="w"> </span>create<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--billing-account<span class="o">=</span>ACCOUNT_ID<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--display-name<span class="o">=</span><span class="s2">&quot;pipeforge-guardrail&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--budget-amount<span class="o">=</span>25USD<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--threshold-rule<span class="o">=</span><span class="nv">percent</span><span class="o">=</span><span class="m">0</span>.5<span class="w"> </span>--threshold-rule<span class="o">=</span><span class="nv">percent</span><span class="o">=</span><span class="m">0</span>.9<span class="w"> </span>--threshold-rule<span class="o">=</span><span class="nv">percent</span><span class="o">=</span><span class="m">1</span>.0
+</code></pre></div>
+<p>In Phase 1 you'll re-create this budget in Terraform — clicking first, codifying
+second is the allowed workflow (course ground rule #1).</p>
+<p><strong>Cost model of the course</strong> (so nothing surprises you):</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Resource</th>
+<th>Phase</th>
+<th>Cost behavior</th>
+<th>Guardrail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GCS + BigQuery storage</td>
+<td>3+</td>
+<td>pennies at demo volume</td>
+<td>lifecycle rules (P09)</td>
+</tr>
+<tr>
+<td>BigQuery queries</td>
+<td>6+</td>
+<td>$6.25/TB scanned</td>
+<td>partition filters + <code>maximum_bytes_billed</code></td>
+</tr>
+<tr>
+<td>Cloud SQL db-f1-micro</td>
+<td>2+</td>
+<td>~$9/mo if left running</td>
+<td><code>gcloud sql instances patch ... --activation-policy=NEVER</code> when idle</td>
+</tr>
+<tr>
+<td>Dataproc <strong>Serverless</strong></td>
+<td>5+</td>
+<td>per-second while a batch runs</td>
+<td>nothing idles; still, small data</td>
+</tr>
+<tr>
+<td>Kafka VM (e2-small, optional)</td>
+<td>4</td>
+<td>~$13/mo if left running</td>
+<td>run Kafka in Docker locally; VM only for the cloud drill, then stop</td>
+</tr>
+<tr>
+<td>Airflow</td>
+<td>7</td>
+<td>$0 (local Docker)</td>
+<td>Composer is a read-only excursion unless you accept ~$300+/mo</td>
+</tr>
+<tr>
+<td>Cloud Run (API+UI)</td>
+<td>11–12</td>
+<td>scale-to-zero ≈ $0</td>
+<td>min instances = 0</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="23-estimation-drill-your-first-interview-rep-4-19">2.3 Estimation drill (your first interview rep — §4, §19)<a class="headerlink" href="#23-estimation-drill-your-first-interview-rep-4-19" title="Link to this section">#</a></h3>
+<p>On paper, no calculator, estimate for NovaMart (numbers in the charter §2):</p>
+<ol>
+<li>Clickstream: 500 ev/s × 400 B → GB/day raw? Parquet (÷5–10)? Events/day?</li>
+<li>If peak = 3× average, how many Kafka partitions at ~10K msgs/s each?</li>
+<li><code>orders</code> at 100k rows/day × 1 KB — does this need Spark? (Scale thresholds, §3.)</li>
+<li>90 days of RAW clickstream in GCS Standard at $0.02/GB-mo — monthly cost?</li>
+</ol>
+<details><summary>Answers</summary>
+
+1. 500×400 B = 200 KB/s ≈ **17 GB/day** raw ≈ 2–3.5 GB/day Parquet; 43.2M events/day.
+2. Peak 1,500 ev/s → **1–2 partitions** suffice; provision 6 for headroom/keyed parallelism (small numbers are a *correct* answer — say so).
+3. 100 MB/day — **pandas/BQ load, no Spark needed** for ingestion; Spark earns its place on clickstream + SCD2 merges.
+4. ~1.5 TB × $0.02 ≈ **$30/mo at full production volume**; at demo volume (~5%) ≈ $1.5. This is why the course caps generator throughput.
+</details>
+
+<h3 id="24-architecture-redraw">2.4 Architecture redraw<a class="headerlink" href="#24-architecture-redraw" title="Link to this section">#</a></h3>
+<p>Close everything. On a whiteboard/paper, redraw the PipeForge architecture:
+6 layers left→right, the metadata core underneath driving ingestion, the
+cross-cutting bar (workflow, DQ, recon, audit, tokenization, archival, lineage).
+Compare against the README diagram. Repeat until the redraw takes &lt; 3 minutes —
+you will draw exactly this in interviews.</p>
+<h3 id="25-create-your-empty-github-repo">2.5 Create your empty GitHub repo<a class="headerlink" href="#25-create-your-empty-github-repo" title="Link to this section">#</a></h3>
+<p>Create a <strong>public</strong> repo named <code>pipeforge</code> (or your own name — check it's not
+taken if you care about uniqueness), empty, no README. Phase 1 makes the first commit.</p>
+<h2 id="3-prove-it">3. Prove it<a class="headerlink" href="#3-prove-it" title="Link to this section">#</a></h2>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <code>gcloud config get-value project</code> prints your project; budget visible in console</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <code>terraform -version</code> ≥ 1.7; Docker runs <code>hello-world</code></li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> ADC works: <code>python -c "import google.auth; print(google.auth.default()[1])"</code> prints the project</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Estimation drill answers within 2× of the key</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Architecture redraw &lt; 3 min</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Empty GitHub repo exists</li>
+</ul>
+<h2 id="4-interview-corner">4. Interview corner<a class="headerlink" href="#4-interview-corner" title="Link to this section">#</a></h2>
+<p>Rehearse the opening move you'll use in every real interview (§2 power move):</p>
+<blockquote>
+<p>"I'll walk through requirements, sources and volumes, architecture, data model,
+pipeline design, deep dives, then monitoring and SLAs. Does that work for you?"</p>
+</blockquote>
+<p>Then deliver a 2-minute overview of PipeForge as if the interviewer asked
+"design an ETL platform" — using only the charter. Record yourself. Cringe. Repeat.</p>
+<h2 id="5-stretch-goals">5. Stretch goals<a class="headerlink" href="#5-stretch-goals" title="Link to this section">#</a></h2>
+<ul>
+<li>Read notes <strong>§10 (Top 15 mistakes)</strong> and pin it above your desk.</li>
+<li>Do GCP course <strong>M01 practice questions</strong>; start a PDE-exam error log.</li>
+</ul>
+        <nav class="pager">
+          <a class="prev" href="interview-map.html"><span class="dir">← Previous</span><span class="label">Interview Map</span></a>
+          <a class="next" href="phase-01.html"><span class="dir">Next →</span><span class="label">01 · Foundation</span></a>
+        </nav>
+        <footer class="page-foot">
+          Generated from <a href="https://github.com/thesandx/courses/blob/master/data_platform_mastery/phase_00_orientation/README.md"><code>data_platform_mastery/phase_00_orientation/README.md</code></a> ·
+          Part of the <a href="index.html">Data Platform Mastery</a> course.
+        </footer>
+      </main>
+      <aside class="toc-rail"><div class="toc-title">On this page</div>
+<a href="#1-concepts">1. Concepts</a>
+<a href="#2-build">2. Build</a>
+<a href="#3-prove-it">3. Prove it</a>
+<a href="#4-interview-corner">4. Interview corner</a>
+<a href="#5-stretch-goals">5. Stretch goals</a></aside>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById("themeBtn").addEventListener("click", function () {
+    var cur = document.documentElement.getAttribute("data-theme");
+    localStorage.setItem("dpm-theme", cur === "dark" ? "light" : "dark");
+    location.reload();   // simplest way to re-render mermaid + pygments in the new theme
+  });
+  document.getElementById("menuBtn").addEventListener("click", function () {
+    document.getElementById("sidebar").classList.toggle("open");
+  });
+</script>
+</body>
+</html>
