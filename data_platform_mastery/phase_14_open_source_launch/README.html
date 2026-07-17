@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 14 — Open-Source Launch, Docs &amp; the Resume Payload (`v1.0.0`)</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e; --accent: #0969da;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1; --accent: #4493f8;
+  }
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.65; word-wrap: break-word;
+  -webkit-font-smoothing: antialiased;
+}
+.page { max-width: 880px; margin: 0 auto; padding: 2.5rem 1.5rem 5rem; }
+h1, h2, h3, h4, h5, h6 { margin-top: 1.6em; margin-bottom: .5em; line-height: 1.25; font-weight: 650; }
+h1 { font-size: 2.1em; margin-top: 0; border-bottom: 2px solid var(--border); padding-bottom: .35em; letter-spacing: -.02em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+h4 { font-size: 1.05em; }
+p { margin: 0 0 1em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+strong { font-weight: 650; }
+code, pre, kbd {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; font-size: 85%; }
+pre {
+  background: var(--code-bg); padding: 1em 1.2em; border-radius: 8px;
+  overflow-x: auto; line-height: 1.5; font-size: 85%;
+  border: 1px solid var(--border); margin: 0 0 1.2em;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; border-radius: 0; }
+.codehilite { background: var(--code-bg); border-radius: 8px; margin: 0 0 1.2em; }
+.codehilite pre { margin: 0; border: 1px solid var(--border); }
+blockquote {
+  margin: 0 0 1.2em; padding: .5em 1.1em; color: var(--quote);
+  border-left: 4px solid var(--accent); background: var(--code-bg);
+  border-radius: 0 8px 8px 0;
+}
+blockquote > :first-child { margin-top: 0; }
+blockquote > :last-child { margin-bottom: 0; }
+table {
+  border-collapse: collapse; display: block; overflow-x: auto;
+  max-width: 100%; margin: 0 0 1.2em; font-size: .95em;
+}
+th, td { border: 1px solid var(--border); padding: 8px 14px; }
+th { font-weight: 650; background: var(--code-bg); }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; border-radius: 8px; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 2em 0; }
+ul, ol { padding-left: 1.8em; margin: 0 0 1em; }
+li { margin: .3em 0; }
+li > p { margin-bottom: .5em; }
+input[type="checkbox"] { margin-right: .4em; }
+::selection { background: color-mix(in srgb, var(--accent) 25%, transparent); }
+/* Pygments syntax highlighting — light */
+pre { line-height: 125%; }
+td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+.codehilite .hll { background-color: #ffffcc }
+.codehilite { background: #f8f8f8; }
+.codehilite .c { color: #3D7B7B; font-style: italic } /* Comment */
+.codehilite .err { border: 1px solid #F00 } /* Error */
+.codehilite .k { color: #008000; font-weight: bold } /* Keyword */
+.codehilite .o { color: #666 } /* Operator */
+.codehilite .ch { color: #3D7B7B; font-style: italic } /* Comment.Hashbang */
+.codehilite .cm { color: #3D7B7B; font-style: italic } /* Comment.Multiline */
+.codehilite .cp { color: #9C6500 } /* Comment.Preproc */
+.codehilite .cpf { color: #3D7B7B; font-style: italic } /* Comment.PreprocFile */
+.codehilite .c1 { color: #3D7B7B; font-style: italic } /* Comment.Single */
+.codehilite .cs { color: #3D7B7B; font-style: italic } /* Comment.Special */
+.codehilite .gd { color: #A00000 } /* Generic.Deleted */
+.codehilite .ge { font-style: italic } /* Generic.Emph */
+.codehilite .ges { font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.codehilite .gr { color: #E40000 } /* Generic.Error */
+.codehilite .gh { color: #000080; font-weight: bold } /* Generic.Heading */
+.codehilite .gi { color: #008400 } /* Generic.Inserted */
+.codehilite .go { color: #717171 } /* Generic.Output */
+.codehilite .gp { color: #000080; font-weight: bold } /* Generic.Prompt */
+.codehilite .gs { font-weight: bold } /* Generic.Strong */
+.codehilite .gu { color: #800080; font-weight: bold } /* Generic.Subheading */
+.codehilite .gt { color: #04D } /* Generic.Traceback */
+.codehilite .kc { color: #008000; font-weight: bold } /* Keyword.Constant */
+.codehilite .kd { color: #008000; font-weight: bold } /* Keyword.Declaration */
+.codehilite .kn { color: #008000; font-weight: bold } /* Keyword.Namespace */
+.codehilite .kp { color: #008000 } /* Keyword.Pseudo */
+.codehilite .kr { color: #008000; font-weight: bold } /* Keyword.Reserved */
+.codehilite .kt { color: #B00040 } /* Keyword.Type */
+.codehilite .m { color: #666 } /* Literal.Number */
+.codehilite .s { color: #BA2121 } /* Literal.String */
+.codehilite .na { color: #687822 } /* Name.Attribute */
+.codehilite .nb { color: #008000 } /* Name.Builtin */
+.codehilite .nc { color: #00F; font-weight: bold } /* Name.Class */
+.codehilite .no { color: #800 } /* Name.Constant */
+.codehilite .nd { color: #A2F } /* Name.Decorator */
+.codehilite .ni { color: #717171; font-weight: bold } /* Name.Entity */
+.codehilite .ne { color: #CB3F38; font-weight: bold } /* Name.Exception */
+.codehilite .nf { color: #00F } /* Name.Function */
+.codehilite .nl { color: #767600 } /* Name.Label */
+.codehilite .nn { color: #00F; font-weight: bold } /* Name.Namespace */
+.codehilite .nt { color: #008000; font-weight: bold } /* Name.Tag */
+.codehilite .nv { color: #19177C } /* Name.Variable */
+.codehilite .ow { color: #A2F; font-weight: bold } /* Operator.Word */
+.codehilite .w { color: #BBB } /* Text.Whitespace */
+.codehilite .mb { color: #666 } /* Literal.Number.Bin */
+.codehilite .mf { color: #666 } /* Literal.Number.Float */
+.codehilite .mh { color: #666 } /* Literal.Number.Hex */
+.codehilite .mi { color: #666 } /* Literal.Number.Integer */
+.codehilite .mo { color: #666 } /* Literal.Number.Oct */
+.codehilite .sa { color: #BA2121 } /* Literal.String.Affix */
+.codehilite .sb { color: #BA2121 } /* Literal.String.Backtick */
+.codehilite .sc { color: #BA2121 } /* Literal.String.Char */
+.codehilite .dl { color: #BA2121 } /* Literal.String.Delimiter */
+.codehilite .sd { color: #BA2121; font-style: italic } /* Literal.String.Doc */
+.codehilite .s2 { color: #BA2121 } /* Literal.String.Double */
+.codehilite .se { color: #AA5D1F; font-weight: bold } /* Literal.String.Escape */
+.codehilite .sh { color: #BA2121 } /* Literal.String.Heredoc */
+.codehilite .si { color: #A45A77; font-weight: bold } /* Literal.String.Interpol */
+.codehilite .sx { color: #008000 } /* Literal.String.Other */
+.codehilite .sr { color: #A45A77 } /* Literal.String.Regex */
+.codehilite .s1 { color: #BA2121 } /* Literal.String.Single */
+.codehilite .ss { color: #19177C } /* Literal.String.Symbol */
+.codehilite .bp { color: #008000 } /* Name.Builtin.Pseudo */
+.codehilite .fm { color: #00F } /* Name.Function.Magic */
+.codehilite .vc { color: #19177C } /* Name.Variable.Class */
+.codehilite .vg { color: #19177C } /* Name.Variable.Global */
+.codehilite .vi { color: #19177C } /* Name.Variable.Instance */
+.codehilite .vm { color: #19177C } /* Name.Variable.Magic */
+.codehilite .il { color: #666 } /* Literal.Number.Integer.Long */
+/* Pygments syntax highlighting — dark */
+@media (prefers-color-scheme: dark) {
+pre { line-height: 125%; }
+td.linenos .normal { color: #6e7681; background-color: #0d1117; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: #6e7681; background-color: #0d1117; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #e6edf3; background-color: #6e7681; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #e6edf3; background-color: #6e7681; padding-left: 5px; padding-right: 5px; }
+.codehilite .hll { background-color: #6e7681 }
+.codehilite { background: #0d1117; color: #E6EDF3 }
+.codehilite .c { color: #8B949E; font-style: italic } /* Comment */
+.codehilite .err { color: #F85149 } /* Error */
+.codehilite .esc { color: #E6EDF3 } /* Escape */
+.codehilite .g { color: #E6EDF3 } /* Generic */
+.codehilite .k { color: #FF7B72 } /* Keyword */
+.codehilite .l { color: #A5D6FF } /* Literal */
+.codehilite .n { color: #E6EDF3 } /* Name */
+.codehilite .o { color: #FF7B72; font-weight: bold } /* Operator */
+.codehilite .x { color: #E6EDF3 } /* Other */
+.codehilite .p { color: #E6EDF3 } /* Punctuation */
+.codehilite .ch { color: #8B949E; font-style: italic } /* Comment.Hashbang */
+.codehilite .cm { color: #8B949E; font-style: italic } /* Comment.Multiline */
+.codehilite .cp { color: #8B949E; font-weight: bold; font-style: italic } /* Comment.Preproc */
+.codehilite .cpf { color: #8B949E; font-style: italic } /* Comment.PreprocFile */
+.codehilite .c1 { color: #8B949E; font-style: italic } /* Comment.Single */
+.codehilite .cs { color: #8B949E; font-weight: bold; font-style: italic } /* Comment.Special */
+.codehilite .gd { color: #FFA198; background-color: #490202 } /* Generic.Deleted */
+.codehilite .ge { color: #E6EDF3; font-style: italic } /* Generic.Emph */
+.codehilite .ges { color: #E6EDF3; font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.codehilite .gr { color: #FFA198 } /* Generic.Error */
+.codehilite .gh { color: #79C0FF; font-weight: bold } /* Generic.Heading */
+.codehilite .gi { color: #56D364; background-color: #0F5323 } /* Generic.Inserted */
+.codehilite .go { color: #8B949E } /* Generic.Output */
+.codehilite .gp { color: #8B949E } /* Generic.Prompt */
+.codehilite .gs { color: #E6EDF3; font-weight: bold } /* Generic.Strong */
+.codehilite .gu { color: #79C0FF } /* Generic.Subheading */
+.codehilite .gt { color: #FF7B72 } /* Generic.Traceback */
+.codehilite .g-Underline { color: #E6EDF3; text-decoration: underline } /* Generic.Underline */
+.codehilite .kc { color: #79C0FF } /* Keyword.Constant */
+.codehilite .kd { color: #FF7B72 } /* Keyword.Declaration */
+.codehilite .kn { color: #FF7B72 } /* Keyword.Namespace */
+.codehilite .kp { color: #79C0FF } /* Keyword.Pseudo */
+.codehilite .kr { color: #FF7B72 } /* Keyword.Reserved */
+.codehilite .kt { color: #FF7B72 } /* Keyword.Type */
+.codehilite .ld { color: #79C0FF } /* Literal.Date */
+.codehilite .m { color: #A5D6FF } /* Literal.Number */
+.codehilite .s { color: #A5D6FF } /* Literal.String */
+.codehilite .na { color: #E6EDF3 } /* Name.Attribute */
+.codehilite .nb { color: #E6EDF3 } /* Name.Builtin */
+.codehilite .nc { color: #F0883E; font-weight: bold } /* Name.Class */
+.codehilite .no { color: #79C0FF; font-weight: bold } /* Name.Constant */
+.codehilite .nd { color: #D2A8FF; font-weight: bold } /* Name.Decorator */
+.codehilite .ni { color: #FFA657 } /* Name.Entity */
+.codehilite .ne { color: #F0883E; font-weight: bold } /* Name.Exception */
+.codehilite .nf { color: #D2A8FF; font-weight: bold } /* Name.Function */
+.codehilite .nl { color: #79C0FF; font-weight: bold } /* Name.Label */
+.codehilite .nn { color: #FF7B72 } /* Name.Namespace */
+.codehilite .nx { color: #E6EDF3 } /* Name.Other */
+.codehilite .py { color: #79C0FF } /* Name.Property */
+.codehilite .nt { color: #7EE787 } /* Name.Tag */
+.codehilite .nv { color: #79C0FF } /* Name.Variable */
+.codehilite .ow { color: #FF7B72; font-weight: bold } /* Operator.Word */
+.codehilite .pm { color: #E6EDF3 } /* Punctuation.Marker */
+.codehilite .w { color: #6E7681 } /* Text.Whitespace */
+.codehilite .mb { color: #A5D6FF } /* Literal.Number.Bin */
+.codehilite .mf { color: #A5D6FF } /* Literal.Number.Float */
+.codehilite .mh { color: #A5D6FF } /* Literal.Number.Hex */
+.codehilite .mi { color: #A5D6FF } /* Literal.Number.Integer */
+.codehilite .mo { color: #A5D6FF } /* Literal.Number.Oct */
+.codehilite .sa { color: #79C0FF } /* Literal.String.Affix */
+.codehilite .sb { color: #A5D6FF } /* Literal.String.Backtick */
+.codehilite .sc { color: #A5D6FF } /* Literal.String.Char */
+.codehilite .dl { color: #79C0FF } /* Literal.String.Delimiter */
+.codehilite .sd { color: #A5D6FF } /* Literal.String.Doc */
+.codehilite .s2 { color: #A5D6FF } /* Literal.String.Double */
+.codehilite .se { color: #79C0FF } /* Literal.String.Escape */
+.codehilite .sh { color: #79C0FF } /* Literal.String.Heredoc */
+.codehilite .si { color: #A5D6FF } /* Literal.String.Interpol */
+.codehilite .sx { color: #A5D6FF } /* Literal.String.Other */
+.codehilite .sr { color: #79C0FF } /* Literal.String.Regex */
+.codehilite .s1 { color: #A5D6FF } /* Literal.String.Single */
+.codehilite .ss { color: #A5D6FF } /* Literal.String.Symbol */
+.codehilite .bp { color: #E6EDF3 } /* Name.Builtin.Pseudo */
+.codehilite .fm { color: #D2A8FF; font-weight: bold } /* Name.Function.Magic */
+.codehilite .vc { color: #79C0FF } /* Name.Variable.Class */
+.codehilite .vg { color: #79C0FF } /* Name.Variable.Global */
+.codehilite .vi { color: #79C0FF } /* Name.Variable.Instance */
+.codehilite .vm { color: #79C0FF } /* Name.Variable.Magic */
+.codehilite .il { color: #A5D6FF } /* Literal.Number.Integer.Long */
+}
+</style>
+</head>
+<body>
+<main class="page">
+<h1 id="phase-14-open-source-launch-docs-the-resume-payload-v100">Phase 14 — Open-Source Launch, Docs &amp; the Resume Payload (<code>v1.0.0</code>)</h1>
+<blockquote>
+<p><strong>Mission:</strong> ship it to the world. Turn fourteen phases of engineering into a
+polished open-source project (docs, demo mode, contribution guide, release),
+and convert the whole journey into resume bullets, a portfolio narrative, and
+interview-day logistics. The code was the work; this phase is the career payoff.</p>
+</blockquote>
+<h2 id="1-concepts">1. Concepts</h2>
+<p>Open-source credibility signals reviewers actually check, in order: a README
+that explains the architecture in 90 seconds, a way to try it in minutes, CI
+badges that are green, docs that show operational maturity (runbooks, incident
+files — you have these!), a license, and evidence of real releases. Stars are
+vanity; <em>"I read the code and it's clearly production-shaped"</em> is the reaction
+you're engineering.</p>
+<h2 id="2-build">2. Build</h2>
+<h3 id="21-the-readme-the-most-read-file-youll-write-this-year">2.1 The README (the most-read file you'll write this year)</h3>
+<p>Structure — study 3 good platform READMEs first (Airflow, Dagster, DataHub) —
+then write:
+1. One-paragraph pitch (charter §0) + badges (CI, license, release).
+2. <strong>Architecture diagram</strong> (clean mermaid or draw.io export of the course
+   diagram) + the 11-capability table with ✅s.
+3. 90-second feature tour with the Phase-11 screenshots (catalog, scorecard,
+   wizard, lineage).
+4. <strong>Quickstart</strong> (see demo mode below) — a reader must reach "wow" in &lt;15 min.
+5. Design docs index: link the ADRs, the 100x doc, the scale report, incidents.
+   (Publishing your incident files is unusual and <em>deeply</em> credible.)
+6. Roadmap + contributing + license.</p>
+<h3 id="22-demo-mode-pipeforge-demo-up">2.2 Demo mode — <code>pipeforge demo up</code></h3>
+<p>The single highest-ROI feature for an open-source data platform: one command
+that runs the whole thing <strong>locally without a GCP account</strong> where possible:
+docker compose (Kafka, MySQL, Postgres, Airflow, Marquez, MinIO standing in for
+GCS via its S3/GCS-ish interface — or a <code>--local-fs</code> storage backend you add
+behind the storage client), seeded generators, and a <code>--with-gcp</code> flag for the
+real thing. Write the storage backend as an interface (<code>GcsStore | LocalStore</code>)
+— a refactor that also makes unit tests faster. Budget 2–3 days; it's worth it.</p>
+<h3 id="23-docs-site-mkdocs-material-on-github-pages">2.3 Docs site — <code>mkdocs-material</code> on GitHub Pages</h3>
+<p><code>docs/</code>: Getting started · Concepts (layers, registration, contracts) · Operator
+guide (runbooks, alerts) · API reference (FastAPI's OpenAPI embedded) ·
+Design/ADRs · Incident library. Deploy via the existing Actions on tag.</p>
+<h3 id="24-release-engineering">2.4 Release engineering</h3>
+<ul>
+<li><code>CHANGELOG.md</code> from your phase tags (you have a real history — flaunt it).</li>
+<li><code>release.yml</code>: on tag → tests → build wheel + images → GitHub Release notes.</li>
+<li>Cut <strong><code>v1.0.0</code></strong> with the definition-of-done demo (charter §9) recorded as a
+  5-minute screen capture linked in the README. The video is your async interview.</li>
+</ul>
+<h3 id="25-the-resume-payload-do-not-skip-this-its-why-you-came">2.5 The resume payload (do not skip this — it's why you came)</h3>
+<p><strong>Resume bullets</strong> — adapt, keep the numbers honest, one line each:</p>
+<ul>
+<li>Built and open-sourced <strong>PipeForge</strong>, a metadata-driven data platform on GCP
+  (Terraform, Kafka, Spark/Dataproc, Airflow, BigQuery, Streamlit): source
+  onboarding to queryable star-schema data in &lt;10 minutes with zero per-source code.</li>
+<li>Designed a lakehouse (RAW/ODP/FDP/CDP) with SCD Type-2 history, deterministic
+  surrogate keys, and idempotent MERGE/partition-overwrite writes — verified
+  effectively-once delivery from an at-least-once Kafka pipeline.</li>
+<li>Implemented a 6-dimension data-quality framework and cross-layer reconciliation
+  that caught hard-delete drift and silent semantic corruption in chaos drills;
+  DQ scorecard and lineage served via a Streamlit control plane.</li>
+<li>Ran 10x load and chaos testing (source outages, poison messages, mid-write
+  kills, schema breaks); cut a skewed Spark stage 40→6 min via salting + AQE;
+  documented 10+ incidents with runbooks.</li>
+<li>Built platform FinOps: billing export modeled in the platform itself, cost per
+  tenant and per million rows tracked; partition/rollup tuning cut dashboard
+  bytes-billed &gt;10x.</li>
+</ul>
+<p><strong>The portfolio narrative</strong> (write <code>docs/story.md</code>, 1 page): why → constraints
+(solo, $25/mo) → key decisions with tradeoffs → what broke and what it taught →
+what you'd do differently. Interviewers who read it will spend the hour on <em>your</em>
+territory.</p>
+<p><strong>Interview-day logistics:</strong> pin the repo on GitHub; put the demo video link in
+your resume header; prepare the 10-min live demo (P11) and a 2-min no-laptop
+whiteboard version; print your three best war stories.</p>
+<h3 id="26-announce-it">2.6 Announce it</h3>
+<p>LinkedIn post + a technical blog post ("How I built a metadata-driven data
+platform on GCP for $25/month" — outline: the Q7 problem, the registry insight,
+3 hardest bugs from your incident files, the numbers). Submit to
+r/dataengineering. Expect silence or feedback; both are useful. Respond to every
+issue like a maintainer — that thread is <em>also</em> interview evidence.</p>
+<h2 id="3-prove-it">3. Prove it</h2>
+<ul>
+<li>[ ] A friend (not you) goes README → demo mode → onboards a source in &lt;30 min without help — watch them, fix every stumble</li>
+<li>[ ] Docs site live; CI badges green; <code>v1.0.0</code> released with the demo video</li>
+<li>[ ] <code>pipeforge demo up</code> works on a clean machine (test in a fresh VM/container)</li>
+<li>[ ] Resume updated; story doc written; demo rehearsed twice cold</li>
+<li>[ ] All 11 capability boxes in the README checked, each linking to code + docs</li>
+</ul>
+<h2 id="4-break-it">4. Break it</h2>
+<p>Have your reviewer friend file their confusion as GitHub issues, then triage and
+fix like a maintainer for a week. Open source is a support commitment; feeling a
+little of it is part of the education.</p>
+<h2 id="5-interview-corner-the-endgame">5. Interview corner — the endgame</h2>
+<p>Now go to the <strong><a href="../interview_gauntlet/README.html">Interview Gauntlet</a></strong> and run
+all 20 questions against a timer over 3–4 weeks. Then re-read the <em>entire</em>
+system-design notes end-to-end one last time: it will read like a description of
+your own repo — which was the plan all along.</p>
+<h2 id="6-stretch-goals-post-10-roadmap-your-future-work-interview-answer">6. Stretch goals (post-1.0 roadmap = your "future work" interview answer)</h2>
+<ul>
+<li>Debezium-based CDC connector as a first-class load pattern (§23/§37)</li>
+<li>Iceberg-native ODP/FDP with time travel as the rollback story (§35)</li>
+<li>Flink hot path for a sub-second fraud demo (§36, Q13)</li>
+<li>dbt adapter: let teams bring dbt projects as CDP builders (§32)</li>
+<li>Data-diff CI: PR-time recon between prod and dev model outputs</li>
+</ul>
+</main>
+</body>
+</html>

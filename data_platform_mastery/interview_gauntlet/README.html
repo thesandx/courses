@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🎯 The Interview Gauntlet — 20 Drills to Staff-Level</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e; --accent: #0969da;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1; --accent: #4493f8;
+  }
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.65; word-wrap: break-word;
+  -webkit-font-smoothing: antialiased;
+}
+.page { max-width: 880px; margin: 0 auto; padding: 2.5rem 1.5rem 5rem; }
+h1, h2, h3, h4, h5, h6 { margin-top: 1.6em; margin-bottom: .5em; line-height: 1.25; font-weight: 650; }
+h1 { font-size: 2.1em; margin-top: 0; border-bottom: 2px solid var(--border); padding-bottom: .35em; letter-spacing: -.02em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+h4 { font-size: 1.05em; }
+p { margin: 0 0 1em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+strong { font-weight: 650; }
+code, pre, kbd {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; font-size: 85%; }
+pre {
+  background: var(--code-bg); padding: 1em 1.2em; border-radius: 8px;
+  overflow-x: auto; line-height: 1.5; font-size: 85%;
+  border: 1px solid var(--border); margin: 0 0 1.2em;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; border-radius: 0; }
+.codehilite { background: var(--code-bg); border-radius: 8px; margin: 0 0 1.2em; }
+.codehilite pre { margin: 0; border: 1px solid var(--border); }
+blockquote {
+  margin: 0 0 1.2em; padding: .5em 1.1em; color: var(--quote);
+  border-left: 4px solid var(--accent); background: var(--code-bg);
+  border-radius: 0 8px 8px 0;
+}
+blockquote > :first-child { margin-top: 0; }
+blockquote > :last-child { margin-bottom: 0; }
+table {
+  border-collapse: collapse; display: block; overflow-x: auto;
+  max-width: 100%; margin: 0 0 1.2em; font-size: .95em;
+}
+th, td { border: 1px solid var(--border); padding: 8px 14px; }
+th { font-weight: 650; background: var(--code-bg); }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; border-radius: 8px; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 2em 0; }
+ul, ol { padding-left: 1.8em; margin: 0 0 1em; }
+li { margin: .3em 0; }
+li > p { margin-bottom: .5em; }
+input[type="checkbox"] { margin-right: .4em; }
+::selection { background: color-mix(in srgb, var(--accent) 25%, transparent); }
+/* Pygments syntax highlighting — light */
+pre { line-height: 125%; }
+td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+.codehilite .hll { background-color: #ffffcc }
+.codehilite { background: #f8f8f8; }
+.codehilite .c { color: #3D7B7B; font-style: italic } /* Comment */
+.codehilite .err { border: 1px solid #F00 } /* Error */
+.codehilite .k { color: #008000; font-weight: bold } /* Keyword */
+.codehilite .o { color: #666 } /* Operator */
+.codehilite .ch { color: #3D7B7B; font-style: italic } /* Comment.Hashbang */
+.codehilite .cm { color: #3D7B7B; font-style: italic } /* Comment.Multiline */
+.codehilite .cp { color: #9C6500 } /* Comment.Preproc */
+.codehilite .cpf { color: #3D7B7B; font-style: italic } /* Comment.PreprocFile */
+.codehilite .c1 { color: #3D7B7B; font-style: italic } /* Comment.Single */
+.codehilite .cs { color: #3D7B7B; font-style: italic } /* Comment.Special */
+.codehilite .gd { color: #A00000 } /* Generic.Deleted */
+.codehilite .ge { font-style: italic } /* Generic.Emph */
+.codehilite .ges { font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.codehilite .gr { color: #E40000 } /* Generic.Error */
+.codehilite .gh { color: #000080; font-weight: bold } /* Generic.Heading */
+.codehilite .gi { color: #008400 } /* Generic.Inserted */
+.codehilite .go { color: #717171 } /* Generic.Output */
+.codehilite .gp { color: #000080; font-weight: bold } /* Generic.Prompt */
+.codehilite .gs { font-weight: bold } /* Generic.Strong */
+.codehilite .gu { color: #800080; font-weight: bold } /* Generic.Subheading */
+.codehilite .gt { color: #04D } /* Generic.Traceback */
+.codehilite .kc { color: #008000; font-weight: bold } /* Keyword.Constant */
+.codehilite .kd { color: #008000; font-weight: bold } /* Keyword.Declaration */
+.codehilite .kn { color: #008000; font-weight: bold } /* Keyword.Namespace */
+.codehilite .kp { color: #008000 } /* Keyword.Pseudo */
+.codehilite .kr { color: #008000; font-weight: bold } /* Keyword.Reserved */
+.codehilite .kt { color: #B00040 } /* Keyword.Type */
+.codehilite .m { color: #666 } /* Literal.Number */
+.codehilite .s { color: #BA2121 } /* Literal.String */
+.codehilite .na { color: #687822 } /* Name.Attribute */
+.codehilite .nb { color: #008000 } /* Name.Builtin */
+.codehilite .nc { color: #00F; font-weight: bold } /* Name.Class */
+.codehilite .no { color: #800 } /* Name.Constant */
+.codehilite .nd { color: #A2F } /* Name.Decorator */
+.codehilite .ni { color: #717171; font-weight: bold } /* Name.Entity */
+.codehilite .ne { color: #CB3F38; font-weight: bold } /* Name.Exception */
+.codehilite .nf { color: #00F } /* Name.Function */
+.codehilite .nl { color: #767600 } /* Name.Label */
+.codehilite .nn { color: #00F; font-weight: bold } /* Name.Namespace */
+.codehilite .nt { color: #008000; font-weight: bold } /* Name.Tag */
+.codehilite .nv { color: #19177C } /* Name.Variable */
+.codehilite .ow { color: #A2F; font-weight: bold } /* Operator.Word */
+.codehilite .w { color: #BBB } /* Text.Whitespace */
+.codehilite .mb { color: #666 } /* Literal.Number.Bin */
+.codehilite .mf { color: #666 } /* Literal.Number.Float */
+.codehilite .mh { color: #666 } /* Literal.Number.Hex */
+.codehilite .mi { color: #666 } /* Literal.Number.Integer */
+.codehilite .mo { color: #666 } /* Literal.Number.Oct */
+.codehilite .sa { color: #BA2121 } /* Literal.String.Affix */
+.codehilite .sb { color: #BA2121 } /* Literal.String.Backtick */
+.codehilite .sc { color: #BA2121 } /* Literal.String.Char */
+.codehilite .dl { color: #BA2121 } /* Literal.String.Delimiter */
+.codehilite .sd { color: #BA2121; font-style: italic } /* Literal.String.Doc */
+.codehilite .s2 { color: #BA2121 } /* Literal.String.Double */
+.codehilite .se { color: #AA5D1F; font-weight: bold } /* Literal.String.Escape */
+.codehilite .sh { color: #BA2121 } /* Literal.String.Heredoc */
+.codehilite .si { color: #A45A77; font-weight: bold } /* Literal.String.Interpol */
+.codehilite .sx { color: #008000 } /* Literal.String.Other */
+.codehilite .sr { color: #A45A77 } /* Literal.String.Regex */
+.codehilite .s1 { color: #BA2121 } /* Literal.String.Single */
+.codehilite .ss { color: #19177C } /* Literal.String.Symbol */
+.codehilite .bp { color: #008000 } /* Name.Builtin.Pseudo */
+.codehilite .fm { color: #00F } /* Name.Function.Magic */
+.codehilite .vc { color: #19177C } /* Name.Variable.Class */
+.codehilite .vg { color: #19177C } /* Name.Variable.Global */
+.codehilite .vi { color: #19177C } /* Name.Variable.Instance */
+.codehilite .vm { color: #19177C } /* Name.Variable.Magic */
+.codehilite .il { color: #666 } /* Literal.Number.Integer.Long */
+/* Pygments syntax highlighting — dark */
+@media (prefers-color-scheme: dark) {
+pre { line-height: 125%; }
+td.linenos .normal { color: #6e7681; background-color: #0d1117; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: #6e7681; background-color: #0d1117; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #e6edf3; background-color: #6e7681; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #e6edf3; background-color: #6e7681; padding-left: 5px; padding-right: 5px; }
+.codehilite .hll { background-color: #6e7681 }
+.codehilite { background: #0d1117; color: #E6EDF3 }
+.codehilite .c { color: #8B949E; font-style: italic } /* Comment */
+.codehilite .err { color: #F85149 } /* Error */
+.codehilite .esc { color: #E6EDF3 } /* Escape */
+.codehilite .g { color: #E6EDF3 } /* Generic */
+.codehilite .k { color: #FF7B72 } /* Keyword */
+.codehilite .l { color: #A5D6FF } /* Literal */
+.codehilite .n { color: #E6EDF3 } /* Name */
+.codehilite .o { color: #FF7B72; font-weight: bold } /* Operator */
+.codehilite .x { color: #E6EDF3 } /* Other */
+.codehilite .p { color: #E6EDF3 } /* Punctuation */
+.codehilite .ch { color: #8B949E; font-style: italic } /* Comment.Hashbang */
+.codehilite .cm { color: #8B949E; font-style: italic } /* Comment.Multiline */
+.codehilite .cp { color: #8B949E; font-weight: bold; font-style: italic } /* Comment.Preproc */
+.codehilite .cpf { color: #8B949E; font-style: italic } /* Comment.PreprocFile */
+.codehilite .c1 { color: #8B949E; font-style: italic } /* Comment.Single */
+.codehilite .cs { color: #8B949E; font-weight: bold; font-style: italic } /* Comment.Special */
+.codehilite .gd { color: #FFA198; background-color: #490202 } /* Generic.Deleted */
+.codehilite .ge { color: #E6EDF3; font-style: italic } /* Generic.Emph */
+.codehilite .ges { color: #E6EDF3; font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.codehilite .gr { color: #FFA198 } /* Generic.Error */
+.codehilite .gh { color: #79C0FF; font-weight: bold } /* Generic.Heading */
+.codehilite .gi { color: #56D364; background-color: #0F5323 } /* Generic.Inserted */
+.codehilite .go { color: #8B949E } /* Generic.Output */
+.codehilite .gp { color: #8B949E } /* Generic.Prompt */
+.codehilite .gs { color: #E6EDF3; font-weight: bold } /* Generic.Strong */
+.codehilite .gu { color: #79C0FF } /* Generic.Subheading */
+.codehilite .gt { color: #FF7B72 } /* Generic.Traceback */
+.codehilite .g-Underline { color: #E6EDF3; text-decoration: underline } /* Generic.Underline */
+.codehilite .kc { color: #79C0FF } /* Keyword.Constant */
+.codehilite .kd { color: #FF7B72 } /* Keyword.Declaration */
+.codehilite .kn { color: #FF7B72 } /* Keyword.Namespace */
+.codehilite .kp { color: #79C0FF } /* Keyword.Pseudo */
+.codehilite .kr { color: #FF7B72 } /* Keyword.Reserved */
+.codehilite .kt { color: #FF7B72 } /* Keyword.Type */
+.codehilite .ld { color: #79C0FF } /* Literal.Date */
+.codehilite .m { color: #A5D6FF } /* Literal.Number */
+.codehilite .s { color: #A5D6FF } /* Literal.String */
+.codehilite .na { color: #E6EDF3 } /* Name.Attribute */
+.codehilite .nb { color: #E6EDF3 } /* Name.Builtin */
+.codehilite .nc { color: #F0883E; font-weight: bold } /* Name.Class */
+.codehilite .no { color: #79C0FF; font-weight: bold } /* Name.Constant */
+.codehilite .nd { color: #D2A8FF; font-weight: bold } /* Name.Decorator */
+.codehilite .ni { color: #FFA657 } /* Name.Entity */
+.codehilite .ne { color: #F0883E; font-weight: bold } /* Name.Exception */
+.codehilite .nf { color: #D2A8FF; font-weight: bold } /* Name.Function */
+.codehilite .nl { color: #79C0FF; font-weight: bold } /* Name.Label */
+.codehilite .nn { color: #FF7B72 } /* Name.Namespace */
+.codehilite .nx { color: #E6EDF3 } /* Name.Other */
+.codehilite .py { color: #79C0FF } /* Name.Property */
+.codehilite .nt { color: #7EE787 } /* Name.Tag */
+.codehilite .nv { color: #79C0FF } /* Name.Variable */
+.codehilite .ow { color: #FF7B72; font-weight: bold } /* Operator.Word */
+.codehilite .pm { color: #E6EDF3 } /* Punctuation.Marker */
+.codehilite .w { color: #6E7681 } /* Text.Whitespace */
+.codehilite .mb { color: #A5D6FF } /* Literal.Number.Bin */
+.codehilite .mf { color: #A5D6FF } /* Literal.Number.Float */
+.codehilite .mh { color: #A5D6FF } /* Literal.Number.Hex */
+.codehilite .mi { color: #A5D6FF } /* Literal.Number.Integer */
+.codehilite .mo { color: #A5D6FF } /* Literal.Number.Oct */
+.codehilite .sa { color: #79C0FF } /* Literal.String.Affix */
+.codehilite .sb { color: #A5D6FF } /* Literal.String.Backtick */
+.codehilite .sc { color: #A5D6FF } /* Literal.String.Char */
+.codehilite .dl { color: #79C0FF } /* Literal.String.Delimiter */
+.codehilite .sd { color: #A5D6FF } /* Literal.String.Doc */
+.codehilite .s2 { color: #A5D6FF } /* Literal.String.Double */
+.codehilite .se { color: #79C0FF } /* Literal.String.Escape */
+.codehilite .sh { color: #79C0FF } /* Literal.String.Heredoc */
+.codehilite .si { color: #A5D6FF } /* Literal.String.Interpol */
+.codehilite .sx { color: #A5D6FF } /* Literal.String.Other */
+.codehilite .sr { color: #79C0FF } /* Literal.String.Regex */
+.codehilite .s1 { color: #A5D6FF } /* Literal.String.Single */
+.codehilite .ss { color: #A5D6FF } /* Literal.String.Symbol */
+.codehilite .bp { color: #E6EDF3 } /* Name.Builtin.Pseudo */
+.codehilite .fm { color: #D2A8FF; font-weight: bold } /* Name.Function.Magic */
+.codehilite .vc { color: #79C0FF } /* Name.Variable.Class */
+.codehilite .vg { color: #79C0FF } /* Name.Variable.Global */
+.codehilite .vi { color: #79C0FF } /* Name.Variable.Instance */
+.codehilite .vm { color: #79C0FF } /* Name.Variable.Magic */
+.codehilite .il { color: #A5D6FF } /* Literal.Number.Integer.Long */
+}
+</style>
+</head>
+<body>
+<main class="page">
+<h1 id="the-interview-gauntlet-20-drills-to-staff-level">🎯 The Interview Gauntlet — 20 Drills to Staff-Level</h1>
+<blockquote>
+<p>The final unit. You've built the platform; now you convert it into interview
+performance. This gauntlet re-runs <strong>Part E of the system-design notes</strong> (all 20
+question breakdowns) as timed, out-loud mock sessions — each anchored to what
+you built, each scored against the 5 dimensions interviewers actually grade
+(§1): requirements thinking, architecture reasoning, trade-off awareness,
+depth, production knowledge.</p>
+</blockquote>
+<h2 id="how-to-run-a-drill">How to run a drill</h2>
+<ol>
+<li><strong>45-minute timer, out loud, standing at a whiteboard</strong> (or excalidraw +
+   screen recording). No notes during; notes review after.</li>
+<li>Open with the framework declaration (§2 power move), then run all 7 steps —
+   checkpoints: architecture drawn by minute 15, deep dives offered by minute 30.</li>
+<li>Record yourself. Afterwards, score 1–5 on each of the 5 dimensions and re-read
+   the corresponding question breakdown in the notes. Log scores in
+   <code>gauntlet_log.md</code> — you're looking for trend, not perfection.</li>
+<li><strong>Use PipeForge evidence sparingly but decisively:</strong> one first-person proof
+   per deep dive ("when I built this, the consumer rebalance duplicated 0.3% of
+   events — here's the dedup layer that absorbed it") lands harder than ten.</li>
+<li>Every question: end with monitoring + one SLA sentence, even if unasked (§9).</li>
+</ol>
+<h2 id="schedule-34-weeks-dont-binge">Schedule (3–4 weeks, don't binge)</h2>
+<table>
+<thead>
+<tr>
+<th>Week</th>
+<th>Drills</th>
+<th>Theme</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Q1, Q2, Q3, Q6, Q7</td>
+<td>Warm-ups + your home turf (warehouse, medallion, platform)</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Q4, Q5, Q8, Q9, Q18</td>
+<td>Streaming, CDC, quality, dedup — your Phase 4/5/8 muscles</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Q10, Q11, Q13, Q14, Q20</td>
+<td>Hard mode: hot paths, exactness, skew, IoT volume</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Q12, Q15, Q16, Q17, Q19</td>
+<td>Staff mode: multi-tenant, mesh, two-phase serving, feeds</td>
+</tr>
+</tbody>
+</table>
+<p>Re-run your three weakest at the end. A drill that went badly and was repeated is
+worth five that went fine.</p>
+<h2 id="per-question-anchors-your-pipeforge-evidence-base">Per-question anchors (your PipeForge evidence base)</h2>
+<p><strong>Q1 Log aggregation (Easy):</strong> Your clickstream pipeline <em>is</em> one. Anchor: RAW
+ingestion-date partitions + offset-stamped files (replay/debug story). Watch for:
+don't over-engineer — this is a batch-tolerant use case unless they say otherwise.</p>
+<p><strong>Q2 URL shortener analytics (Easy):</strong> Tiny volume — say so with the §3 threshold
+table and design small (the restraint is the test). Anchor: your rollup pattern.</p>
+<p><strong>Q3 E-commerce warehouse (the most-asked):</strong> This is NovaMart. Grain declaration,
+star schema, SCD2 as-of joins, idempotent daily loads, 5 baseline DQ checks.
+You should score 5/5 here or repeat it until you do — it's your home game.</p>
+<p><strong>Q4 Real-time metrics dashboard:</strong> SLA-number-first (§27). Anchor: micro-batch
+consumer + rollups + freshness stamp. Trap: "real-time" usually means minutes —
+ask, then say why you're <em>not</em> reaching for Flink.</p>
+<p><strong>Q5 CDC replication:</strong> Anchor: the hard-delete drift incident (P08) — tell it,
+then the log-based CDC design (§23), snapshot + ordering + lag monitoring
+("monitor consumer lag, not connector status").</p>
+<p><strong>Q6 Medallion lake:</strong> RAW/ODP/FDP/CDP with the layer-contract table (charter §3).
+Anchor: "bronze a little clean" mistake and why your RAW is verbatim + manifests.</p>
+<p><strong>Q7 ETL framework for 100 sources (the platform question):</strong> Your thesis
+statement. Registry → contracts → parameter-driven engines → DAG factory →
+uniform DQ/audit → onboarding in minutes. Deep dives: parse-time safety of the
+DAG factory, tenant fairness, contract change protocol. This should be your
+single strongest 45 minutes on Earth.</p>
+<p><strong>Q8 Feature store:</strong> Anchor: <code>customer_features</code> CDP table (offline) + the
+online/offline consistency problem; dual-store pattern, point-in-time-correct
+training data (your SCD2/as-of machinery is exactly this).</p>
+<p><strong>Q9 DQ monitoring framework:</strong> Phase 8 verbatim: 6 dimensions, severity ladder,
+golden rule, calibration, scorecard. Include the silent-semantic-corruption story
+(schema-valid but wrong by 100x).</p>
+<p><strong>Q10 Uber surge pricing (final boss):</strong> Hot path (sub-minute aggregates per geo
+cell) + cold path (batch correctness + reconciliation) — the hybrid §5 pattern.
+Anchors: your lag math, skew surgery (hot cells = hot keys!), late-data honesty.
+Geo-cell partitioning is the new element — think H3/S2 cells as partition keys.</p>
+<p><strong>Q11 Spotify royalties:</strong> Money = exactness talk: effectively-once (at-least-once
++ idempotent MERGE), immutable audit, recon with tolerance zero, backfill with
+restatement protocol. Anchor: your recon framework + append-only <code>pipeline_run</code>.</p>
+<p><strong>Q12 Netflix recommendations:</strong> Lakehouse replay for training sets (RAW retention
+as the "lambda-lite insurance", §13), feature freshness tiers, offline/online split.</p>
+<p><strong>Q13 Real-time fraud:</strong> The one where micro-batch genuinely loses — argue the
+Flink/stateful-streaming graduation honestly (§27/§36): sub-second scoring,
+event-at-a-time state, then batch reconciliation behind it. Knowing where your
+own architecture stops is the staff signal.</p>
+<p><strong>Q14 Twitter timeline analytics:</strong> Sessionization + celebrity skew — your salting
+numbers from P13 are the star. Fan-out math up front (§4).</p>
+<p><strong>Q15 Multi-tenant SaaS platform (staff favorite):</strong> Phase 12 verbatim: isolation
+ladder with a chosen rung and reasons, noisy-neighbor incident, per-tenant cost,
+quotas. Add schema-evolution-per-tenant and compliance variance as deep dives.</p>
+<p><strong>Q16 Real-time recommendation engine (two-phase):</strong> Batch candidate generation
+(CDP) + online ranking store; your rollup + key-value serving discussion. Focus
+on the handoff: how offline features reach the online store (reverse ETL, §28).</p>
+<p><strong>Q17 LinkedIn activity feed:</strong> Estimation-heavy (§4): events/day → fan-out
+write vs read tradeoff → storage math out loud. Then standard lake + hot path.</p>
+<p><strong>Q18 Ad click stream:</strong> Dedup at billing-grade + late attribution (30-day
+windows): your lookback-MERGE pattern generalizes; discuss watermark vs
+append-and-compact for a 30-day revision window (§17), and click-fraud DLQ.</p>
+<p><strong>Q19 Data mesh platform (staff/principal):</strong> Argue the <em>organizational</em> problem
+first (§25: central-team bottleneck), then your platform as the self-serve layer,
+contracts as the federation mechanism, catalog as discovery. Be the candidate who
+says when mesh is wrong.</p>
+<p><strong>Q20 IoT pipeline:</strong> Volume math (500K devices × 30s), device clock skew (§17
+late data at 20–30%!), per-device ordering (Kafka keys), DLQ for corrupt
+firmware payloads, downsampling tiers for retention cost. All patterns you own.</p>
+<h2 id="the-five-war-stories-rehearse-until-theyre-2-minutes-each">The five war stories (rehearse until they're 2 minutes each)</h2>
+<p>From your <code>docs/incidents/</code>, pick five spanning different failure classes, e.g.:
+1. Hard-delete drift caught by recon (ingestion correctness)
+2. Append double-count (idempotency)
+3. Silent semantic corruption — prices ÷100 (why schema checks aren't enough)
+4. Consumer lag / retention near-miss (streaming ops)
+5. Token key rotation breaking joins (governance meets correctness)</p>
+<p>Format (§8): what broke → impact → how detected → fix → prevention. These answer
+"tell me about a hard bug", "a production incident", "a time you improved
+reliability" — behavioral rounds are system-design rounds in disguise for DEs.</p>
+<h2 id="final-calibration">Final calibration</h2>
+<ul>
+<li>Re-read the <strong>entire notes file</strong> in one sitting; skim <strong>§41 rapid recap</strong> the
+  night before any interview.</li>
+<li>Do one full mock with a human (peer, mentor, or paid) for Q3, Q7, and one hard
+  question — external calibration catches habits self-review can't.</li>
+<li>The bar you're aiming for, in one line: <strong>every claim in your interview is
+  something you can open a terminal and prove.</strong> That's what this course bought you.</li>
+</ul>
+<p>Good luck. You did the work — now go collect.</p>
+</main>
+</body>
+</html>

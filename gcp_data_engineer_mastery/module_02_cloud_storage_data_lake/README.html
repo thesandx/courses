@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 2: Cloud Storage &amp; Data Lakes</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e; --accent: #0969da;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1; --accent: #4493f8;
+  }
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.65; word-wrap: break-word;
+  -webkit-font-smoothing: antialiased;
+}
+.page { max-width: 880px; margin: 0 auto; padding: 2.5rem 1.5rem 5rem; }
+h1, h2, h3, h4, h5, h6 { margin-top: 1.6em; margin-bottom: .5em; line-height: 1.25; font-weight: 650; }
+h1 { font-size: 2.1em; margin-top: 0; border-bottom: 2px solid var(--border); padding-bottom: .35em; letter-spacing: -.02em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+h4 { font-size: 1.05em; }
+p { margin: 0 0 1em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+strong { font-weight: 650; }
+code, pre, kbd {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; font-size: 85%; }
+pre {
+  background: var(--code-bg); padding: 1em 1.2em; border-radius: 8px;
+  overflow-x: auto; line-height: 1.5; font-size: 85%;
+  border: 1px solid var(--border); margin: 0 0 1.2em;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; border-radius: 0; }
+.codehilite { background: var(--code-bg); border-radius: 8px; margin: 0 0 1.2em; }
+.codehilite pre { margin: 0; border: 1px solid var(--border); }
+blockquote {
+  margin: 0 0 1.2em; padding: .5em 1.1em; color: var(--quote);
+  border-left: 4px solid var(--accent); background: var(--code-bg);
+  border-radius: 0 8px 8px 0;
+}
+blockquote > :first-child { margin-top: 0; }
+blockquote > :last-child { margin-bottom: 0; }
+table {
+  border-collapse: collapse; display: block; overflow-x: auto;
+  max-width: 100%; margin: 0 0 1.2em; font-size: .95em;
+}
+th, td { border: 1px solid var(--border); padding: 8px 14px; }
+th { font-weight: 650; background: var(--code-bg); }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; border-radius: 8px; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 2em 0; }
+ul, ol { padding-left: 1.8em; margin: 0 0 1em; }
+li { margin: .3em 0; }
+li > p { margin-bottom: .5em; }
+input[type="checkbox"] { margin-right: .4em; }
+::selection { background: color-mix(in srgb, var(--accent) 25%, transparent); }
+/* Pygments syntax highlighting — light */
+pre { line-height: 125%; }
+td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+.codehilite .hll { background-color: #ffffcc }
+.codehilite { background: #f8f8f8; }
+.codehilite .c { color: #3D7B7B; font-style: italic } /* Comment */
+.codehilite .err { border: 1px solid #F00 } /* Error */
+.codehilite .k { color: #008000; font-weight: bold } /* Keyword */
+.codehilite .o { color: #666 } /* Operator */
+.codehilite .ch { color: #3D7B7B; font-style: italic } /* Comment.Hashbang */
+.codehilite .cm { color: #3D7B7B; font-style: italic } /* Comment.Multiline */
+.codehilite .cp { color: #9C6500 } /* Comment.Preproc */
+.codehilite .cpf { color: #3D7B7B; font-style: italic } /* Comment.PreprocFile */
+.codehilite .c1 { color: #3D7B7B; font-style: italic } /* Comment.Single */
+.codehilite .cs { color: #3D7B7B; font-style: italic } /* Comment.Special */
+.codehilite .gd { color: #A00000 } /* Generic.Deleted */
+.codehilite .ge { font-style: italic } /* Generic.Emph */
+.codehilite .ges { font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.codehilite .gr { color: #E40000 } /* Generic.Error */
+.codehilite .gh { color: #000080; font-weight: bold } /* Generic.Heading */
+.codehilite .gi { color: #008400 } /* Generic.Inserted */
+.codehilite .go { color: #717171 } /* Generic.Output */
+.codehilite .gp { color: #000080; font-weight: bold } /* Generic.Prompt */
+.codehilite .gs { font-weight: bold } /* Generic.Strong */
+.codehilite .gu { color: #800080; font-weight: bold } /* Generic.Subheading */
+.codehilite .gt { color: #04D } /* Generic.Traceback */
+.codehilite .kc { color: #008000; font-weight: bold } /* Keyword.Constant */
+.codehilite .kd { color: #008000; font-weight: bold } /* Keyword.Declaration */
+.codehilite .kn { color: #008000; font-weight: bold } /* Keyword.Namespace */
+.codehilite .kp { color: #008000 } /* Keyword.Pseudo */
+.codehilite .kr { color: #008000; font-weight: bold } /* Keyword.Reserved */
+.codehilite .kt { color: #B00040 } /* Keyword.Type */
+.codehilite .m { color: #666 } /* Literal.Number */
+.codehilite .s { color: #BA2121 } /* Literal.String */
+.codehilite .na { color: #687822 } /* Name.Attribute */
+.codehilite .nb { color: #008000 } /* Name.Builtin */
+.codehilite .nc { color: #00F; font-weight: bold } /* Name.Class */
+.codehilite .no { color: #800 } /* Name.Constant */
+.codehilite .nd { color: #A2F } /* Name.Decorator */
+.codehilite .ni { color: #717171; font-weight: bold } /* Name.Entity */
+.codehilite .ne { color: #CB3F38; font-weight: bold } /* Name.Exception */
+.codehilite .nf { color: #00F } /* Name.Function */
+.codehilite .nl { color: #767600 } /* Name.Label */
+.codehilite .nn { color: #00F; font-weight: bold } /* Name.Namespace */
+.codehilite .nt { color: #008000; font-weight: bold } /* Name.Tag */
+.codehilite .nv { color: #19177C } /* Name.Variable */
+.codehilite .ow { color: #A2F; font-weight: bold } /* Operator.Word */
+.codehilite .w { color: #BBB } /* Text.Whitespace */
+.codehilite .mb { color: #666 } /* Literal.Number.Bin */
+.codehilite .mf { color: #666 } /* Literal.Number.Float */
+.codehilite .mh { color: #666 } /* Literal.Number.Hex */
+.codehilite .mi { color: #666 } /* Literal.Number.Integer */
+.codehilite .mo { color: #666 } /* Literal.Number.Oct */
+.codehilite .sa { color: #BA2121 } /* Literal.String.Affix */
+.codehilite .sb { color: #BA2121 } /* Literal.String.Backtick */
+.codehilite .sc { color: #BA2121 } /* Literal.String.Char */
+.codehilite .dl { color: #BA2121 } /* Literal.String.Delimiter */
+.codehilite .sd { color: #BA2121; font-style: italic } /* Literal.String.Doc */
+.codehilite .s2 { color: #BA2121 } /* Literal.String.Double */
+.codehilite .se { color: #AA5D1F; font-weight: bold } /* Literal.String.Escape */
+.codehilite .sh { color: #BA2121 } /* Literal.String.Heredoc */
+.codehilite .si { color: #A45A77; font-weight: bold } /* Literal.String.Interpol */
+.codehilite .sx { color: #008000 } /* Literal.String.Other */
+.codehilite .sr { color: #A45A77 } /* Literal.String.Regex */
+.codehilite .s1 { color: #BA2121 } /* Literal.String.Single */
+.codehilite .ss { color: #19177C } /* Literal.String.Symbol */
+.codehilite .bp { color: #008000 } /* Name.Builtin.Pseudo */
+.codehilite .fm { color: #00F } /* Name.Function.Magic */
+.codehilite .vc { color: #19177C } /* Name.Variable.Class */
+.codehilite .vg { color: #19177C } /* Name.Variable.Global */
+.codehilite .vi { color: #19177C } /* Name.Variable.Instance */
+.codehilite .vm { color: #19177C } /* Name.Variable.Magic */
+.codehilite .il { color: #666 } /* Literal.Number.Integer.Long */
+/* Pygments syntax highlighting — dark */
+@media (prefers-color-scheme: dark) {
+pre { line-height: 125%; }
+td.linenos .normal { color: #6e7681; background-color: #0d1117; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: #6e7681; background-color: #0d1117; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #e6edf3; background-color: #6e7681; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #e6edf3; background-color: #6e7681; padding-left: 5px; padding-right: 5px; }
+.codehilite .hll { background-color: #6e7681 }
+.codehilite { background: #0d1117; color: #E6EDF3 }
+.codehilite .c { color: #8B949E; font-style: italic } /* Comment */
+.codehilite .err { color: #F85149 } /* Error */
+.codehilite .esc { color: #E6EDF3 } /* Escape */
+.codehilite .g { color: #E6EDF3 } /* Generic */
+.codehilite .k { color: #FF7B72 } /* Keyword */
+.codehilite .l { color: #A5D6FF } /* Literal */
+.codehilite .n { color: #E6EDF3 } /* Name */
+.codehilite .o { color: #FF7B72; font-weight: bold } /* Operator */
+.codehilite .x { color: #E6EDF3 } /* Other */
+.codehilite .p { color: #E6EDF3 } /* Punctuation */
+.codehilite .ch { color: #8B949E; font-style: italic } /* Comment.Hashbang */
+.codehilite .cm { color: #8B949E; font-style: italic } /* Comment.Multiline */
+.codehilite .cp { color: #8B949E; font-weight: bold; font-style: italic } /* Comment.Preproc */
+.codehilite .cpf { color: #8B949E; font-style: italic } /* Comment.PreprocFile */
+.codehilite .c1 { color: #8B949E; font-style: italic } /* Comment.Single */
+.codehilite .cs { color: #8B949E; font-weight: bold; font-style: italic } /* Comment.Special */
+.codehilite .gd { color: #FFA198; background-color: #490202 } /* Generic.Deleted */
+.codehilite .ge { color: #E6EDF3; font-style: italic } /* Generic.Emph */
+.codehilite .ges { color: #E6EDF3; font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.codehilite .gr { color: #FFA198 } /* Generic.Error */
+.codehilite .gh { color: #79C0FF; font-weight: bold } /* Generic.Heading */
+.codehilite .gi { color: #56D364; background-color: #0F5323 } /* Generic.Inserted */
+.codehilite .go { color: #8B949E } /* Generic.Output */
+.codehilite .gp { color: #8B949E } /* Generic.Prompt */
+.codehilite .gs { color: #E6EDF3; font-weight: bold } /* Generic.Strong */
+.codehilite .gu { color: #79C0FF } /* Generic.Subheading */
+.codehilite .gt { color: #FF7B72 } /* Generic.Traceback */
+.codehilite .g-Underline { color: #E6EDF3; text-decoration: underline } /* Generic.Underline */
+.codehilite .kc { color: #79C0FF } /* Keyword.Constant */
+.codehilite .kd { color: #FF7B72 } /* Keyword.Declaration */
+.codehilite .kn { color: #FF7B72 } /* Keyword.Namespace */
+.codehilite .kp { color: #79C0FF } /* Keyword.Pseudo */
+.codehilite .kr { color: #FF7B72 } /* Keyword.Reserved */
+.codehilite .kt { color: #FF7B72 } /* Keyword.Type */
+.codehilite .ld { color: #79C0FF } /* Literal.Date */
+.codehilite .m { color: #A5D6FF } /* Literal.Number */
+.codehilite .s { color: #A5D6FF } /* Literal.String */
+.codehilite .na { color: #E6EDF3 } /* Name.Attribute */
+.codehilite .nb { color: #E6EDF3 } /* Name.Builtin */
+.codehilite .nc { color: #F0883E; font-weight: bold } /* Name.Class */
+.codehilite .no { color: #79C0FF; font-weight: bold } /* Name.Constant */
+.codehilite .nd { color: #D2A8FF; font-weight: bold } /* Name.Decorator */
+.codehilite .ni { color: #FFA657 } /* Name.Entity */
+.codehilite .ne { color: #F0883E; font-weight: bold } /* Name.Exception */
+.codehilite .nf { color: #D2A8FF; font-weight: bold } /* Name.Function */
+.codehilite .nl { color: #79C0FF; font-weight: bold } /* Name.Label */
+.codehilite .nn { color: #FF7B72 } /* Name.Namespace */
+.codehilite .nx { color: #E6EDF3 } /* Name.Other */
+.codehilite .py { color: #79C0FF } /* Name.Property */
+.codehilite .nt { color: #7EE787 } /* Name.Tag */
+.codehilite .nv { color: #79C0FF } /* Name.Variable */
+.codehilite .ow { color: #FF7B72; font-weight: bold } /* Operator.Word */
+.codehilite .pm { color: #E6EDF3 } /* Punctuation.Marker */
+.codehilite .w { color: #6E7681 } /* Text.Whitespace */
+.codehilite .mb { color: #A5D6FF } /* Literal.Number.Bin */
+.codehilite .mf { color: #A5D6FF } /* Literal.Number.Float */
+.codehilite .mh { color: #A5D6FF } /* Literal.Number.Hex */
+.codehilite .mi { color: #A5D6FF } /* Literal.Number.Integer */
+.codehilite .mo { color: #A5D6FF } /* Literal.Number.Oct */
+.codehilite .sa { color: #79C0FF } /* Literal.String.Affix */
+.codehilite .sb { color: #A5D6FF } /* Literal.String.Backtick */
+.codehilite .sc { color: #A5D6FF } /* Literal.String.Char */
+.codehilite .dl { color: #79C0FF } /* Literal.String.Delimiter */
+.codehilite .sd { color: #A5D6FF } /* Literal.String.Doc */
+.codehilite .s2 { color: #A5D6FF } /* Literal.String.Double */
+.codehilite .se { color: #79C0FF } /* Literal.String.Escape */
+.codehilite .sh { color: #79C0FF } /* Literal.String.Heredoc */
+.codehilite .si { color: #A5D6FF } /* Literal.String.Interpol */
+.codehilite .sx { color: #A5D6FF } /* Literal.String.Other */
+.codehilite .sr { color: #79C0FF } /* Literal.String.Regex */
+.codehilite .s1 { color: #A5D6FF } /* Literal.String.Single */
+.codehilite .ss { color: #A5D6FF } /* Literal.String.Symbol */
+.codehilite .bp { color: #E6EDF3 } /* Name.Builtin.Pseudo */
+.codehilite .fm { color: #D2A8FF; font-weight: bold } /* Name.Function.Magic */
+.codehilite .vc { color: #79C0FF } /* Name.Variable.Class */
+.codehilite .vg { color: #79C0FF } /* Name.Variable.Global */
+.codehilite .vi { color: #79C0FF } /* Name.Variable.Instance */
+.codehilite .vm { color: #79C0FF } /* Name.Variable.Magic */
+.codehilite .il { color: #A5D6FF } /* Literal.Number.Integer.Long */
+}
+</style>
+</head>
+<body>
+<main class="page">
+<h1 id="module-2-cloud-storage-data-lakes">Module 2: Cloud Storage &amp; Data Lakes</h1>
+<h2 id="learning-objectives">Learning Objectives</h2>
+<ul>
+<li>Choose the right <strong>storage class</strong> (Standard/Nearline/Coldline/Archive) and <strong>location
+  type</strong> (region/dual-region/multi-region) for a workload.</li>
+<li>Automate cost with <strong>lifecycle rules</strong>, <strong>Autoclass</strong>, and <strong>object versioning</strong>.</li>
+<li>Design a lakehouse with <strong>raw → curated → consumer</strong> zones.</li>
+<li>Secure buckets with <strong>uniform bucket-level access</strong> and understand signed URLs vs IAM.</li>
+<li>Know when GCS is the answer vs BigQuery/Bigtable.</li>
+</ul>
+<hr>
+<h2 id="1-storage-classes-the-costaccess-tradeoff">1. Storage Classes — the Cost/Access Tradeoff</h2>
+<p>All classes have the <strong>same throughput and millisecond latency</strong>. They differ only in
+<strong>storage price</strong> vs <strong>access cost</strong> and a <strong>minimum storage duration</strong>.</p>
+<table>
+<thead>
+<tr>
+<th>Class</th>
+<th>Best for</th>
+<th>Min duration</th>
+<th>Rel. storage $</th>
+<th>Rel. access $</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Standard</strong></td>
+<td>Hot data, active analytics</td>
+<td>none</td>
+<td>High</td>
+<td>Low</td>
+</tr>
+<tr>
+<td><strong>Nearline</strong></td>
+<td>Accessed &lt; once/month</td>
+<td>30 days</td>
+<td>Medium</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td><strong>Coldline</strong></td>
+<td>Accessed &lt; once/quarter</td>
+<td>90 days</td>
+<td>Low</td>
+<td>High</td>
+</tr>
+<tr>
+<td><strong>Archive</strong></td>
+<td>DR, compliance, rarely read</td>
+<td>365 days</td>
+<td>Lowest</td>
+<td>Highest</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Pitfall:</strong> Early deletion / rewrite before the minimum duration still bills you for
+the <em>full</em> minimum. Don't put churning data in Coldline/Archive.</p>
+</blockquote>
+<h2 id="2-location-types">2. Location Types</h2>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Example</th>
+<th>Availability</th>
+<th>Cost</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Region</td>
+<td><code>us-central1</code></td>
+<td>Single region</td>
+<td>Lowest</td>
+<td>Colocate with Dataflow/Dataproc/BigQuery to avoid egress</td>
+</tr>
+<tr>
+<td>Dual-region</td>
+<td><code>nam4</code></td>
+<td>2 regions, low RPO</td>
+<td>Medium</td>
+<td>HA with predictable placement</td>
+</tr>
+<tr>
+<td>Multi-region</td>
+<td><code>US</code>, <code>EU</code></td>
+<td>Continent-wide</td>
+<td>Highest</td>
+<td>Serving to broad audiences</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Exam trap:</strong> put your bucket in the <strong>same region as your compute and BigQuery
+dataset</strong>. Cross-region reads add latency <strong>and egress cost</strong>, and BigQuery can only
+load/export within the same location.</p>
+</blockquote>
+<h2 id="3-lifecycle-autoclass-versioning">3. Lifecycle, Autoclass &amp; Versioning</h2>
+<ul>
+<li><strong>Lifecycle rules:</strong> conditions (age, class, versions) → actions (<code>SetStorageClass</code>,
+  <code>Delete</code>, <code>AbortIncompleteMultipartUpload</code>).</li>
+<li><strong>Autoclass:</strong> GCS auto-transitions each object between classes based on access — set
+  it and forget lifecycle-class tuning.</li>
+<li><strong>Object versioning:</strong> keeps overwritten/deleted versions (noncurrent) — combine with a
+  lifecycle rule to expire old versions.</li>
+</ul>
+<div class="codehilite"><pre><span></span><code><span class="nb">lifecycle_rule</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nb">condition</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="na">age</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="m">30</span><span class="w"> </span><span class="p">}</span>
+<span class="w">  </span><span class="nb">action</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="na">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;SetStorageClass&quot;; storage_class = &quot;NEARLINE&quot;</span><span class="w"> </span><span class="p">}</span>
+<span class="p">}</span>
+<span class="nb">lifecycle_rule</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nb">condition</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="na">age</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="m">365</span><span class="w"> </span><span class="p">}</span>
+<span class="w">  </span><span class="nb">action</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="na">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Delete&quot;</span><span class="w"> </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<blockquote>
+<p><strong>Pitfall:</strong> Autoclass and per-object lifecycle <em>class</em> transitions are mutually
+exclusive — use one strategy. You can still keep a <code>Delete</code> lifecycle rule with
+Autoclass on.</p>
+</blockquote>
+<h2 id="4-security-uniform-vs-fine-grained-iam-vs-acls">4. Security: Uniform vs Fine-grained, IAM vs ACLs</h2>
+<ul>
+<li><strong>Uniform bucket-level access (UBLA):</strong> disables per-object ACLs; IAM alone controls
+  access. <strong>Recommended default</strong> — simpler, auditable.</li>
+<li><strong>Signed URLs:</strong> time-limited access to a specific object <strong>without</strong> granting IAM —
+  perfect for letting an external client upload/download one file.</li>
+<li><strong>CMEK:</strong> encrypt with your Cloud KMS key for compliance (Module 10).</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Need</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Simple, auditable access control</td>
+<td>UBLA + IAM</td>
+</tr>
+<tr>
+<td>Give an outsider temporary access to one object</td>
+<td><strong>Signed URL</strong></td>
+</tr>
+<tr>
+<td>Regulatory key control</td>
+<td>CMEK</td>
+</tr>
+<tr>
+<td>Public website assets</td>
+<td><code>allUsers:objectViewer</code> (rare, deliberate)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="5-the-data-lake-lakehouse-zoning-pattern">5. The Data Lake / Lakehouse Zoning Pattern</h2>
+<div class="codehilite"><pre><span></span><code>flowchart LR
+    S[Sources] --&gt; R[(raw zone&lt;br/&gt;immutable, as-ingested)]
+    R --&gt; C[(curated zone&lt;br/&gt;cleaned, partitioned Parquet)]
+    C --&gt; U[(consumer zone&lt;br/&gt;marts / BigLake)]
+    C --&gt; BQ[BigQuery external / BigLake tables]
+</code></pre></div>
+
+<table>
+<thead>
+<tr>
+<th>Zone</th>
+<th>Format</th>
+<th>Mutability</th>
+<th>Who reads</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>raw</strong></td>
+<td>source-native (JSON/CSV/Avro)</td>
+<td>append-only, immutable</td>
+<td>pipelines only</td>
+</tr>
+<tr>
+<td><strong>curated</strong></td>
+<td>columnar (Parquet/ORC), partitioned</td>
+<td>rewritten by ETL</td>
+<td>analysts, BigLake</td>
+</tr>
+<tr>
+<td><strong>consumer</strong></td>
+<td>marts, aggregates</td>
+<td>published</td>
+<td>BI, apps</td>
+</tr>
+</tbody>
+</table>
+<p>Query lake files in place with <strong>BigLake tables</strong> (governed external tables) — you get
+BigQuery security/metadata over GCS without loading. This is the modern "lakehouse."</p>
+<hr>
+<h2 id="exam-focus">🎯 Exam Focus</h2>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Answer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>"Data read a few times a year, minimize storage cost"</td>
+<td><strong>Coldline</strong> (Archive only if truly &lt;1/yr)</td>
+</tr>
+<tr>
+<td>"Bucket + Dataproc + BigQuery, minimize cost/latency"</td>
+<td>Put all in the <strong>same region</strong></td>
+</tr>
+<tr>
+<td>"Let a partner upload one file, no GCP account"</td>
+<td><strong>Signed URL</strong> (resumable/PUT)</td>
+</tr>
+<tr>
+<td>"Automatically tier data by access without tuning"</td>
+<td><strong>Autoclass</strong></td>
+</tr>
+<tr>
+<td>"Keep deleted objects recoverable for 30 days"</td>
+<td><strong>Versioning</strong> + lifecycle to expire noncurrent &gt;30d</td>
+</tr>
+<tr>
+<td>"Query files in GCS with BigQuery security/governance"</td>
+<td><strong>BigLake</strong> table</td>
+</tr>
+</tbody>
+</table>
+<h3 id="practice-questions">Practice Questions</h3>
+<ol>
+<li><strong>Logs written once, read only for the rare audit within 30 days, then kept 7 years
+   for compliance.</strong> → Standard (or Nearline) for first 30 days → lifecycle to <strong>Archive</strong>
+   for long-term retention; add a <strong>retention policy/bucket lock</strong> for compliance.</li>
+<li><strong>A pipeline in <code>us-central1</code> loads a bucket in the <code>EU</code> multi-region — why is the load
+   failing / expensive?</strong> → BigQuery/Dataflow can't cross locations for loads and you pay
+   egress. Colocate the bucket in <code>us-central1</code> (or dataset in <code>EU</code>).</li>
+<li><strong>You need to hand an external analyst read access to exactly one object for 1 hour.</strong>
+   → <strong>Signed URL</strong> with 1-hour expiry — not an IAM grant.</li>
+<li><strong>Cheapest correct class for data accessed on average once a month.</strong> → <strong>Nearline</strong>.</li>
+<li><strong>Best way to enforce that no objects use legacy ACLs.</strong> → Enable <strong>uniform
+   bucket-level access</strong>.</li>
+</ol>
+<hr>
+<h2 id="key-takeaways">Key Takeaways</h2>
+<ul>
+<li>Classes trade storage $ for access $ + a minimum-duration penalty — match to access
+  frequency.</li>
+<li><strong>Colocate</strong> bucket, compute, and BigQuery dataset in one region.</li>
+<li>Automate tiering with <strong>Autoclass</strong> or <strong>lifecycle</strong>; protect data with <strong>versioning</strong>
+  and retention locks.</li>
+<li>Prefer <strong>UBLA + IAM</strong>; use <strong>signed URLs</strong> for keyless external access; query in place
+  with <strong>BigLake</strong>.</li>
+</ul>
+<p>Next: <a href="../module_03_bigquery_fundamentals/README.html">Module 3 — BigQuery Fundamentals</a>.</p>
+<hr>
+<h2 id="files-in-this-module">Files in This Module</h2>
+<ul>
+<li><code>concepts.tf</code> — a lakehouse-zoned bucket with lifecycle, versioning, and UBLA</li>
+<li><code>exercise.md</code> — build raw/curated buckets with tiering and a retention policy</li>
+<li><code>solution.tf</code> — reference solution</li>
+</ul>
+</main>
+</body>
+</html>

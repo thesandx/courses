@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 4: Protocols, ABCs &amp; Structural Typing</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e; --accent: #0969da;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1; --accent: #4493f8;
+  }
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.65; word-wrap: break-word;
+  -webkit-font-smoothing: antialiased;
+}
+.page { max-width: 880px; margin: 0 auto; padding: 2.5rem 1.5rem 5rem; }
+h1, h2, h3, h4, h5, h6 { margin-top: 1.6em; margin-bottom: .5em; line-height: 1.25; font-weight: 650; }
+h1 { font-size: 2.1em; margin-top: 0; border-bottom: 2px solid var(--border); padding-bottom: .35em; letter-spacing: -.02em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+h4 { font-size: 1.05em; }
+p { margin: 0 0 1em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+strong { font-weight: 650; }
+code, pre, kbd {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; font-size: 85%; }
+pre {
+  background: var(--code-bg); padding: 1em 1.2em; border-radius: 8px;
+  overflow-x: auto; line-height: 1.5; font-size: 85%;
+  border: 1px solid var(--border); margin: 0 0 1.2em;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; border-radius: 0; }
+.codehilite { background: var(--code-bg); border-radius: 8px; margin: 0 0 1.2em; }
+.codehilite pre { margin: 0; border: 1px solid var(--border); }
+blockquote {
+  margin: 0 0 1.2em; padding: .5em 1.1em; color: var(--quote);
+  border-left: 4px solid var(--accent); background: var(--code-bg);
+  border-radius: 0 8px 8px 0;
+}
+blockquote > :first-child { margin-top: 0; }
+blockquote > :last-child { margin-bottom: 0; }
+table {
+  border-collapse: collapse; display: block; overflow-x: auto;
+  max-width: 100%; margin: 0 0 1.2em; font-size: .95em;
+}
+th, td { border: 1px solid var(--border); padding: 8px 14px; }
+th { font-weight: 650; background: var(--code-bg); }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; border-radius: 8px; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 2em 0; }
+ul, ol { padding-left: 1.8em; margin: 0 0 1em; }
+li { margin: .3em 0; }
+li > p { margin-bottom: .5em; }
+input[type="checkbox"] { margin-right: .4em; }
+::selection { background: color-mix(in srgb, var(--accent) 25%, transparent); }
+/* Pygments syntax highlighting — light */
+pre { line-height: 125%; }
+td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+.codehilite .hll { background-color: #ffffcc }
+.codehilite { background: #f8f8f8; }
+.codehilite .c { color: #3D7B7B; font-style: italic } /* Comment */
+.codehilite .err { border: 1px solid #F00 } /* Error */
+.codehilite .k { color: #008000; font-weight: bold } /* Keyword */
+.codehilite .o { color: #666 } /* Operator */
+.codehilite .ch { color: #3D7B7B; font-style: italic } /* Comment.Hashbang */
+.codehilite .cm { color: #3D7B7B; font-style: italic } /* Comment.Multiline */
+.codehilite .cp { color: #9C6500 } /* Comment.Preproc */
+.codehilite .cpf { color: #3D7B7B; font-style: italic } /* Comment.PreprocFile */
+.codehilite .c1 { color: #3D7B7B; font-style: italic } /* Comment.Single */
+.codehilite .cs { color: #3D7B7B; font-style: italic } /* Comment.Special */
+.codehilite .gd { color: #A00000 } /* Generic.Deleted */
+.codehilite .ge { font-style: italic } /* Generic.Emph */
+.codehilite .ges { font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.codehilite .gr { color: #E40000 } /* Generic.Error */
+.codehilite .gh { color: #000080; font-weight: bold } /* Generic.Heading */
+.codehilite .gi { color: #008400 } /* Generic.Inserted */
+.codehilite .go { color: #717171 } /* Generic.Output */
+.codehilite .gp { color: #000080; font-weight: bold } /* Generic.Prompt */
+.codehilite .gs { font-weight: bold } /* Generic.Strong */
+.codehilite .gu { color: #800080; font-weight: bold } /* Generic.Subheading */
+.codehilite .gt { color: #04D } /* Generic.Traceback */
+.codehilite .kc { color: #008000; font-weight: bold } /* Keyword.Constant */
+.codehilite .kd { color: #008000; font-weight: bold } /* Keyword.Declaration */
+.codehilite .kn { color: #008000; font-weight: bold } /* Keyword.Namespace */
+.codehilite .kp { color: #008000 } /* Keyword.Pseudo */
+.codehilite .kr { color: #008000; font-weight: bold } /* Keyword.Reserved */
+.codehilite .kt { color: #B00040 } /* Keyword.Type */
+.codehilite .m { color: #666 } /* Literal.Number */
+.codehilite .s { color: #BA2121 } /* Literal.String */
+.codehilite .na { color: #687822 } /* Name.Attribute */
+.codehilite .nb { color: #008000 } /* Name.Builtin */
+.codehilite .nc { color: #00F; font-weight: bold } /* Name.Class */
+.codehilite .no { color: #800 } /* Name.Constant */
+.codehilite .nd { color: #A2F } /* Name.Decorator */
+.codehilite .ni { color: #717171; font-weight: bold } /* Name.Entity */
+.codehilite .ne { color: #CB3F38; font-weight: bold } /* Name.Exception */
+.codehilite .nf { color: #00F } /* Name.Function */
+.codehilite .nl { color: #767600 } /* Name.Label */
+.codehilite .nn { color: #00F; font-weight: bold } /* Name.Namespace */
+.codehilite .nt { color: #008000; font-weight: bold } /* Name.Tag */
+.codehilite .nv { color: #19177C } /* Name.Variable */
+.codehilite .ow { color: #A2F; font-weight: bold } /* Operator.Word */
+.codehilite .w { color: #BBB } /* Text.Whitespace */
+.codehilite .mb { color: #666 } /* Literal.Number.Bin */
+.codehilite .mf { color: #666 } /* Literal.Number.Float */
+.codehilite .mh { color: #666 } /* Literal.Number.Hex */
+.codehilite .mi { color: #666 } /* Literal.Number.Integer */
+.codehilite .mo { color: #666 } /* Literal.Number.Oct */
+.codehilite .sa { color: #BA2121 } /* Literal.String.Affix */
+.codehilite .sb { color: #BA2121 } /* Literal.String.Backtick */
+.codehilite .sc { color: #BA2121 } /* Literal.String.Char */
+.codehilite .dl { color: #BA2121 } /* Literal.String.Delimiter */
+.codehilite .sd { color: #BA2121; font-style: italic } /* Literal.String.Doc */
+.codehilite .s2 { color: #BA2121 } /* Literal.String.Double */
+.codehilite .se { color: #AA5D1F; font-weight: bold } /* Literal.String.Escape */
+.codehilite .sh { color: #BA2121 } /* Literal.String.Heredoc */
+.codehilite .si { color: #A45A77; font-weight: bold } /* Literal.String.Interpol */
+.codehilite .sx { color: #008000 } /* Literal.String.Other */
+.codehilite .sr { color: #A45A77 } /* Literal.String.Regex */
+.codehilite .s1 { color: #BA2121 } /* Literal.String.Single */
+.codehilite .ss { color: #19177C } /* Literal.String.Symbol */
+.codehilite .bp { color: #008000 } /* Name.Builtin.Pseudo */
+.codehilite .fm { color: #00F } /* Name.Function.Magic */
+.codehilite .vc { color: #19177C } /* Name.Variable.Class */
+.codehilite .vg { color: #19177C } /* Name.Variable.Global */
+.codehilite .vi { color: #19177C } /* Name.Variable.Instance */
+.codehilite .vm { color: #19177C } /* Name.Variable.Magic */
+.codehilite .il { color: #666 } /* Literal.Number.Integer.Long */
+/* Pygments syntax highlighting — dark */
+@media (prefers-color-scheme: dark) {
+pre { line-height: 125%; }
+td.linenos .normal { color: #6e7681; background-color: #0d1117; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: #6e7681; background-color: #0d1117; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #e6edf3; background-color: #6e7681; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #e6edf3; background-color: #6e7681; padding-left: 5px; padding-right: 5px; }
+.codehilite .hll { background-color: #6e7681 }
+.codehilite { background: #0d1117; color: #E6EDF3 }
+.codehilite .c { color: #8B949E; font-style: italic } /* Comment */
+.codehilite .err { color: #F85149 } /* Error */
+.codehilite .esc { color: #E6EDF3 } /* Escape */
+.codehilite .g { color: #E6EDF3 } /* Generic */
+.codehilite .k { color: #FF7B72 } /* Keyword */
+.codehilite .l { color: #A5D6FF } /* Literal */
+.codehilite .n { color: #E6EDF3 } /* Name */
+.codehilite .o { color: #FF7B72; font-weight: bold } /* Operator */
+.codehilite .x { color: #E6EDF3 } /* Other */
+.codehilite .p { color: #E6EDF3 } /* Punctuation */
+.codehilite .ch { color: #8B949E; font-style: italic } /* Comment.Hashbang */
+.codehilite .cm { color: #8B949E; font-style: italic } /* Comment.Multiline */
+.codehilite .cp { color: #8B949E; font-weight: bold; font-style: italic } /* Comment.Preproc */
+.codehilite .cpf { color: #8B949E; font-style: italic } /* Comment.PreprocFile */
+.codehilite .c1 { color: #8B949E; font-style: italic } /* Comment.Single */
+.codehilite .cs { color: #8B949E; font-weight: bold; font-style: italic } /* Comment.Special */
+.codehilite .gd { color: #FFA198; background-color: #490202 } /* Generic.Deleted */
+.codehilite .ge { color: #E6EDF3; font-style: italic } /* Generic.Emph */
+.codehilite .ges { color: #E6EDF3; font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.codehilite .gr { color: #FFA198 } /* Generic.Error */
+.codehilite .gh { color: #79C0FF; font-weight: bold } /* Generic.Heading */
+.codehilite .gi { color: #56D364; background-color: #0F5323 } /* Generic.Inserted */
+.codehilite .go { color: #8B949E } /* Generic.Output */
+.codehilite .gp { color: #8B949E } /* Generic.Prompt */
+.codehilite .gs { color: #E6EDF3; font-weight: bold } /* Generic.Strong */
+.codehilite .gu { color: #79C0FF } /* Generic.Subheading */
+.codehilite .gt { color: #FF7B72 } /* Generic.Traceback */
+.codehilite .g-Underline { color: #E6EDF3; text-decoration: underline } /* Generic.Underline */
+.codehilite .kc { color: #79C0FF } /* Keyword.Constant */
+.codehilite .kd { color: #FF7B72 } /* Keyword.Declaration */
+.codehilite .kn { color: #FF7B72 } /* Keyword.Namespace */
+.codehilite .kp { color: #79C0FF } /* Keyword.Pseudo */
+.codehilite .kr { color: #FF7B72 } /* Keyword.Reserved */
+.codehilite .kt { color: #FF7B72 } /* Keyword.Type */
+.codehilite .ld { color: #79C0FF } /* Literal.Date */
+.codehilite .m { color: #A5D6FF } /* Literal.Number */
+.codehilite .s { color: #A5D6FF } /* Literal.String */
+.codehilite .na { color: #E6EDF3 } /* Name.Attribute */
+.codehilite .nb { color: #E6EDF3 } /* Name.Builtin */
+.codehilite .nc { color: #F0883E; font-weight: bold } /* Name.Class */
+.codehilite .no { color: #79C0FF; font-weight: bold } /* Name.Constant */
+.codehilite .nd { color: #D2A8FF; font-weight: bold } /* Name.Decorator */
+.codehilite .ni { color: #FFA657 } /* Name.Entity */
+.codehilite .ne { color: #F0883E; font-weight: bold } /* Name.Exception */
+.codehilite .nf { color: #D2A8FF; font-weight: bold } /* Name.Function */
+.codehilite .nl { color: #79C0FF; font-weight: bold } /* Name.Label */
+.codehilite .nn { color: #FF7B72 } /* Name.Namespace */
+.codehilite .nx { color: #E6EDF3 } /* Name.Other */
+.codehilite .py { color: #79C0FF } /* Name.Property */
+.codehilite .nt { color: #7EE787 } /* Name.Tag */
+.codehilite .nv { color: #79C0FF } /* Name.Variable */
+.codehilite .ow { color: #FF7B72; font-weight: bold } /* Operator.Word */
+.codehilite .pm { color: #E6EDF3 } /* Punctuation.Marker */
+.codehilite .w { color: #6E7681 } /* Text.Whitespace */
+.codehilite .mb { color: #A5D6FF } /* Literal.Number.Bin */
+.codehilite .mf { color: #A5D6FF } /* Literal.Number.Float */
+.codehilite .mh { color: #A5D6FF } /* Literal.Number.Hex */
+.codehilite .mi { color: #A5D6FF } /* Literal.Number.Integer */
+.codehilite .mo { color: #A5D6FF } /* Literal.Number.Oct */
+.codehilite .sa { color: #79C0FF } /* Literal.String.Affix */
+.codehilite .sb { color: #A5D6FF } /* Literal.String.Backtick */
+.codehilite .sc { color: #A5D6FF } /* Literal.String.Char */
+.codehilite .dl { color: #79C0FF } /* Literal.String.Delimiter */
+.codehilite .sd { color: #A5D6FF } /* Literal.String.Doc */
+.codehilite .s2 { color: #A5D6FF } /* Literal.String.Double */
+.codehilite .se { color: #79C0FF } /* Literal.String.Escape */
+.codehilite .sh { color: #79C0FF } /* Literal.String.Heredoc */
+.codehilite .si { color: #A5D6FF } /* Literal.String.Interpol */
+.codehilite .sx { color: #A5D6FF } /* Literal.String.Other */
+.codehilite .sr { color: #79C0FF } /* Literal.String.Regex */
+.codehilite .s1 { color: #A5D6FF } /* Literal.String.Single */
+.codehilite .ss { color: #A5D6FF } /* Literal.String.Symbol */
+.codehilite .bp { color: #E6EDF3 } /* Name.Builtin.Pseudo */
+.codehilite .fm { color: #D2A8FF; font-weight: bold } /* Name.Function.Magic */
+.codehilite .vc { color: #79C0FF } /* Name.Variable.Class */
+.codehilite .vg { color: #79C0FF } /* Name.Variable.Global */
+.codehilite .vi { color: #79C0FF } /* Name.Variable.Instance */
+.codehilite .vm { color: #79C0FF } /* Name.Variable.Magic */
+.codehilite .il { color: #A5D6FF } /* Literal.Number.Integer.Long */
+}
+</style>
+</head>
+<body>
+<main class="page">
+<h1 id="module-4-protocols-abcs-structural-typing">Module 4: Protocols, ABCs &amp; Structural Typing</h1>
+<h2 id="learning-objectives">Learning Objectives</h2>
+<ul>
+<li>Articulate <strong>duck typing</strong> and why idiomatic Python checks <em>behavior</em>, not type.</li>
+<li>Use <code>collections.abc</code> both to <strong>test</strong> capabilities (<code>isinstance(x, Iterable)</code>) and
+  to <strong>inherit</strong> mixin methods for free.</li>
+<li>Define <strong>Abstract Base Classes</strong> with <code>@abstractmethod</code> and know exactly when
+  instantiation fails.</li>
+<li>Write <strong><code>typing.Protocol</code></strong> classes for static <em>and</em> (with <code>@runtime_checkable</code>)
+  runtime structural checks — and know their limits.</li>
+<li>Implement the <strong>iterator protocol</strong> correctly (iterable vs iterator, why <code>__iter__</code>
+  returning <code>self</code> makes one-shot iterators).</li>
+</ul>
+<hr>
+<h2 id="1-duck-typing-capability-over-ancestry">1. Duck Typing: Capability over Ancestry</h2>
+<p><code>len(x)</code> doesn't care what <code>x</code> <em>is</em> — only that it defines <code>__len__</code>. Python's
+standard library is built on this: <code>json.dump</code> accepts anything with <code>.write</code>,
+<code>for</code> accepts anything with <code>__iter__</code>. The cost: errors surface at <em>call time</em>,
+deep in the stack. Modules 4's tools exist to move that error earlier.</p>
+<table>
+<thead>
+<tr>
+<th>Style</th>
+<th>Check</th>
+<th>Error appears</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>EAFP duck typing</td>
+<td>none — just call it</td>
+<td>mid-operation (<code>AttributeError</code>)</td>
+</tr>
+<tr>
+<td>ABC <code>isinstance</code></td>
+<td>nominal or <code>__subclasshook__</code></td>
+<td>at the boundary</td>
+</tr>
+<tr>
+<td><code>typing.Protocol</code></td>
+<td>structural, static</td>
+<td>in the type checker, before running</td>
+</tr>
+</tbody>
+</table>
+<h2 id="2-collectionsabc-interfaces-you-already-satisfy">2. <code>collections.abc</code>: Interfaces You Already Satisfy</h2>
+<p>Two superpowers:</p>
+<p><strong>a) Capability testing.</strong> <code>isinstance(x, Iterable)</code> is <code>True</code> for <em>any</em> class
+defining <code>__iter__</code> — even with no inheritance — because these ABCs implement
+<code>__subclasshook__</code> to check for the methods structurally.</p>
+<p><strong>b) Mixin methods.</strong> Inherit and implement a tiny core; the ABC derives the rest:</p>
+<table>
+<thead>
+<tr>
+<th>ABC</th>
+<th>You implement</th>
+<th>You get for free</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Sequence</code></td>
+<td><code>__getitem__</code>, <code>__len__</code></td>
+<td><code>__contains__</code>, <code>__iter__</code>, <code>__reversed__</code>, <code>index</code>, <code>count</code></td>
+</tr>
+<tr>
+<td><code>Mapping</code></td>
+<td><code>__getitem__</code>, <code>__len__</code>, <code>__iter__</code></td>
+<td><code>keys</code>, <code>values</code>, <code>items</code>, <code>get</code>, <code>__eq__</code>, <code>__contains__</code></td>
+</tr>
+<tr>
+<td><code>MutableSequence</code></td>
+<td>+ <code>__setitem__</code>, <code>__delitem__</code>, <code>insert</code></td>
+<td><code>append</code>, <code>extend</code>, <code>pop</code>, <code>remove</code>, <code>+=</code></td>
+</tr>
+<tr>
+<td><code>Set</code></td>
+<td><code>__contains__</code>, <code>__iter__</code>, <code>__len__</code></td>
+<td><code>&amp;</code>, <code>|</code>, <code>-</code>, <code>^</code>, comparisons</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Pitfall:</strong> the free <code>Sequence.__contains__</code> and <code>.index</code> are O(n) scans. Override
+them when your data structure can do better (e.g., a sorted sequence → bisect).</p>
+</blockquote>
+<h2 id="3-abstract-base-classes">3. Abstract Base Classes</h2>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Storage</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">save</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bytes</span><span class="p">:</span> <span class="o">...</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">copy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">src</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dst</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>      <span class="c1"># concrete: uses abstracts</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">dst</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">src</span><span class="p">))</span>
+</code></pre></div>
+
+<p>Rules that surprise people:</p>
+<table>
+<thead>
+<tr>
+<th>Fact</th>
+<th>Consequence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Instantiation fails only if abstract methods remain</td>
+<td>Subclass missing one method = still abstract</td>
+</tr>
+<tr>
+<td>The check happens at <strong>instantiation</strong>, not definition</td>
+<td>You can define incomplete subclasses freely</td>
+</tr>
+<tr>
+<td>Abstract methods can have bodies</td>
+<td>Subclasses may call <code>super().save(...)</code> for shared logic</td>
+</tr>
+<tr>
+<td><code>Storage.register(Thing)</code> — virtual subclass</td>
+<td><code>isinstance</code> passes but <strong>nothing is verified</strong></td>
+</tr>
+<tr>
+<td>Works with <code>@property</code>, <code>@classmethod</code>, <code>@staticmethod</code></td>
+<td>Stack <code>@abstractmethod</code> <strong>innermost</strong></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Pitfall:</strong> ABCs are <em>nominal</em> — a class with a perfect <code>save</code>/<code>load</code> that doesn't
+inherit <code>Storage</code> fails <code>isinstance</code>. When you don't own the class, that's a wall.
+Protocols knock it down.</p>
+</blockquote>
+<h2 id="4-typingprotocol-structural-typing">4. <code>typing.Protocol</code>: Structural Typing</h2>
+<p>A <code>Protocol</code> declares a <em>shape</em>. Anything with matching methods conforms — no
+inheritance, no registration. This is duck typing formalized for type checkers.</p>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Protocol</span><span class="p">,</span> <span class="n">runtime_checkable</span>
+
+<span class="nd">@runtime_checkable</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Serializer</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">serialize</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span> <span class="o">...</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">export</span><span class="p">(</span><span class="n">item</span><span class="p">:</span> <span class="n">Serializer</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>     <span class="c1"># mypy checks structurally</span>
+    <span class="k">return</span> <span class="n">item</span><span class="o">.</span><span class="n">serialize</span><span class="p">()</span>
+</code></pre></div>
+
+<div class="codehilite"><pre><span></span><code>flowchart LR
+    subgraph Nominal
+        A[class JsonDoc&lt;br/&gt;inherits Storage] --&gt;|isinstance by ancestry| B[ABC]
+    end
+    subgraph Structural
+        C[any class with&lt;br/&gt;serialize method] --&gt;|matches shape| D[Protocol]
+    end
+</code></pre></div>
+
+<table>
+<thead>
+<tr>
+<th></th>
+<th>ABC</th>
+<th>Protocol</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Conformance</td>
+<td>inherit / register</td>
+<td>just have the methods</td>
+</tr>
+<tr>
+<td>Third-party classes</td>
+<td>must be registered</td>
+<td>conform automatically</td>
+</tr>
+<tr>
+<td>Mixin methods</td>
+<td>yes — big win</td>
+<td>no (non-protocol members aren't inherited that way)</td>
+</tr>
+<tr>
+<td>Runtime <code>isinstance</code></td>
+<td>always</td>
+<td>only with <code>@runtime_checkable</code></td>
+</tr>
+<tr>
+<td>Checks method <strong>signatures</strong> at runtime</td>
+<td>n/a</td>
+<td><strong>No — presence only!</strong></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Pitfall:</strong> <code>@runtime_checkable</code> <code>isinstance</code> checks only that the <em>names exist as
+callables</em> — <code>serialize(self, x, y, z)</code> still passes. Full signature checking is the
+static checker's job.</p>
+</blockquote>
+<p><strong>Rule of thumb:</strong> own the hierarchy and want shared behavior → ABC. Describing what
+you <em>accept</em> (especially third-party objects) → Protocol.</p>
+<h2 id="5-the-iterator-protocol">5. The Iterator Protocol</h2>
+<table>
+<thead>
+<tr>
+<th>Term</th>
+<th>Must define</th>
+<th>Contract</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Iterable</strong></td>
+<td><code>__iter__</code> → returns an iterator</td>
+<td>can be looped over, many times</td>
+</tr>
+<tr>
+<td><strong>Iterator</strong></td>
+<td><code>__next__</code> + <code>__iter__</code> returning <code>self</code></td>
+<td>produces values, raises <code>StopIteration</code> when done — then is <strong>exhausted forever</strong></td>
+</tr>
+</tbody>
+</table>
+<p>A container should be <strong>iterable but not its own iterator</strong> — return a fresh iterator
+(easiest: make <code>__iter__</code> a generator) so two loops don't steal from each other.</p>
+<div class="codehilite"><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">Countdown</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">start</span><span class="p">):</span> <span class="bp">self</span><span class="o">.</span><span class="n">start</span> <span class="o">=</span> <span class="n">start</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>                  <span class="c1"># generator = fresh iterator each call</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">start</span>
+        <span class="k">while</span> <span class="n">n</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="n">n</span>
+            <span class="n">n</span> <span class="o">-=</span> <span class="mi">1</span>
+</code></pre></div>
+
+<blockquote>
+<p><strong>Pitfall:</strong> implementing <code>__next__</code> on the container and returning <code>self</code> from
+<code>__iter__</code> means the <em>second</em> <code>for</code> loop over the object silently does nothing.</p>
+</blockquote>
+<hr>
+<h2 id="key-takeaways">Key Takeaways</h2>
+<ul>
+<li><code>collections.abc</code> gives structural <code>isinstance</code> checks <em>and</em> free mixin methods.</li>
+<li>ABC = nominal contract + shared implementation; fails fast at instantiation.</li>
+<li>Protocol = structural contract; perfect for typing what you accept; runtime checks
+  verify names only.</li>
+<li>Containers return fresh iterators; iterators are one-shot by contract.</li>
+</ul>
+<p>Next: <a href="../module_05_solid/README.html">Module 5 — SOLID in Python</a>.</p>
+<hr>
+<h2 id="files-in-this-module">Files in This Module</h2>
+<ul>
+<li><code>concepts.py</code> — duck typing, abc mixins, ABCs, Protocols, iterators — all runnable</li>
+<li><code>exercise.py</code> — build a <code>SortedItems</code> Sequence, a <code>Notifier</code> ABC and a Protocol-typed pipeline</li>
+<li><code>solution.py</code> — reference solution</li>
+</ul>
+</main>
+</body>
+</html>

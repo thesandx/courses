@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Data Platform Mastery — Build an Open-Source ETL Platform on GCP</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e; --accent: #0969da;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1; --accent: #4493f8;
+  }
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.65; word-wrap: break-word;
+  -webkit-font-smoothing: antialiased;
+}
+.page { max-width: 880px; margin: 0 auto; padding: 2.5rem 1.5rem 5rem; }
+h1, h2, h3, h4, h5, h6 { margin-top: 1.6em; margin-bottom: .5em; line-height: 1.25; font-weight: 650; }
+h1 { font-size: 2.1em; margin-top: 0; border-bottom: 2px solid var(--border); padding-bottom: .35em; letter-spacing: -.02em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+h4 { font-size: 1.05em; }
+p { margin: 0 0 1em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+strong { font-weight: 650; }
+code, pre, kbd {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; font-size: 85%; }
+pre {
+  background: var(--code-bg); padding: 1em 1.2em; border-radius: 8px;
+  overflow-x: auto; line-height: 1.5; font-size: 85%;
+  border: 1px solid var(--border); margin: 0 0 1.2em;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; border-radius: 0; }
+.codehilite { background: var(--code-bg); border-radius: 8px; margin: 0 0 1.2em; }
+.codehilite pre { margin: 0; border: 1px solid var(--border); }
+blockquote {
+  margin: 0 0 1.2em; padding: .5em 1.1em; color: var(--quote);
+  border-left: 4px solid var(--accent); background: var(--code-bg);
+  border-radius: 0 8px 8px 0;
+}
+blockquote > :first-child { margin-top: 0; }
+blockquote > :last-child { margin-bottom: 0; }
+table {
+  border-collapse: collapse; display: block; overflow-x: auto;
+  max-width: 100%; margin: 0 0 1.2em; font-size: .95em;
+}
+th, td { border: 1px solid var(--border); padding: 8px 14px; }
+th { font-weight: 650; background: var(--code-bg); }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; border-radius: 8px; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 2em 0; }
+ul, ol { padding-left: 1.8em; margin: 0 0 1em; }
+li { margin: .3em 0; }
+li > p { margin-bottom: .5em; }
+input[type="checkbox"] { margin-right: .4em; }
+::selection { background: color-mix(in srgb, var(--accent) 25%, transparent); }
+/* Pygments syntax highlighting — light */
+pre { line-height: 125%; }
+td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+.codehilite .hll { background-color: #ffffcc }
+.codehilite { background: #f8f8f8; }
+.codehilite .c { color: #3D7B7B; font-style: italic } /* Comment */
+.codehilite .err { border: 1px solid #F00 } /* Error */
+.codehilite .k { color: #008000; font-weight: bold } /* Keyword */
+.codehilite .o { color: #666 } /* Operator */
+.codehilite .ch { color: #3D7B7B; font-style: italic } /* Comment.Hashbang */
+.codehilite .cm { color: #3D7B7B; font-style: italic } /* Comment.Multiline */
+.codehilite .cp { color: #9C6500 } /* Comment.Preproc */
+.codehilite .cpf { color: #3D7B7B; font-style: italic } /* Comment.PreprocFile */
+.codehilite .c1 { color: #3D7B7B; font-style: italic } /* Comment.Single */
+.codehilite .cs { color: #3D7B7B; font-style: italic } /* Comment.Special */
+.codehilite .gd { color: #A00000 } /* Generic.Deleted */
+.codehilite .ge { font-style: italic } /* Generic.Emph */
+.codehilite .ges { font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.codehilite .gr { color: #E40000 } /* Generic.Error */
+.codehilite .gh { color: #000080; font-weight: bold } /* Generic.Heading */
+.codehilite .gi { color: #008400 } /* Generic.Inserted */
+.codehilite .go { color: #717171 } /* Generic.Output */
+.codehilite .gp { color: #000080; font-weight: bold } /* Generic.Prompt */
+.codehilite .gs { font-weight: bold } /* Generic.Strong */
+.codehilite .gu { color: #800080; font-weight: bold } /* Generic.Subheading */
+.codehilite .gt { color: #04D } /* Generic.Traceback */
+.codehilite .kc { color: #008000; font-weight: bold } /* Keyword.Constant */
+.codehilite .kd { color: #008000; font-weight: bold } /* Keyword.Declaration */
+.codehilite .kn { color: #008000; font-weight: bold } /* Keyword.Namespace */
+.codehilite .kp { color: #008000 } /* Keyword.Pseudo */
+.codehilite .kr { color: #008000; font-weight: bold } /* Keyword.Reserved */
+.codehilite .kt { color: #B00040 } /* Keyword.Type */
+.codehilite .m { color: #666 } /* Literal.Number */
+.codehilite .s { color: #BA2121 } /* Literal.String */
+.codehilite .na { color: #687822 } /* Name.Attribute */
+.codehilite .nb { color: #008000 } /* Name.Builtin */
+.codehilite .nc { color: #00F; font-weight: bold } /* Name.Class */
+.codehilite .no { color: #800 } /* Name.Constant */
+.codehilite .nd { color: #A2F } /* Name.Decorator */
+.codehilite .ni { color: #717171; font-weight: bold } /* Name.Entity */
+.codehilite .ne { color: #CB3F38; font-weight: bold } /* Name.Exception */
+.codehilite .nf { color: #00F } /* Name.Function */
+.codehilite .nl { color: #767600 } /* Name.Label */
+.codehilite .nn { color: #00F; font-weight: bold } /* Name.Namespace */
+.codehilite .nt { color: #008000; font-weight: bold } /* Name.Tag */
+.codehilite .nv { color: #19177C } /* Name.Variable */
+.codehilite .ow { color: #A2F; font-weight: bold } /* Operator.Word */
+.codehilite .w { color: #BBB } /* Text.Whitespace */
+.codehilite .mb { color: #666 } /* Literal.Number.Bin */
+.codehilite .mf { color: #666 } /* Literal.Number.Float */
+.codehilite .mh { color: #666 } /* Literal.Number.Hex */
+.codehilite .mi { color: #666 } /* Literal.Number.Integer */
+.codehilite .mo { color: #666 } /* Literal.Number.Oct */
+.codehilite .sa { color: #BA2121 } /* Literal.String.Affix */
+.codehilite .sb { color: #BA2121 } /* Literal.String.Backtick */
+.codehilite .sc { color: #BA2121 } /* Literal.String.Char */
+.codehilite .dl { color: #BA2121 } /* Literal.String.Delimiter */
+.codehilite .sd { color: #BA2121; font-style: italic } /* Literal.String.Doc */
+.codehilite .s2 { color: #BA2121 } /* Literal.String.Double */
+.codehilite .se { color: #AA5D1F; font-weight: bold } /* Literal.String.Escape */
+.codehilite .sh { color: #BA2121 } /* Literal.String.Heredoc */
+.codehilite .si { color: #A45A77; font-weight: bold } /* Literal.String.Interpol */
+.codehilite .sx { color: #008000 } /* Literal.String.Other */
+.codehilite .sr { color: #A45A77 } /* Literal.String.Regex */
+.codehilite .s1 { color: #BA2121 } /* Literal.String.Single */
+.codehilite .ss { color: #19177C } /* Literal.String.Symbol */
+.codehilite .bp { color: #008000 } /* Name.Builtin.Pseudo */
+.codehilite .fm { color: #00F } /* Name.Function.Magic */
+.codehilite .vc { color: #19177C } /* Name.Variable.Class */
+.codehilite .vg { color: #19177C } /* Name.Variable.Global */
+.codehilite .vi { color: #19177C } /* Name.Variable.Instance */
+.codehilite .vm { color: #19177C } /* Name.Variable.Magic */
+.codehilite .il { color: #666 } /* Literal.Number.Integer.Long */
+/* Pygments syntax highlighting — dark */
+@media (prefers-color-scheme: dark) {
+pre { line-height: 125%; }
+td.linenos .normal { color: #6e7681; background-color: #0d1117; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: #6e7681; background-color: #0d1117; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #e6edf3; background-color: #6e7681; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #e6edf3; background-color: #6e7681; padding-left: 5px; padding-right: 5px; }
+.codehilite .hll { background-color: #6e7681 }
+.codehilite { background: #0d1117; color: #E6EDF3 }
+.codehilite .c { color: #8B949E; font-style: italic } /* Comment */
+.codehilite .err { color: #F85149 } /* Error */
+.codehilite .esc { color: #E6EDF3 } /* Escape */
+.codehilite .g { color: #E6EDF3 } /* Generic */
+.codehilite .k { color: #FF7B72 } /* Keyword */
+.codehilite .l { color: #A5D6FF } /* Literal */
+.codehilite .n { color: #E6EDF3 } /* Name */
+.codehilite .o { color: #FF7B72; font-weight: bold } /* Operator */
+.codehilite .x { color: #E6EDF3 } /* Other */
+.codehilite .p { color: #E6EDF3 } /* Punctuation */
+.codehilite .ch { color: #8B949E; font-style: italic } /* Comment.Hashbang */
+.codehilite .cm { color: #8B949E; font-style: italic } /* Comment.Multiline */
+.codehilite .cp { color: #8B949E; font-weight: bold; font-style: italic } /* Comment.Preproc */
+.codehilite .cpf { color: #8B949E; font-style: italic } /* Comment.PreprocFile */
+.codehilite .c1 { color: #8B949E; font-style: italic } /* Comment.Single */
+.codehilite .cs { color: #8B949E; font-weight: bold; font-style: italic } /* Comment.Special */
+.codehilite .gd { color: #FFA198; background-color: #490202 } /* Generic.Deleted */
+.codehilite .ge { color: #E6EDF3; font-style: italic } /* Generic.Emph */
+.codehilite .ges { color: #E6EDF3; font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.codehilite .gr { color: #FFA198 } /* Generic.Error */
+.codehilite .gh { color: #79C0FF; font-weight: bold } /* Generic.Heading */
+.codehilite .gi { color: #56D364; background-color: #0F5323 } /* Generic.Inserted */
+.codehilite .go { color: #8B949E } /* Generic.Output */
+.codehilite .gp { color: #8B949E } /* Generic.Prompt */
+.codehilite .gs { color: #E6EDF3; font-weight: bold } /* Generic.Strong */
+.codehilite .gu { color: #79C0FF } /* Generic.Subheading */
+.codehilite .gt { color: #FF7B72 } /* Generic.Traceback */
+.codehilite .g-Underline { color: #E6EDF3; text-decoration: underline } /* Generic.Underline */
+.codehilite .kc { color: #79C0FF } /* Keyword.Constant */
+.codehilite .kd { color: #FF7B72 } /* Keyword.Declaration */
+.codehilite .kn { color: #FF7B72 } /* Keyword.Namespace */
+.codehilite .kp { color: #79C0FF } /* Keyword.Pseudo */
+.codehilite .kr { color: #FF7B72 } /* Keyword.Reserved */
+.codehilite .kt { color: #FF7B72 } /* Keyword.Type */
+.codehilite .ld { color: #79C0FF } /* Literal.Date */
+.codehilite .m { color: #A5D6FF } /* Literal.Number */
+.codehilite .s { color: #A5D6FF } /* Literal.String */
+.codehilite .na { color: #E6EDF3 } /* Name.Attribute */
+.codehilite .nb { color: #E6EDF3 } /* Name.Builtin */
+.codehilite .nc { color: #F0883E; font-weight: bold } /* Name.Class */
+.codehilite .no { color: #79C0FF; font-weight: bold } /* Name.Constant */
+.codehilite .nd { color: #D2A8FF; font-weight: bold } /* Name.Decorator */
+.codehilite .ni { color: #FFA657 } /* Name.Entity */
+.codehilite .ne { color: #F0883E; font-weight: bold } /* Name.Exception */
+.codehilite .nf { color: #D2A8FF; font-weight: bold } /* Name.Function */
+.codehilite .nl { color: #79C0FF; font-weight: bold } /* Name.Label */
+.codehilite .nn { color: #FF7B72 } /* Name.Namespace */
+.codehilite .nx { color: #E6EDF3 } /* Name.Other */
+.codehilite .py { color: #79C0FF } /* Name.Property */
+.codehilite .nt { color: #7EE787 } /* Name.Tag */
+.codehilite .nv { color: #79C0FF } /* Name.Variable */
+.codehilite .ow { color: #FF7B72; font-weight: bold } /* Operator.Word */
+.codehilite .pm { color: #E6EDF3 } /* Punctuation.Marker */
+.codehilite .w { color: #6E7681 } /* Text.Whitespace */
+.codehilite .mb { color: #A5D6FF } /* Literal.Number.Bin */
+.codehilite .mf { color: #A5D6FF } /* Literal.Number.Float */
+.codehilite .mh { color: #A5D6FF } /* Literal.Number.Hex */
+.codehilite .mi { color: #A5D6FF } /* Literal.Number.Integer */
+.codehilite .mo { color: #A5D6FF } /* Literal.Number.Oct */
+.codehilite .sa { color: #79C0FF } /* Literal.String.Affix */
+.codehilite .sb { color: #A5D6FF } /* Literal.String.Backtick */
+.codehilite .sc { color: #A5D6FF } /* Literal.String.Char */
+.codehilite .dl { color: #79C0FF } /* Literal.String.Delimiter */
+.codehilite .sd { color: #A5D6FF } /* Literal.String.Doc */
+.codehilite .s2 { color: #A5D6FF } /* Literal.String.Double */
+.codehilite .se { color: #79C0FF } /* Literal.String.Escape */
+.codehilite .sh { color: #79C0FF } /* Literal.String.Heredoc */
+.codehilite .si { color: #A5D6FF } /* Literal.String.Interpol */
+.codehilite .sx { color: #A5D6FF } /* Literal.String.Other */
+.codehilite .sr { color: #79C0FF } /* Literal.String.Regex */
+.codehilite .s1 { color: #A5D6FF } /* Literal.String.Single */
+.codehilite .ss { color: #A5D6FF } /* Literal.String.Symbol */
+.codehilite .bp { color: #E6EDF3 } /* Name.Builtin.Pseudo */
+.codehilite .fm { color: #D2A8FF; font-weight: bold } /* Name.Function.Magic */
+.codehilite .vc { color: #79C0FF } /* Name.Variable.Class */
+.codehilite .vg { color: #79C0FF } /* Name.Variable.Global */
+.codehilite .vi { color: #79C0FF } /* Name.Variable.Instance */
+.codehilite .vm { color: #79C0FF } /* Name.Variable.Magic */
+.codehilite .il { color: #A5D6FF } /* Literal.Number.Integer.Long */
+}
+</style>
+</head>
+<body>
+<main class="page">
+<h1 id="data-platform-mastery-build-an-open-source-etl-platform-on-gcp">Data Platform Mastery — Build an Open-Source ETL Platform on GCP</h1>
+<blockquote>
+<p><strong>One project. Every concept. Staff-level depth.</strong></p>
+<p>This course fuses two resources into one intensive, hands-on program:
+1. <strong><a href="../../DE_interview/SystemDesign/system_design_notes.html">DE System Design Notes</a></strong> — the 7-step interview framework, core concepts (partitioning, ingestion patterns, backfill, dedup, contracts, late data), architecture patterns (Lambda/Kappa/Medallion/CDC), and the 20-question interview bank.
+2. <strong><a href="../gcp_data_engineer_mastery/README.html">GCP Data Engineer Mastery</a></strong> — the GCP service catalog: Cloud Storage, BigQuery, Pub/Sub, Dataflow, Dataproc, Composer, governance, reliability, cost.</p>
+<p>Instead of reading about these ideas, <strong>you will build them</strong> — starting from an
+<strong>empty GitHub repository</strong> and ending with <strong>PipeForge</strong>: a real, open-source,
+metadata-driven data platform on GCP that you own, can demo live in interviews,
+and can put at the top of your resume.</p>
+<p>📖 <strong>Prefer a book-style reading experience?</strong> Every page of this course is also
+rendered as a styled HTML site in <a href="../docs/data_platform_mastery/index.html"><code>docs/data_platform_mastery/</code></a>
+(regenerate with <code>python data_platform_mastery/tools/build_docs.py</code>). Enable GitHub
+Pages (Settings → Pages → branch <code>master</code>, folder <code>/docs</code>) to browse it online at
+<code>https://&lt;your-username&gt;.github.io/courses/data_platform_mastery/</code>.</p>
+</blockquote>
+<hr>
+<h2 id="what-you-will-build-pipeforge">What You Will Build: PipeForge</h2>
+<p><strong>PipeForge</strong> is an open-source, config-driven ETL/ELT platform. You register a data
+source once (a file drop, a database, an API, a Kafka topic) and the platform
+generates everything else: the ingestion pipeline, the Airflow DAG, the data-quality
+gates, the SCD2 history tables, the reconciliation checks, the audit trail, the
+lineage graph, and the entry in the searchable catalog — all visible in a Streamlit
+control plane and all provisioned with Terraform.</p>
+<p>That is exactly the system asked about in the most common staff-level interview
+question — <em>"Design an ETL framework that can onboard 100 sources without writing
+100 pipelines"</em> (Q7 in the question bank) — except you'll have actually built it.</p>
+<h3 id="reference-architecture">Reference architecture</h3>
+<p>The course follows the same enterprise architecture used by large banks' data
+platforms (see the two reference images this course was designed from): sources flow
+through a <strong>registration portal</strong> into a <strong>parameter-driven ingestion framework</strong>,
+land in a <strong>RAW</strong> zone, and are promoted through <strong>ODP → FDP → CDP</strong> data-product
+layers with cross-cutting <strong>DQ, reconciliation, audit, archival, tokenization,
+lineage and catalog</strong> services — fronted by APIs and a UI.</p>
+<div class="codehilite"><pre><span></span><code>flowchart LR
+    subgraph SOURCES[&quot;SORs / Sources&quot;]
+      DB[(OLTP DBs)]
+      FILES[File drops&lt;br/&gt;CSV / JSON / Parquet]
+      API[REST APIs]
+      EVT[Event streams&lt;br/&gt;Kafka]
+    end
+
+    subgraph REG[&quot;Registration Framework ①&quot;]
+      META[(Metadata DB&lt;br/&gt;Cloud SQL Postgres)]
+      PORTAL[Streamlit portal + FastAPI]
+    end
+
+    subgraph INGEST[&quot;Ingestion Framework ② — parameter-driven&quot;]
+      BATCH[Batch connectors&lt;br/&gt;file / JDBC / API]
+      STREAM[Streaming consumers&lt;br/&gt;Kafka → GCS/BQ]
+    end
+
+    subgraph LAKE[&quot;GCS Lake + BigQuery&quot;]
+      RAW[(RAW / landing&lt;br/&gt;as-is, ingestion-date partitioned)]
+      ODP[(ODP — Operational&lt;br/&gt;typed, deduped ≈ Bronze→Silver)]
+      FDP[(FDP — Foundation&lt;br/&gt;conformed, SCD2, surrogate keys)]
+      CDP[(CDP — Consumption&lt;br/&gt;star schemas, rollups ≈ Gold)]
+    end
+
+    subgraph SERVE[&quot;Consumption&quot;]
+      BI[Looker Studio / BI]
+      ML[BigQuery ML / notebooks]
+      APPS[Reverse ETL / APIs]
+      UI[Streamlit control plane:&lt;br/&gt;catalog · DQ scorecard · ops]
+    end
+
+    SOURCES --&gt; INGEST --&gt; RAW --&gt; ODP --&gt; FDP --&gt; CDP --&gt; SERVE
+    REG -. drives every pipeline .-&gt; INGEST
+    REG -.-&gt; LAKE
+
+    subgraph XCUT[&quot;Cross-cutting services&quot;]
+      DQ[DQ Framework ④&lt;br/&gt;6 dimensions]
+      RECON[Reconciliation ⑦]
+      AUDIT[Audit model ⑧&lt;br/&gt;operational metadata]
+      TOK[Tokenization ③ DLP/KMS]
+      ARCH[Archival &amp; Purge ⑨]
+      WF[Workflow ⑩ Airflow]
+      CAT[Catalog &amp; Lineage ⑪&lt;br/&gt;Dataplex / OpenLineage]
+    end
+    XCUT -.applied at every layer.-&gt; LAKE
+</code></pre></div>
+
+<h3 id="the-11-platform-capabilities-your-feature-checklist">The 11 platform capabilities (your feature checklist)</h3>
+<p>These are the numbered capabilities from the reference architecture. Every one of
+them is a course phase deliverable — when all 11 are checked, PipeForge is done:</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Capability</th>
+<th>What it means in PipeForge</th>
+<th>Built in</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>①</td>
+<td><strong>Data Registration Framework</strong></td>
+<td>Metadata DB + CLI/API/UI to onboard a source in minutes</td>
+<td>Phase 2, 11, 12</td>
+</tr>
+<tr>
+<td>②</td>
+<td><strong>Ingestion Framework</strong> — parameter-driven, integrated with the registration portal</td>
+<td>One generic engine; N sources = N rows of config, not N pipelines</td>
+<td>Phase 3, 4</td>
+</tr>
+<tr>
+<td>③</td>
+<td><strong>Data anonymization — Tokenization</strong></td>
+<td>Deterministic tokenization of PII with KMS/DLP before data leaves RAW</td>
+<td>Phase 9</td>
+</tr>
+<tr>
+<td>④</td>
+<td><strong>Data Quality Framework — 6 dimensions</strong></td>
+<td>Completeness, accuracy, consistency, timeliness, validity, uniqueness — rules as metadata, gates in every DAG</td>
+<td>Phase 8</td>
+</tr>
+<tr>
+<td>⑤</td>
+<td><strong>Change Data Capture — Type 2</strong></td>
+<td>CDC ingestion + SCD Type-2 history in FDP via Spark/BigQuery MERGE</td>
+<td>Phase 5</td>
+</tr>
+<tr>
+<td>⑥</td>
+<td><strong>Surrogate Key Generation</strong></td>
+<td>Deterministic hash keys + key-mapping tables for dims</td>
+<td>Phase 5, 6</td>
+</tr>
+<tr>
+<td>⑦</td>
+<td><strong>Reconciliation Framework</strong></td>
+<td>Source↔RAW↔ODP↔FDP↔CDP counts/sums/checksums, divergence alerts</td>
+<td>Phase 8</td>
+</tr>
+<tr>
+<td>⑧</td>
+<td><strong>Audit Model — Operational Metadata Capture</strong></td>
+<td>Every run, task, row count, byte count, duration → audit tables</td>
+<td>Phase 2, 8, 10</td>
+</tr>
+<tr>
+<td>⑨</td>
+<td><strong>Data Archival &amp; Purge Framework</strong></td>
+<td>Lifecycle tiers, partition expiry, GDPR right-to-delete</td>
+<td>Phase 9</td>
+</tr>
+<tr>
+<td>⑩</td>
+<td><strong>Workflow</strong></td>
+<td>Airflow DAG <strong>factory</strong> — DAGs generated from metadata</td>
+<td>Phase 7</td>
+</tr>
+<tr>
+<td>⑪</td>
+<td><strong>Catalog Integration</strong> (Collibra-equivalent)</td>
+<td>Dataplex catalog + OpenLineage lineage + searchable Streamlit catalog</td>
+<td>Phase 9, 11</td>
+</tr>
+</tbody>
+</table>
+<h3 id="final-tech-stack">Final tech stack</h3>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Technology</th>
+<th>Why (always tied to a requirement — the interview habit)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>IaC</td>
+<td><strong>Terraform</strong></td>
+<td>Reproducible envs, reviewable infra, destroy = cost control</td>
+</tr>
+<tr>
+<td>Landing/lake</td>
+<td><strong>GCS</strong> (+ BigLake/Iceberg)</td>
+<td>Cheap replayable raw zone — your backfill insurance policy</td>
+</tr>
+<tr>
+<td>Warehouse</td>
+<td><strong>BigQuery</strong></td>
+<td>Serving layer for BI/ML; partition+cluster for cost</td>
+</tr>
+<tr>
+<td>Metadata DB</td>
+<td><strong>Cloud SQL (Postgres)</strong></td>
+<td>OLTP-shaped workload: registry, audit, DQ results</td>
+</tr>
+<tr>
+<td>Streaming</td>
+<td><strong>Kafka</strong> (local + VM) with a <strong>Pub/Sub</strong> bridge</td>
+<td>Learn real Kafka ops <em>and</em> the managed-GCP answer</td>
+</tr>
+<tr>
+<td>Batch/stream processing</td>
+<td><strong>PySpark on Dataproc Serverless</strong></td>
+<td>Distributed transforms, SCD2 MERGE, dedup at scale</td>
+</tr>
+<tr>
+<td>Orchestration</td>
+<td><strong>Airflow</strong> (local Docker → optional Composer)</td>
+<td>DAG factory, backfills, idempotent scheduling</td>
+</tr>
+<tr>
+<td>Control plane</td>
+<td><strong>FastAPI + Streamlit</strong> on Cloud Run</td>
+<td>Registration API + catalog/DQ/ops UI</td>
+</tr>
+<tr>
+<td>Governance</td>
+<td><strong>DLP, KMS, Dataplex, OpenLineage</strong></td>
+<td>Tokenization, CMEK, catalog, lineage</td>
+</tr>
+<tr>
+<td>Observability</td>
+<td><strong>Cloud Monitoring + billing export to BQ</strong></td>
+<td>Freshness SLAs, alerting, FinOps dashboard</td>
+</tr>
+<tr>
+<td>CI/CD</td>
+<td><strong>GitHub Actions</strong></td>
+<td>Tests, lint, terraform plan, container builds</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="who-this-is-for-and-the-promise">Who this is for, and the promise</h2>
+<p>You should already be comfortable with Python and SQL and have skimmed both source
+resources at least once. The promise, if you complete every phase honestly:</p>
+<ul>
+<li><strong>You can crack senior/staff DE system-design interviews.</strong> Every concept in the
+  interview notes is something you will have <em>implemented</em>, broken, and fixed. You
+  won't recite "idempotency"; you'll describe the night your backfill double-counted
+  revenue in <code>fct_orders</code> and how <code>MERGE</code> + partition overwrite fixed it — in <em>your</em>
+  repo, with the commit to prove it.</li>
+<li><strong>You own a real open-source project</strong> with releases, docs, CI, an architecture
+  README, and a live demo — a resume line that survives any depth of questioning.</li>
+<li><strong>You are production-fluent on GCP</strong> across storage, compute, streaming,
+  orchestration, governance, and cost.</li>
+</ul>
+<h2 id="course-structure">Course structure</h2>
+<p>Sixteen units. Each phase = one milestone release of PipeForge (<code>v0.1.0 → v1.0.0</code>).
+Every phase README follows the same rhythm:</p>
+<ol>
+<li><strong>Mission</strong> — what you ship this phase and the git tag you cut.</li>
+<li><strong>Concepts</strong> — the theory, cross-referenced to the system-design notes (§) and GCP course modules (M).</li>
+<li><strong>Build</strong> — numbered, hands-on steps with real code you commit to <em>your</em> repo.</li>
+<li><strong>Prove it</strong> — verification checklist (commands + expected output).</li>
+<li><strong>Break it</strong> — a deliberate failure drill (staff engineers are made in incidents).</li>
+<li><strong>Interview corner</strong> — how to narrate what you just built in an interview, with the exact vocabulary from the notes.</li>
+<li><strong>Stretch goals</strong> — optional depth for overachievers.</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Title</th>
+<th>You ship</th>
+<th>Tag</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="phase_00_orientation/README.html">00</a></td>
+<td>Orientation &amp; Ground School</td>
+<td>GCP project, budgets, tooling, the plan</td>
+<td>—</td>
+</tr>
+<tr>
+<td><a href="phase_01_foundation/README.html">01</a></td>
+<td>Empty Repo → Engineering Foundation</td>
+<td>Repo, CI, Terraform bootstrap, envs</td>
+<td><code>v0.1.0</code></td>
+</tr>
+<tr>
+<td><a href="phase_02_metadata_core/README.html">02</a></td>
+<td>The Metadata Core (Registration Framework ①⑧)</td>
+<td>Cloud SQL registry, data contracts, CLI</td>
+<td><code>v0.2.0</code></td>
+</tr>
+<tr>
+<td><a href="phase_03_batch_ingestion/README.html">03</a></td>
+<td>Batch Ingestion Framework ②</td>
+<td>File/JDBC/API connectors → RAW, quarantine, manifests</td>
+<td><code>v0.3.0</code></td>
+</tr>
+<tr>
+<td><a href="phase_04_streaming_kafka/README.html">04</a></td>
+<td>Streaming Ingestion with Kafka ②</td>
+<td>Kafka + Schema Registry, consumers → GCS/BQ, DLQ, Pub/Sub bridge</td>
+<td><code>v0.4.0</code></td>
+</tr>
+<tr>
+<td><a href="phase_05_spark_processing/README.html">05</a></td>
+<td>Spark on Dataproc: ODP→FDP (⑤⑥)</td>
+<td>Dedup, SCD2, surrogate keys, late data</td>
+<td><code>v0.5.0</code></td>
+</tr>
+<tr>
+<td><a href="phase_06_bigquery_serving/README.html">06</a></td>
+<td>BigQuery Serving: FDP→CDP</td>
+<td>Dim/Fact builder, star schema, rollups, cost tuning</td>
+<td><code>v0.6.0</code></td>
+</tr>
+<tr>
+<td><a href="phase_07_orchestration/README.html">07</a></td>
+<td>Orchestration: the DAG Factory ⑩</td>
+<td>Metadata-generated Airflow DAGs, backfill CLI</td>
+<td><code>v0.7.0</code></td>
+</tr>
+<tr>
+<td><a href="phase_08_data_quality_recon/README.html">08</a></td>
+<td>Data Quality &amp; Reconciliation ④⑦</td>
+<td>6-dimension DQ engine, quarantine, recon framework</td>
+<td><code>v0.8.0</code></td>
+</tr>
+<tr>
+<td><a href="phase_09_governance/README.html">09</a></td>
+<td>Governance: Tokenization, Lineage, Archival, Catalog ③⑨⑪</td>
+<td>DLP tokenization, OpenLineage, purge framework, Dataplex</td>
+<td><code>v0.9.0</code></td>
+</tr>
+<tr>
+<td><a href="phase_10_observability_finops/README.html">10</a></td>
+<td>Observability &amp; FinOps</td>
+<td>Freshness SLAs, alerting, cost dashboard</td>
+<td><code>v0.10.0</code></td>
+</tr>
+<tr>
+<td><a href="phase_11_streamlit_control_plane/README.html">11</a></td>
+<td>The Streamlit Control Plane</td>
+<td>Catalog search, DQ scorecard, ops console, onboarding wizard</td>
+<td><code>v0.11.0</code></td>
+</tr>
+<tr>
+<td><a href="phase_12_platform_apis/README.html">12</a></td>
+<td>Platform APIs &amp; Multi-Tenancy</td>
+<td>FastAPI control plane, Secret Manager, Cloud Run, tenants</td>
+<td><code>v0.12.0</code></td>
+</tr>
+<tr>
+<td><a href="phase_13_scale_hardening/README.html">13</a></td>
+<td>Scale, Hardening &amp; Chaos Drills</td>
+<td>10x load, skew fixes, failure drills, runbooks</td>
+<td><code>v0.13.0</code></td>
+</tr>
+<tr>
+<td><a href="phase_14_open_source_launch/README.html">14</a></td>
+<td>Open-Source Launch &amp; Resume</td>
+<td>Docs site, demo mode, release v1.0, resume bullets</td>
+<td><code>v1.0.0</code></td>
+</tr>
+<tr>
+<td><a href="interview_gauntlet/README.html">🎯</a></td>
+<td>The Interview Gauntlet</td>
+<td>All 20 question-bank drills answered <em>with your platform</em></td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>Also read <strong><a href="PROJECT_CHARTER.html">PROJECT_CHARTER.md</a></strong> (the full product spec of
+PipeForge — treat it like the design doc you'd write at work) and
+<strong><a href="INTERVIEW_MAP.html">INTERVIEW_MAP.md</a></strong> (every interview topic → where you built it).</p>
+<h3 id="suggested-pacing">Suggested pacing</h3>
+<ul>
+<li><strong>Intensive:</strong> 8 weeks full-time (phase ≈ 3–4 days; phases 5, 7, 8 deserve a full week between them).</li>
+<li><strong>Sustainable:</strong> 16 weeks at ~12 hrs/week — one phase per week, gauntlet drills every weekend from phase 5 onward.</li>
+</ul>
+<p>Never move on with a red "Prove it" checklist. The platform is cumulative; debt compounds.</p>
+<h2 id="cost-guardrails-read-before-touching-gcp">Cost guardrails (read before touching GCP)</h2>
+<p>Everything is designed to run on a <strong>few dollars a week</strong> if you follow the rules:</p>
+<ol>
+<li><strong>Phase 0 creates a budget alert before anything else.</strong> Non-negotiable.</li>
+<li>Heavy things are <strong>ephemeral</strong>: Dataproc Serverless (per-second), Kafka on a
+   preemptible <code>e2-small</code> you stop when idle, Airflow runs <strong>locally in Docker</strong>
+   (Composer is an optional one-day excursion — it costs ~$300+/mo if left up).</li>
+<li>Cloud SQL uses the smallest tier (<code>db-f1-micro</code>) and is stopped when idle.</li>
+<li>Every phase ends with a <strong>Cleanup</strong> section; <code>terraform destroy -target=...</code> is a skill, practice it.</li>
+<li>BigQuery: partition + cluster from day one, and set <code>maximum_bytes_billed</code> on every query profile you create.</li>
+</ol>
+<p>Typical spend if you're disciplined: <strong>$5–25/month</strong>. The expensive mistakes are
+always: idle Composer, idle Cloud SQL at a big tier, an unpartitioned table scanned
+by a dashboard, and a forgotten Dataproc <em>cluster</em> (which is why we use Serverless).</p>
+<h2 id="ground-rules">Ground rules</h2>
+<ol>
+<li><strong>Everything is code.</strong> If you clicked it in the console, reproduce it in Terraform before moving on.</li>
+<li><strong>Every pipeline is idempotent and backfillable from day one</strong> — parameterized by execution date, partition-overwrite or MERGE writes. This is the single most-tested property in interviews (§7, §13).</li>
+<li><strong>Metadata drives everything.</strong> If you find yourself writing a per-source pipeline, stop — add config, not code.</li>
+<li><strong>Narrate as you build.</strong> After each phase, do the "Interview corner" out loud with a 45-minute timer. Building without narrating is half the course.</li>
+<li><strong>Commit like a professional.</strong> Small commits, meaningful messages, PRs to your own repo with self-review, tagged releases. The repo <em>is</em> the resume.</li>
+<li><strong>Cost is a requirement</strong>, not an afterthought. Know what every resource costs before you <code>terraform apply</code>.</li>
+</ol>
+<h2 id="how-the-two-source-resources-are-woven-in">How the two source resources are woven in</h2>
+<ul>
+<li>Each phase's <strong>Concepts</strong> section cites the system-design notes by section number
+  (e.g., "§12 Ingestion Patterns", "§18 Deduplication") — reread the cited sections
+  <em>before</em> the build, then again after. They will read completely differently once
+  you've hit the problems they describe.</li>
+<li>Each phase cites GCP course modules (e.g., "M04 BigQuery at Scale") for the
+  service-level depth and exam-style tradeoffs. Do those modules' practice questions
+  when cited — the PDE cert is a free by-product of this course.</li>
+<li>The <strong>Interview Gauntlet</strong> re-runs the full 20-question bank (Part E of the notes)
+  and forces you to answer each one using PipeForge as your evidence base.</li>
+</ul>
+<p>Start with <strong><a href="phase_00_orientation/README.html">Phase 00 — Orientation</a></strong>.</p>
+</main>
+</body>
+</html>

@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 12 — Platform APIs, Secrets &amp; Multi-Tenancy (`v0.12.0`)</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e; --accent: #0969da;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1; --accent: #4493f8;
+  }
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.65; word-wrap: break-word;
+  -webkit-font-smoothing: antialiased;
+}
+.page { max-width: 880px; margin: 0 auto; padding: 2.5rem 1.5rem 5rem; }
+h1, h2, h3, h4, h5, h6 { margin-top: 1.6em; margin-bottom: .5em; line-height: 1.25; font-weight: 650; }
+h1 { font-size: 2.1em; margin-top: 0; border-bottom: 2px solid var(--border); padding-bottom: .35em; letter-spacing: -.02em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+h4 { font-size: 1.05em; }
+p { margin: 0 0 1em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+strong { font-weight: 650; }
+code, pre, kbd {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; font-size: 85%; }
+pre {
+  background: var(--code-bg); padding: 1em 1.2em; border-radius: 8px;
+  overflow-x: auto; line-height: 1.5; font-size: 85%;
+  border: 1px solid var(--border); margin: 0 0 1.2em;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; border-radius: 0; }
+.codehilite { background: var(--code-bg); border-radius: 8px; margin: 0 0 1.2em; }
+.codehilite pre { margin: 0; border: 1px solid var(--border); }
+blockquote {
+  margin: 0 0 1.2em; padding: .5em 1.1em; color: var(--quote);
+  border-left: 4px solid var(--accent); background: var(--code-bg);
+  border-radius: 0 8px 8px 0;
+}
+blockquote > :first-child { margin-top: 0; }
+blockquote > :last-child { margin-bottom: 0; }
+table {
+  border-collapse: collapse; display: block; overflow-x: auto;
+  max-width: 100%; margin: 0 0 1.2em; font-size: .95em;
+}
+th, td { border: 1px solid var(--border); padding: 8px 14px; }
+th { font-weight: 650; background: var(--code-bg); }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; border-radius: 8px; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 2em 0; }
+ul, ol { padding-left: 1.8em; margin: 0 0 1em; }
+li { margin: .3em 0; }
+li > p { margin-bottom: .5em; }
+input[type="checkbox"] { margin-right: .4em; }
+::selection { background: color-mix(in srgb, var(--accent) 25%, transparent); }
+/* Pygments syntax highlighting — light */
+pre { line-height: 125%; }
+td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+.codehilite .hll { background-color: #ffffcc }
+.codehilite { background: #f8f8f8; }
+.codehilite .c { color: #3D7B7B; font-style: italic } /* Comment */
+.codehilite .err { border: 1px solid #F00 } /* Error */
+.codehilite .k { color: #008000; font-weight: bold } /* Keyword */
+.codehilite .o { color: #666 } /* Operator */
+.codehilite .ch { color: #3D7B7B; font-style: italic } /* Comment.Hashbang */
+.codehilite .cm { color: #3D7B7B; font-style: italic } /* Comment.Multiline */
+.codehilite .cp { color: #9C6500 } /* Comment.Preproc */
+.codehilite .cpf { color: #3D7B7B; font-style: italic } /* Comment.PreprocFile */
+.codehilite .c1 { color: #3D7B7B; font-style: italic } /* Comment.Single */
+.codehilite .cs { color: #3D7B7B; font-style: italic } /* Comment.Special */
+.codehilite .gd { color: #A00000 } /* Generic.Deleted */
+.codehilite .ge { font-style: italic } /* Generic.Emph */
+.codehilite .ges { font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.codehilite .gr { color: #E40000 } /* Generic.Error */
+.codehilite .gh { color: #000080; font-weight: bold } /* Generic.Heading */
+.codehilite .gi { color: #008400 } /* Generic.Inserted */
+.codehilite .go { color: #717171 } /* Generic.Output */
+.codehilite .gp { color: #000080; font-weight: bold } /* Generic.Prompt */
+.codehilite .gs { font-weight: bold } /* Generic.Strong */
+.codehilite .gu { color: #800080; font-weight: bold } /* Generic.Subheading */
+.codehilite .gt { color: #04D } /* Generic.Traceback */
+.codehilite .kc { color: #008000; font-weight: bold } /* Keyword.Constant */
+.codehilite .kd { color: #008000; font-weight: bold } /* Keyword.Declaration */
+.codehilite .kn { color: #008000; font-weight: bold } /* Keyword.Namespace */
+.codehilite .kp { color: #008000 } /* Keyword.Pseudo */
+.codehilite .kr { color: #008000; font-weight: bold } /* Keyword.Reserved */
+.codehilite .kt { color: #B00040 } /* Keyword.Type */
+.codehilite .m { color: #666 } /* Literal.Number */
+.codehilite .s { color: #BA2121 } /* Literal.String */
+.codehilite .na { color: #687822 } /* Name.Attribute */
+.codehilite .nb { color: #008000 } /* Name.Builtin */
+.codehilite .nc { color: #00F; font-weight: bold } /* Name.Class */
+.codehilite .no { color: #800 } /* Name.Constant */
+.codehilite .nd { color: #A2F } /* Name.Decorator */
+.codehilite .ni { color: #717171; font-weight: bold } /* Name.Entity */
+.codehilite .ne { color: #CB3F38; font-weight: bold } /* Name.Exception */
+.codehilite .nf { color: #00F } /* Name.Function */
+.codehilite .nl { color: #767600 } /* Name.Label */
+.codehilite .nn { color: #00F; font-weight: bold } /* Name.Namespace */
+.codehilite .nt { color: #008000; font-weight: bold } /* Name.Tag */
+.codehilite .nv { color: #19177C } /* Name.Variable */
+.codehilite .ow { color: #A2F; font-weight: bold } /* Operator.Word */
+.codehilite .w { color: #BBB } /* Text.Whitespace */
+.codehilite .mb { color: #666 } /* Literal.Number.Bin */
+.codehilite .mf { color: #666 } /* Literal.Number.Float */
+.codehilite .mh { color: #666 } /* Literal.Number.Hex */
+.codehilite .mi { color: #666 } /* Literal.Number.Integer */
+.codehilite .mo { color: #666 } /* Literal.Number.Oct */
+.codehilite .sa { color: #BA2121 } /* Literal.String.Affix */
+.codehilite .sb { color: #BA2121 } /* Literal.String.Backtick */
+.codehilite .sc { color: #BA2121 } /* Literal.String.Char */
+.codehilite .dl { color: #BA2121 } /* Literal.String.Delimiter */
+.codehilite .sd { color: #BA2121; font-style: italic } /* Literal.String.Doc */
+.codehilite .s2 { color: #BA2121 } /* Literal.String.Double */
+.codehilite .se { color: #AA5D1F; font-weight: bold } /* Literal.String.Escape */
+.codehilite .sh { color: #BA2121 } /* Literal.String.Heredoc */
+.codehilite .si { color: #A45A77; font-weight: bold } /* Literal.String.Interpol */
+.codehilite .sx { color: #008000 } /* Literal.String.Other */
+.codehilite .sr { color: #A45A77 } /* Literal.String.Regex */
+.codehilite .s1 { color: #BA2121 } /* Literal.String.Single */
+.codehilite .ss { color: #19177C } /* Literal.String.Symbol */
+.codehilite .bp { color: #008000 } /* Name.Builtin.Pseudo */
+.codehilite .fm { color: #00F } /* Name.Function.Magic */
+.codehilite .vc { color: #19177C } /* Name.Variable.Class */
+.codehilite .vg { color: #19177C } /* Name.Variable.Global */
+.codehilite .vi { color: #19177C } /* Name.Variable.Instance */
+.codehilite .vm { color: #19177C } /* Name.Variable.Magic */
+.codehilite .il { color: #666 } /* Literal.Number.Integer.Long */
+/* Pygments syntax highlighting — dark */
+@media (prefers-color-scheme: dark) {
+pre { line-height: 125%; }
+td.linenos .normal { color: #6e7681; background-color: #0d1117; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: #6e7681; background-color: #0d1117; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #e6edf3; background-color: #6e7681; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #e6edf3; background-color: #6e7681; padding-left: 5px; padding-right: 5px; }
+.codehilite .hll { background-color: #6e7681 }
+.codehilite { background: #0d1117; color: #E6EDF3 }
+.codehilite .c { color: #8B949E; font-style: italic } /* Comment */
+.codehilite .err { color: #F85149 } /* Error */
+.codehilite .esc { color: #E6EDF3 } /* Escape */
+.codehilite .g { color: #E6EDF3 } /* Generic */
+.codehilite .k { color: #FF7B72 } /* Keyword */
+.codehilite .l { color: #A5D6FF } /* Literal */
+.codehilite .n { color: #E6EDF3 } /* Name */
+.codehilite .o { color: #FF7B72; font-weight: bold } /* Operator */
+.codehilite .x { color: #E6EDF3 } /* Other */
+.codehilite .p { color: #E6EDF3 } /* Punctuation */
+.codehilite .ch { color: #8B949E; font-style: italic } /* Comment.Hashbang */
+.codehilite .cm { color: #8B949E; font-style: italic } /* Comment.Multiline */
+.codehilite .cp { color: #8B949E; font-weight: bold; font-style: italic } /* Comment.Preproc */
+.codehilite .cpf { color: #8B949E; font-style: italic } /* Comment.PreprocFile */
+.codehilite .c1 { color: #8B949E; font-style: italic } /* Comment.Single */
+.codehilite .cs { color: #8B949E; font-weight: bold; font-style: italic } /* Comment.Special */
+.codehilite .gd { color: #FFA198; background-color: #490202 } /* Generic.Deleted */
+.codehilite .ge { color: #E6EDF3; font-style: italic } /* Generic.Emph */
+.codehilite .ges { color: #E6EDF3; font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.codehilite .gr { color: #FFA198 } /* Generic.Error */
+.codehilite .gh { color: #79C0FF; font-weight: bold } /* Generic.Heading */
+.codehilite .gi { color: #56D364; background-color: #0F5323 } /* Generic.Inserted */
+.codehilite .go { color: #8B949E } /* Generic.Output */
+.codehilite .gp { color: #8B949E } /* Generic.Prompt */
+.codehilite .gs { color: #E6EDF3; font-weight: bold } /* Generic.Strong */
+.codehilite .gu { color: #79C0FF } /* Generic.Subheading */
+.codehilite .gt { color: #FF7B72 } /* Generic.Traceback */
+.codehilite .g-Underline { color: #E6EDF3; text-decoration: underline } /* Generic.Underline */
+.codehilite .kc { color: #79C0FF } /* Keyword.Constant */
+.codehilite .kd { color: #FF7B72 } /* Keyword.Declaration */
+.codehilite .kn { color: #FF7B72 } /* Keyword.Namespace */
+.codehilite .kp { color: #79C0FF } /* Keyword.Pseudo */
+.codehilite .kr { color: #FF7B72 } /* Keyword.Reserved */
+.codehilite .kt { color: #FF7B72 } /* Keyword.Type */
+.codehilite .ld { color: #79C0FF } /* Literal.Date */
+.codehilite .m { color: #A5D6FF } /* Literal.Number */
+.codehilite .s { color: #A5D6FF } /* Literal.String */
+.codehilite .na { color: #E6EDF3 } /* Name.Attribute */
+.codehilite .nb { color: #E6EDF3 } /* Name.Builtin */
+.codehilite .nc { color: #F0883E; font-weight: bold } /* Name.Class */
+.codehilite .no { color: #79C0FF; font-weight: bold } /* Name.Constant */
+.codehilite .nd { color: #D2A8FF; font-weight: bold } /* Name.Decorator */
+.codehilite .ni { color: #FFA657 } /* Name.Entity */
+.codehilite .ne { color: #F0883E; font-weight: bold } /* Name.Exception */
+.codehilite .nf { color: #D2A8FF; font-weight: bold } /* Name.Function */
+.codehilite .nl { color: #79C0FF; font-weight: bold } /* Name.Label */
+.codehilite .nn { color: #FF7B72 } /* Name.Namespace */
+.codehilite .nx { color: #E6EDF3 } /* Name.Other */
+.codehilite .py { color: #79C0FF } /* Name.Property */
+.codehilite .nt { color: #7EE787 } /* Name.Tag */
+.codehilite .nv { color: #79C0FF } /* Name.Variable */
+.codehilite .ow { color: #FF7B72; font-weight: bold } /* Operator.Word */
+.codehilite .pm { color: #E6EDF3 } /* Punctuation.Marker */
+.codehilite .w { color: #6E7681 } /* Text.Whitespace */
+.codehilite .mb { color: #A5D6FF } /* Literal.Number.Bin */
+.codehilite .mf { color: #A5D6FF } /* Literal.Number.Float */
+.codehilite .mh { color: #A5D6FF } /* Literal.Number.Hex */
+.codehilite .mi { color: #A5D6FF } /* Literal.Number.Integer */
+.codehilite .mo { color: #A5D6FF } /* Literal.Number.Oct */
+.codehilite .sa { color: #79C0FF } /* Literal.String.Affix */
+.codehilite .sb { color: #A5D6FF } /* Literal.String.Backtick */
+.codehilite .sc { color: #A5D6FF } /* Literal.String.Char */
+.codehilite .dl { color: #79C0FF } /* Literal.String.Delimiter */
+.codehilite .sd { color: #A5D6FF } /* Literal.String.Doc */
+.codehilite .s2 { color: #A5D6FF } /* Literal.String.Double */
+.codehilite .se { color: #79C0FF } /* Literal.String.Escape */
+.codehilite .sh { color: #79C0FF } /* Literal.String.Heredoc */
+.codehilite .si { color: #A5D6FF } /* Literal.String.Interpol */
+.codehilite .sx { color: #A5D6FF } /* Literal.String.Other */
+.codehilite .sr { color: #79C0FF } /* Literal.String.Regex */
+.codehilite .s1 { color: #A5D6FF } /* Literal.String.Single */
+.codehilite .ss { color: #A5D6FF } /* Literal.String.Symbol */
+.codehilite .bp { color: #E6EDF3 } /* Name.Builtin.Pseudo */
+.codehilite .fm { color: #D2A8FF; font-weight: bold } /* Name.Function.Magic */
+.codehilite .vc { color: #79C0FF } /* Name.Variable.Class */
+.codehilite .vg { color: #79C0FF } /* Name.Variable.Global */
+.codehilite .vi { color: #79C0FF } /* Name.Variable.Instance */
+.codehilite .vm { color: #79C0FF } /* Name.Variable.Magic */
+.codehilite .il { color: #A5D6FF } /* Literal.Number.Integer.Long */
+}
+</style>
+</head>
+<body>
+<main class="page">
+<h1 id="phase-12-platform-apis-secrets-multi-tenancy-v0120">Phase 12 — Platform APIs, Secrets &amp; Multi-Tenancy (<code>v0.12.0</code>)</h1>
+<blockquote>
+<p><strong>Mission:</strong> promote PipeForge from "my tool" to "a platform other teams could
+use". A FastAPI control plane (the Registration / Transformation / Workflow
+APIs from the reference architecture's second diagram), secrets done right
+(Secret Manager, the Vault stand-in), machine auth, and a real multi-tenancy
+model with quotas and isolation. This phase is where Q15 (multi-tenant SaaS
+platform) and Q19 (data mesh platform) stop being theory.</p>
+</blockquote>
+<h2 id="1-concepts">1. Concepts</h2>
+<ul>
+<li><strong>The reference architecture's control plane</strong> (image 2): Registration UX/API,
+  Transformation API, Workflow service, Vault, tenant namespaces on GKE. You'll
+  build the same shape with cheaper primitives: Cloud Run instead of GKE+Istio,
+  Secret Manager instead of Vault, IAM instead of mTLS meshes. Being able to say
+  "same architecture, right-sized runtime — here's what GKE would buy me and when
+  I'd move (sidecars, network policy, long-running consumers, per-tenant node
+  pools)" is precisely the staff-level judgment interviews probe.</li>
+<li><strong>Multi-tenancy is an isolation spectrum</strong> (Q15 — memorize the ladder):
+  1. <strong>Row-level</strong> (tenant column + row-access policies) — cheapest, weakest blast-radius story;
+  2. <strong>Schema/dataset-level</strong> (per-tenant BQ datasets, buckets prefixes, pools) — the pragmatic middle <strong>← PipeForge's choice</strong>;
+  3. <strong>Project-level</strong> (per-tenant GCP project) — hard isolation, hard ops;
+  4. <strong>Deployment-level</strong> (per-tenant everything) — enterprise/regulated.
+  Defend the choice by failure domain, noisy neighbors, compliance, and cost —
+  not by fashion.</li>
+<li><strong>Secrets:</strong> connection secrets were <code>connection_ref</code> strings since Phase 2 —
+  that indirection now pays off: refs resolve to Secret Manager at runtime,
+  per-tenant access via IAM conditions, rotation without touching metadata.</li>
+<li><strong>AuthN/Z for machines:</strong> service-to-service on GCP = OIDC ID tokens, verified
+  audience, caller identity mapped to tenant + role. No API keys in headers.</li>
+</ul>
+<h2 id="2-build">2. Build</h2>
+<h3 id="21-fastapi-control-plane-api">2.1 FastAPI control plane — <code>api/</code></h3>
+<div class="codehilite"><pre><span></span><code>api/
+├── main.py            # FastAPI app, OIDC verification middleware
+├── routers/
+│   ├── registration.py    # POST /sources, /datasets, /contracts (compat-checked)
+│   ├── transformation.py  # POST /models  (register a CDP model), GET /models/{id}
+│   ├── workflow.py        # POST /runs {dataset, execution_date}, POST /backfills, GET /runs/{id}
+│   ├── quality.py         # GET /datasets/{id}/dq, POST /datasets/{id}/rules
+│   └── catalog.py         # GET /datasets?q=..., GET /datasets/{id}/lineage
+└── schemas.py         # Pydantic request/response models — the API&#39;s own contract
+</code></pre></div>
+
+<p>Design rules (each is an interview line):
+- <strong>The API is the only writer to the registry from now on.</strong> CLI and UI become
+  API clients. One write path = one place for validation, authz, and audit
+  (<code>api_audit_log</code>: caller, tenant, action, payload hash, timestamp).
+- Contracts in, contracts out: request models are versioned Pydantic schemas;
+  breaking the API contract follows the same §16 protocol as data contracts.
+  Platforms eat their own dogfood.
+- Idempotency keys on POST /runs and /backfills (client retries must not
+  double-trigger — the §7 idempotency principle applied to control planes).
+- 202 + status polling for long operations (a backfill is a job, not a request).</p>
+<h3 id="22-secret-manager-migration">2.2 Secret Manager migration</h3>
+<ul>
+<li>Terraform: secrets for MySQL source creds, metadata DB, Kafka SASL (if VM),
+  webhook URLs; IAM bindings per accessor SA with <strong>conditions on secret name
+  prefix</strong> (<code>tenant-a-*</code> readable only by tenant-a runners).</li>
+<li><code>connection_ref: sm://novamart-mysql</code> now resolves via a <code>SecretResolver</code> in
+  <code>core/</code> (cached, TTL, audit-logged access). Delete every password from <code>.env</code>
+  and Terraform state where possible — do the sweep, it's always embarrassing.</li>
+<li>Rotation drill: rotate the MySQL password via Terraform, confirm pipelines pick
+  it up with zero metadata changes. Rotation-without-redeploy is the whole point
+  of the indirection.</li>
+</ul>
+<h3 id="23-multi-tenancy-tenant-becomes-real">2.3 Multi-tenancy: <code>tenant</code> becomes real</h3>
+<p><code>tenant</code> has been a column since Phase 2. Now enforce it end to end:
+1. <strong>Onboard a second tenant</strong> ("acmecorp") with one dataset (any public CSV).
+2. <strong>Storage isolation:</strong> per-tenant BQ datasets (<code>cdp_novamart</code>, <code>cdp_acmecorp</code>)
+   and GCS prefixes; Terraform generates them from a <code>tenants.yaml</code> (<code>for_each</code> —
+   adding a tenant is a PR with one YAML line — say that sentence in interviews).
+3. <strong>Compute fairness:</strong> per-tenant Airflow pools (P07 groundwork) + per-tenant
+   Dataproc batch quotas (max concurrent batches in dataset config).
+4. <strong>Access:</strong> per-tenant reader groups; API resolves caller→tenant and scopes
+   every query (<code>WHERE tenant = :caller_tenant</code> enforced in the repo layer, not
+   ad hoc in routes — one chokepoint).
+5. <strong>Cost attribution:</strong> <code>tenant</code> label on every GCP resource your Terraform
+   creates + every Dataproc batch → the Phase-10 FinOps model now reports
+   <strong>cost per tenant</strong>. Chargeback-ready is a phrase platform interviewers love.</p>
+<h3 id="24-deploy-cicd-completion">2.4 Deploy + CI/CD completion</h3>
+<ul>
+<li><code>cloudrun_service</code> for the API (min 0, <code>--no-allow-unauthenticated</code>); UI calls
+  it with an ID token.</li>
+<li>GitHub Actions: build+push images on tag, <code>terraform plan</code> on PR via
+  <strong>Workload Identity Federation</strong> (no SA keys in GitHub — keyless CI is current
+  best practice and a strong interview aside), apply on merge with manual approval
+  environment.</li>
+</ul>
+<h3 id="25-ship-it">2.5 Ship it</h3>
+<p>Tests: authz (tenant A token cannot read tenant B dataset — write the test that
+proves it), idempotency-key replay, secret resolver caching, contract-versioned
+API schemas. Tag <code>v0.12.0</code>.</p>
+<h2 id="3-prove-it">3. Prove it</h2>
+<ul>
+<li>[ ] <code>curl</code> with tenant-A ID token: sees only tenant-A datasets; tenant-B's return 404 (not 403 — don't leak existence; small detail, real security habit)</li>
+<li>[ ] Wizard (P11) now writes through the API; <code>api_audit_log</code> shows the human's action chain</li>
+<li>[ ] Both tenants' DAGs run concurrently; pools prevent starvation when tenant A backfills 30 days</li>
+<li>[ ] FinOps dashboard shows cost split by tenant</li>
+<li>[ ] Password rotation with zero pipeline edits</li>
+<li>[ ] <code>git grep -iE 'password|secret_key'</code> finds nothing but Secret Manager refs</li>
+</ul>
+<h2 id="4-break-it">4. Break it</h2>
+<p>Noisy-neighbor drill: give tenant B a pathological dataset (10x volume, a
+cross-join-ish model) and run both tenants' schedules. Where does contention
+actually appear first — Airflow pool? Dataproc quota? BQ slots? Cloud SQL
+connections? Measure, fix the weakest fence, write
+<code>docs/incidents/013-noisy-neighbor.md</code>. (Interviewers ask "how do you isolate
+tenants?" — you'll answer with where isolation <em>actually broke first</em>.)</p>
+<h2 id="5-interview-corner">5. Interview corner</h2>
+<ul>
+<li><strong>Q15 (multi-tenant SaaS data platform)</strong> — full 45-min run. Your isolation
+  ladder + the noisy-neighbor incident + per-tenant cost attribution is a
+  staff-grade answer; most candidates have never operated tenancy at all.</li>
+<li><strong>Q19 (data mesh)</strong> — you now hold all four pillars concretely: domain
+  ownership (owner per dataset), data-as-product (catalog cards + SLAs),
+  self-serve platform (wizard/API), federated governance (contracts + policy tags</li>
+<li>central DQ minimums). Argue <em>when mesh is premature</em> (§25's &lt;50-engineer rule)
+  — restraint impresses more than enthusiasm.</li>
+<li><em>"How do services authenticate to each other on GCP?"</em> — SA identity + OIDC ID
+  tokens + audience verification; secrets only for third-party systems.</li>
+</ul>
+<h2 id="6-stretch-goals">6. Stretch goals</h2>
+<ul>
+<li>Reverse ETL (§28): <code>POST /syncs</code> pushing a CDP segment to a mock CRM webhook, idempotent upserts on business key, rate-limited.</li>
+<li>Per-tenant CMEK (tenant-supplied keys) — the enterprise ask; design doc even if you don't build it.</li>
+<li>Migrate the API+UI to GKE Autopilot with the Terraform module — experience the reference architecture's actual runtime, then destroy it.</li>
+</ul>
+</main>
+</body>
+</html>

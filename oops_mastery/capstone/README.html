@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Capstone: PluginPay — An Extensible Payment-Processing Service</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e; --accent: #0969da;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1; --accent: #4493f8;
+  }
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.65; word-wrap: break-word;
+  -webkit-font-smoothing: antialiased;
+}
+.page { max-width: 880px; margin: 0 auto; padding: 2.5rem 1.5rem 5rem; }
+h1, h2, h3, h4, h5, h6 { margin-top: 1.6em; margin-bottom: .5em; line-height: 1.25; font-weight: 650; }
+h1 { font-size: 2.1em; margin-top: 0; border-bottom: 2px solid var(--border); padding-bottom: .35em; letter-spacing: -.02em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+h4 { font-size: 1.05em; }
+p { margin: 0 0 1em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+strong { font-weight: 650; }
+code, pre, kbd {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; font-size: 85%; }
+pre {
+  background: var(--code-bg); padding: 1em 1.2em; border-radius: 8px;
+  overflow-x: auto; line-height: 1.5; font-size: 85%;
+  border: 1px solid var(--border); margin: 0 0 1.2em;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; border-radius: 0; }
+.codehilite { background: var(--code-bg); border-radius: 8px; margin: 0 0 1.2em; }
+.codehilite pre { margin: 0; border: 1px solid var(--border); }
+blockquote {
+  margin: 0 0 1.2em; padding: .5em 1.1em; color: var(--quote);
+  border-left: 4px solid var(--accent); background: var(--code-bg);
+  border-radius: 0 8px 8px 0;
+}
+blockquote > :first-child { margin-top: 0; }
+blockquote > :last-child { margin-bottom: 0; }
+table {
+  border-collapse: collapse; display: block; overflow-x: auto;
+  max-width: 100%; margin: 0 0 1.2em; font-size: .95em;
+}
+th, td { border: 1px solid var(--border); padding: 8px 14px; }
+th { font-weight: 650; background: var(--code-bg); }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; border-radius: 8px; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 2em 0; }
+ul, ol { padding-left: 1.8em; margin: 0 0 1em; }
+li { margin: .3em 0; }
+li > p { margin-bottom: .5em; }
+input[type="checkbox"] { margin-right: .4em; }
+::selection { background: color-mix(in srgb, var(--accent) 25%, transparent); }
+/* Pygments syntax highlighting — light */
+pre { line-height: 125%; }
+td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+.codehilite .hll { background-color: #ffffcc }
+.codehilite { background: #f8f8f8; }
+.codehilite .c { color: #3D7B7B; font-style: italic } /* Comment */
+.codehilite .err { border: 1px solid #F00 } /* Error */
+.codehilite .k { color: #008000; font-weight: bold } /* Keyword */
+.codehilite .o { color: #666 } /* Operator */
+.codehilite .ch { color: #3D7B7B; font-style: italic } /* Comment.Hashbang */
+.codehilite .cm { color: #3D7B7B; font-style: italic } /* Comment.Multiline */
+.codehilite .cp { color: #9C6500 } /* Comment.Preproc */
+.codehilite .cpf { color: #3D7B7B; font-style: italic } /* Comment.PreprocFile */
+.codehilite .c1 { color: #3D7B7B; font-style: italic } /* Comment.Single */
+.codehilite .cs { color: #3D7B7B; font-style: italic } /* Comment.Special */
+.codehilite .gd { color: #A00000 } /* Generic.Deleted */
+.codehilite .ge { font-style: italic } /* Generic.Emph */
+.codehilite .ges { font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.codehilite .gr { color: #E40000 } /* Generic.Error */
+.codehilite .gh { color: #000080; font-weight: bold } /* Generic.Heading */
+.codehilite .gi { color: #008400 } /* Generic.Inserted */
+.codehilite .go { color: #717171 } /* Generic.Output */
+.codehilite .gp { color: #000080; font-weight: bold } /* Generic.Prompt */
+.codehilite .gs { font-weight: bold } /* Generic.Strong */
+.codehilite .gu { color: #800080; font-weight: bold } /* Generic.Subheading */
+.codehilite .gt { color: #04D } /* Generic.Traceback */
+.codehilite .kc { color: #008000; font-weight: bold } /* Keyword.Constant */
+.codehilite .kd { color: #008000; font-weight: bold } /* Keyword.Declaration */
+.codehilite .kn { color: #008000; font-weight: bold } /* Keyword.Namespace */
+.codehilite .kp { color: #008000 } /* Keyword.Pseudo */
+.codehilite .kr { color: #008000; font-weight: bold } /* Keyword.Reserved */
+.codehilite .kt { color: #B00040 } /* Keyword.Type */
+.codehilite .m { color: #666 } /* Literal.Number */
+.codehilite .s { color: #BA2121 } /* Literal.String */
+.codehilite .na { color: #687822 } /* Name.Attribute */
+.codehilite .nb { color: #008000 } /* Name.Builtin */
+.codehilite .nc { color: #00F; font-weight: bold } /* Name.Class */
+.codehilite .no { color: #800 } /* Name.Constant */
+.codehilite .nd { color: #A2F } /* Name.Decorator */
+.codehilite .ni { color: #717171; font-weight: bold } /* Name.Entity */
+.codehilite .ne { color: #CB3F38; font-weight: bold } /* Name.Exception */
+.codehilite .nf { color: #00F } /* Name.Function */
+.codehilite .nl { color: #767600 } /* Name.Label */
+.codehilite .nn { color: #00F; font-weight: bold } /* Name.Namespace */
+.codehilite .nt { color: #008000; font-weight: bold } /* Name.Tag */
+.codehilite .nv { color: #19177C } /* Name.Variable */
+.codehilite .ow { color: #A2F; font-weight: bold } /* Operator.Word */
+.codehilite .w { color: #BBB } /* Text.Whitespace */
+.codehilite .mb { color: #666 } /* Literal.Number.Bin */
+.codehilite .mf { color: #666 } /* Literal.Number.Float */
+.codehilite .mh { color: #666 } /* Literal.Number.Hex */
+.codehilite .mi { color: #666 } /* Literal.Number.Integer */
+.codehilite .mo { color: #666 } /* Literal.Number.Oct */
+.codehilite .sa { color: #BA2121 } /* Literal.String.Affix */
+.codehilite .sb { color: #BA2121 } /* Literal.String.Backtick */
+.codehilite .sc { color: #BA2121 } /* Literal.String.Char */
+.codehilite .dl { color: #BA2121 } /* Literal.String.Delimiter */
+.codehilite .sd { color: #BA2121; font-style: italic } /* Literal.String.Doc */
+.codehilite .s2 { color: #BA2121 } /* Literal.String.Double */
+.codehilite .se { color: #AA5D1F; font-weight: bold } /* Literal.String.Escape */
+.codehilite .sh { color: #BA2121 } /* Literal.String.Heredoc */
+.codehilite .si { color: #A45A77; font-weight: bold } /* Literal.String.Interpol */
+.codehilite .sx { color: #008000 } /* Literal.String.Other */
+.codehilite .sr { color: #A45A77 } /* Literal.String.Regex */
+.codehilite .s1 { color: #BA2121 } /* Literal.String.Single */
+.codehilite .ss { color: #19177C } /* Literal.String.Symbol */
+.codehilite .bp { color: #008000 } /* Name.Builtin.Pseudo */
+.codehilite .fm { color: #00F } /* Name.Function.Magic */
+.codehilite .vc { color: #19177C } /* Name.Variable.Class */
+.codehilite .vg { color: #19177C } /* Name.Variable.Global */
+.codehilite .vi { color: #19177C } /* Name.Variable.Instance */
+.codehilite .vm { color: #19177C } /* Name.Variable.Magic */
+.codehilite .il { color: #666 } /* Literal.Number.Integer.Long */
+/* Pygments syntax highlighting — dark */
+@media (prefers-color-scheme: dark) {
+pre { line-height: 125%; }
+td.linenos .normal { color: #6e7681; background-color: #0d1117; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: #6e7681; background-color: #0d1117; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #e6edf3; background-color: #6e7681; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #e6edf3; background-color: #6e7681; padding-left: 5px; padding-right: 5px; }
+.codehilite .hll { background-color: #6e7681 }
+.codehilite { background: #0d1117; color: #E6EDF3 }
+.codehilite .c { color: #8B949E; font-style: italic } /* Comment */
+.codehilite .err { color: #F85149 } /* Error */
+.codehilite .esc { color: #E6EDF3 } /* Escape */
+.codehilite .g { color: #E6EDF3 } /* Generic */
+.codehilite .k { color: #FF7B72 } /* Keyword */
+.codehilite .l { color: #A5D6FF } /* Literal */
+.codehilite .n { color: #E6EDF3 } /* Name */
+.codehilite .o { color: #FF7B72; font-weight: bold } /* Operator */
+.codehilite .x { color: #E6EDF3 } /* Other */
+.codehilite .p { color: #E6EDF3 } /* Punctuation */
+.codehilite .ch { color: #8B949E; font-style: italic } /* Comment.Hashbang */
+.codehilite .cm { color: #8B949E; font-style: italic } /* Comment.Multiline */
+.codehilite .cp { color: #8B949E; font-weight: bold; font-style: italic } /* Comment.Preproc */
+.codehilite .cpf { color: #8B949E; font-style: italic } /* Comment.PreprocFile */
+.codehilite .c1 { color: #8B949E; font-style: italic } /* Comment.Single */
+.codehilite .cs { color: #8B949E; font-weight: bold; font-style: italic } /* Comment.Special */
+.codehilite .gd { color: #FFA198; background-color: #490202 } /* Generic.Deleted */
+.codehilite .ge { color: #E6EDF3; font-style: italic } /* Generic.Emph */
+.codehilite .ges { color: #E6EDF3; font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.codehilite .gr { color: #FFA198 } /* Generic.Error */
+.codehilite .gh { color: #79C0FF; font-weight: bold } /* Generic.Heading */
+.codehilite .gi { color: #56D364; background-color: #0F5323 } /* Generic.Inserted */
+.codehilite .go { color: #8B949E } /* Generic.Output */
+.codehilite .gp { color: #8B949E } /* Generic.Prompt */
+.codehilite .gs { color: #E6EDF3; font-weight: bold } /* Generic.Strong */
+.codehilite .gu { color: #79C0FF } /* Generic.Subheading */
+.codehilite .gt { color: #FF7B72 } /* Generic.Traceback */
+.codehilite .g-Underline { color: #E6EDF3; text-decoration: underline } /* Generic.Underline */
+.codehilite .kc { color: #79C0FF } /* Keyword.Constant */
+.codehilite .kd { color: #FF7B72 } /* Keyword.Declaration */
+.codehilite .kn { color: #FF7B72 } /* Keyword.Namespace */
+.codehilite .kp { color: #79C0FF } /* Keyword.Pseudo */
+.codehilite .kr { color: #FF7B72 } /* Keyword.Reserved */
+.codehilite .kt { color: #FF7B72 } /* Keyword.Type */
+.codehilite .ld { color: #79C0FF } /* Literal.Date */
+.codehilite .m { color: #A5D6FF } /* Literal.Number */
+.codehilite .s { color: #A5D6FF } /* Literal.String */
+.codehilite .na { color: #E6EDF3 } /* Name.Attribute */
+.codehilite .nb { color: #E6EDF3 } /* Name.Builtin */
+.codehilite .nc { color: #F0883E; font-weight: bold } /* Name.Class */
+.codehilite .no { color: #79C0FF; font-weight: bold } /* Name.Constant */
+.codehilite .nd { color: #D2A8FF; font-weight: bold } /* Name.Decorator */
+.codehilite .ni { color: #FFA657 } /* Name.Entity */
+.codehilite .ne { color: #F0883E; font-weight: bold } /* Name.Exception */
+.codehilite .nf { color: #D2A8FF; font-weight: bold } /* Name.Function */
+.codehilite .nl { color: #79C0FF; font-weight: bold } /* Name.Label */
+.codehilite .nn { color: #FF7B72 } /* Name.Namespace */
+.codehilite .nx { color: #E6EDF3 } /* Name.Other */
+.codehilite .py { color: #79C0FF } /* Name.Property */
+.codehilite .nt { color: #7EE787 } /* Name.Tag */
+.codehilite .nv { color: #79C0FF } /* Name.Variable */
+.codehilite .ow { color: #FF7B72; font-weight: bold } /* Operator.Word */
+.codehilite .pm { color: #E6EDF3 } /* Punctuation.Marker */
+.codehilite .w { color: #6E7681 } /* Text.Whitespace */
+.codehilite .mb { color: #A5D6FF } /* Literal.Number.Bin */
+.codehilite .mf { color: #A5D6FF } /* Literal.Number.Float */
+.codehilite .mh { color: #A5D6FF } /* Literal.Number.Hex */
+.codehilite .mi { color: #A5D6FF } /* Literal.Number.Integer */
+.codehilite .mo { color: #A5D6FF } /* Literal.Number.Oct */
+.codehilite .sa { color: #79C0FF } /* Literal.String.Affix */
+.codehilite .sb { color: #A5D6FF } /* Literal.String.Backtick */
+.codehilite .sc { color: #A5D6FF } /* Literal.String.Char */
+.codehilite .dl { color: #79C0FF } /* Literal.String.Delimiter */
+.codehilite .sd { color: #A5D6FF } /* Literal.String.Doc */
+.codehilite .s2 { color: #A5D6FF } /* Literal.String.Double */
+.codehilite .se { color: #79C0FF } /* Literal.String.Escape */
+.codehilite .sh { color: #79C0FF } /* Literal.String.Heredoc */
+.codehilite .si { color: #A5D6FF } /* Literal.String.Interpol */
+.codehilite .sx { color: #A5D6FF } /* Literal.String.Other */
+.codehilite .sr { color: #79C0FF } /* Literal.String.Regex */
+.codehilite .s1 { color: #A5D6FF } /* Literal.String.Single */
+.codehilite .ss { color: #A5D6FF } /* Literal.String.Symbol */
+.codehilite .bp { color: #E6EDF3 } /* Name.Builtin.Pseudo */
+.codehilite .fm { color: #D2A8FF; font-weight: bold } /* Name.Function.Magic */
+.codehilite .vc { color: #79C0FF } /* Name.Variable.Class */
+.codehilite .vg { color: #79C0FF } /* Name.Variable.Global */
+.codehilite .vi { color: #79C0FF } /* Name.Variable.Instance */
+.codehilite .vm { color: #79C0FF } /* Name.Variable.Magic */
+.codehilite .il { color: #A5D6FF } /* Literal.Number.Integer.Long */
+}
+</style>
+</head>
+<body>
+<main class="page">
+<h1 id="capstone-pluginpay-an-extensible-payment-processing-service">Capstone: PluginPay — An Extensible Payment-Processing Service</h1>
+<h2 id="overview">Overview</h2>
+<p>You will study, run, and then extend <strong>PluginPay</strong>: a payment service where new
+payment providers plug in without touching core code, domain invariants make invalid
+payments unrepresentable, failures are retried and audited by decorators, and the
+whole graph is wired in one composition root. Every module of this course is load-
+bearing somewhere in this tree — the mapping table below is the proof.</p>
+<p>Your mastery test: complete the three extensions at the bottom <strong>without reading any
+module solutions</strong>.</p>
+<h2 id="architecture">Architecture</h2>
+<div class="codehilite"><pre><span></span><code>flowchart TD
+    subgraph API layer
+        R[api.Router] --&gt; H[handlers + DTOs]
+    end
+    subgraph Service layer
+        H --&gt; S[service.PaymentService]
+        S --&gt; MW[middleware: @retry, @audited]
+        S --&gt; EV[events.EventEmitter]
+        S --&gt; FA[fraud.FraudAdapter]
+    end
+    subgraph Domain
+        S --&gt; P[payment.Payment entity]
+        P --&gt; M[money.Money value object]
+        P --&gt; E[errors hierarchy]
+    end
+    subgraph Plugins
+        S --&gt; REG{{provider registry&lt;br/&gt;ProviderMeta}}
+        C[card.CardProvider] -.registers.-&gt; REG
+        W[wallet.WalletProvider] -.registers.-&gt; REG
+    end
+    subgraph Persistence
+        S --&gt; RP{{repos.PaymentRepo Protocol}}
+        IM[(InMemoryPaymentRepo)] -.conforms.-&gt; RP
+    end
+    CR[main.py — composition root] --&gt;|wires everything| S
+</code></pre></div>
+
+<div class="codehilite"><pre><span></span><code>capstone/
+├── README.md
+└── pluginpay/
+    ├── __init__.py
+    ├── domain/
+    │   ├── __init__.py
+    │   ├── errors.py        # domain exception hierarchy
+    │   ├── money.py         # Money value object (frozen, operators)
+    │   └── payment.py       # Payment entity + validating descriptors
+    ├── providers/
+    │   ├── __init__.py      # ProviderMeta: registry + interface enforcement
+    │   ├── card.py          # CardProvider plugin
+    │   └── wallet.py        # WalletProvider plugin (flaky on purpose)
+    ├── fraud.py             # legacy scorer + adapter
+    ├── repos.py             # PaymentRepo protocol + in-memory impl
+    ├── events.py            # observer/event emitter
+    ├── middleware.py        # @retry and @audited decorators
+    ├── service.py           # PaymentService use cases
+    ├── api.py               # Router, Response, exception→status mapping
+    └── main.py              # composition root + end-to-end demo
+</code></pre></div>
+
+<h2 id="concepts-applied-per-module">Concepts Applied Per Module</h2>
+<table>
+<thead>
+<tr>
+<th>Module</th>
+<th>Concept</th>
+<th>Where in the Capstone</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>01 Core</td>
+<td>classmethod factory, properties, encapsulation</td>
+<td><code>Payment.create</code>, <code>Payment.status</code> property, <code>_history</code></td>
+</tr>
+<tr>
+<td>02 Dunders</td>
+<td><code>__add__</code>/<code>__eq__</code>/<code>__hash__</code>/<code>__repr__</code></td>
+<td><code>domain/money.py</code> operators; <code>Payment.__eq__</code> by id</td>
+</tr>
+<tr>
+<td>03 Descriptors</td>
+<td>validated fields via <code>__set_name__</code></td>
+<td><code>NonEmptyStr</code> descriptor on <code>Payment.customer</code></td>
+</tr>
+<tr>
+<td>04 Protocols</td>
+<td>structural seams</td>
+<td><code>repos.PaymentRepo</code>, <code>fraud.FraudChecker</code></td>
+</tr>
+<tr>
+<td>05 SOLID</td>
+<td>SRP layers, OCP plugins, DIP injection</td>
+<td>the whole tree; providers extend without edits</td>
+</tr>
+<tr>
+<td>06 Metaclasses</td>
+<td>registry + definition-time enforcement</td>
+<td><code>providers/__init__.py</code> <code>ProviderMeta</code></td>
+</tr>
+<tr>
+<td>07 Decorators</td>
+<td>parameterized + stateful wrappers</td>
+<td><code>middleware.retry</code>, <code>middleware.audited</code></td>
+</tr>
+<tr>
+<td>08 Patterns</td>
+<td>strategy, factory, observer, adapter</td>
+<td>providers (strategy), <code>get_provider</code> (factory), <code>events.py</code>, <code>fraud.FraudAdapter</code></td>
+</tr>
+<tr>
+<td>09 DI</td>
+<td>constructor injection, composition root</td>
+<td><code>PaymentService.__init__</code>, <code>main.build_app</code></td>
+</tr>
+<tr>
+<td>10 Microservice</td>
+<td>layered architecture, DTOs, status mapping</td>
+<td><code>api.py</code> + package layout</td>
+</tr>
+</tbody>
+</table>
+<h2 id="how-to-run">How to Run</h2>
+<div class="codehilite"><pre><span></span><code><span class="nb">cd</span><span class="w"> </span>oops_mastery/capstone
+python3<span class="w"> </span>-m<span class="w"> </span>pluginpay.main<span class="w">          </span><span class="c1"># runs the wired demo + built-in assertions</span>
+</code></pre></div>
+
+<h2 id="how-to-verify">How to Verify</h2>
+<div class="codehilite"><pre><span></span><code>python3<span class="w"> </span>-m<span class="w"> </span>pluginpay.main
+<span class="c1">#   → prints each API call and response, ends with:</span>
+<span class="c1">#   All capstone assertions passed ✔</span>
+</code></pre></div>
+
+<p>The demo proves, end to end: a successful card charge (201), the plugin registry
+serving both providers, a flaky wallet charge that succeeds via <code>@retry</code>, fraud
+rejection (402), domain-invariant rejection (400), unknown payment (404), a refund
+flow, the observer audit trail, and a provider added at runtime with zero core edits.</p>
+<h2 id="readiness-mastery-checklist">Readiness / Mastery Checklist</h2>
+<p>Work through PluginPay and check yourself:
+- [ ] I can explain why <code>Money</code> is frozen and <code>Payment</code> is not.
+- [ ] I can trace what happens at import time when <code>card.py</code> defines <code>CardProvider</code>
+      (metaclass pipeline) and why a provider missing <code>charge()</code> fails to even define.
+- [ ] I can add a validated field to <code>Payment</code> with the existing descriptor in one line.
+- [ ] I can explain why <code>service.py</code> imports no concrete repo, provider, or scorer.
+- [ ] I can swap <code>InMemoryPaymentRepo</code> for a file-backed one by editing only <code>main.py</code>.
+- [ ] I can say where a new HTTP status code would be introduced, and why nowhere else.</p>
+<h2 id="extend-it-the-actual-mastery-test">Extend It (the actual mastery test)</h2>
+<ol>
+<li><strong>New plugin:</strong> add <code>providers/bank_transfer.py</code> — succeeds only for amounts
+   ≥ $1.00, refundable. Requirement: <code>main.py</code> must need only the import line.</li>
+<li><strong>Idempotency keys:</strong> clients pass <code>idempotency_key</code>; repeating a key returns the
+   original payment instead of double-charging. (Descriptor or repo index? Decide and
+   justify.)</li>
+<li><strong>Webhooks:</strong> subscribe an observer that collects <code>payment.captured</code> events into a
+   <code>webhooks_sent</code> list, with one failing subscriber that must not break the flow.</li>
+</ol>
+<h2 id="cleanup">Cleanup</h2>
+<div class="codehilite"><pre><span></span><code><span class="c1"># nothing persisted — pure in-memory. Remove build artifacts if any:</span>
+find<span class="w"> </span>.<span class="w"> </span>-name<span class="w"> </span>__pycache__<span class="w"> </span>-type<span class="w"> </span>d<span class="w"> </span>-exec<span class="w"> </span>rm<span class="w"> </span>-rf<span class="w"> </span><span class="o">{}</span><span class="w"> </span>+
+</code></pre></div>
+</main>
+</body>
+</html>
