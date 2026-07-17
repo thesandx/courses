@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 01 — Empty Repo → Engineering Foundation (v0.1.0) · Data Platform Mastery</title>
+<meta name="description" content="Data Platform Mastery — build an open-source metadata-driven ETL platform on GCP.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚒️</text></svg>">
+<link rel="stylesheet" href="style.css">
+<script>
+  (function () {
+    var t = localStorage.getItem("dpm-theme");
+    if (!t) t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+</head>
+<body>
+<button class="menu-btn" id="menuBtn" aria-label="Toggle navigation">☰</button>
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">⚒️</span>
+      <span>
+        <span class="brand-title">Data Platform Mastery</span>
+        <span class="brand-sub">Build PipeForge on GCP</span>
+      </span>
+    </a>
+    <nav><div class="nav-group">Start Here</div>
+<a class="nav-item" href="index.html">Course Overview</a>
+<a class="nav-item" href="project-charter.html">Project Charter</a>
+<a class="nav-item" href="interview-map.html">Interview Map</a>
+<div class="nav-group">Build Phases</div>
+<a class="nav-item" href="phase-00.html">00 · Orientation</a>
+<a class="nav-item active" href="phase-01.html">01 · Foundation<span class="tag">v0.1.0</span></a>
+<a class="nav-item" href="phase-02.html">02 · Metadata Core<span class="tag">v0.2.0</span></a>
+<a class="nav-item" href="phase-03.html">03 · Batch Ingestion<span class="tag">v0.3.0</span></a>
+<a class="nav-item" href="phase-04.html">04 · Streaming &amp; Kafka<span class="tag">v0.4.0</span></a>
+<a class="nav-item" href="phase-05.html">05 · Spark Processing<span class="tag">v0.5.0</span></a>
+<a class="nav-item" href="phase-06.html">06 · BigQuery Serving<span class="tag">v0.6.0</span></a>
+<a class="nav-item" href="phase-07.html">07 · Orchestration<span class="tag">v0.7.0</span></a>
+<a class="nav-item" href="phase-08.html">08 · Quality &amp; Recon<span class="tag">v0.8.0</span></a>
+<a class="nav-item" href="phase-09.html">09 · Governance<span class="tag">v0.9.0</span></a>
+<a class="nav-item" href="phase-10.html">10 · Observability &amp; FinOps<span class="tag">v0.10.0</span></a>
+<a class="nav-item" href="phase-11.html">11 · Streamlit Control Plane<span class="tag">v0.11.0</span></a>
+<a class="nav-item" href="phase-12.html">12 · Platform APIs<span class="tag">v0.12.0</span></a>
+<a class="nav-item" href="phase-13.html">13 · Scale &amp; Hardening<span class="tag">v0.13.0</span></a>
+<a class="nav-item" href="phase-14.html">14 · Open-Source Launch<span class="tag">v1.0.0</span></a>
+<div class="nav-group">Endgame</div>
+<a class="nav-item" href="interview-gauntlet.html">Interview Gauntlet<span class="tag">🎯</span></a></nav>
+    <div class="sidebar-foot">
+      <button id="themeBtn" class="theme-btn" title="Toggle dark mode">🌗 Theme</button>
+      <a href="https://github.com/thesandx/courses/tree/master/data_platform_mastery">GitHub ↗</a>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="crumbs">
+      <span class="crumb-group">Build Phases</span>
+      <span class="crumb-sep">/</span>
+      <span class="crumb-page">01 · Foundation</span>
+      <span class="badge">v0.1.0</span>
+    </header>
+    <div class="content-wrap">
+      <main class="content">
+<h1 id="phase-01-empty-repo-engineering-foundation-v010">Phase 01 — Empty Repo → Engineering Foundation (<code>v0.1.0</code>)<a class="headerlink" href="#phase-01-empty-repo-engineering-foundation-v010" title="Link to this section">#</a></h1>
+<blockquote>
+<p><strong>Mission:</strong> turn the empty repo into a professional project: Python package,
+tests, lint, CI, and a Terraform foundation (remote state, APIs, budget, core
+service accounts, the lake buckets). Nothing "data" happens yet — this phase is
+what separates a portfolio project from a script dump.</p>
+</blockquote>
+<h2 id="1-concepts">1. Concepts<a class="headerlink" href="#1-concepts" title="Link to this section">#</a></h2>
+<ul>
+<li>GCP course <strong>M01</strong> (IAM, service accounts, least privilege) and <strong>M02</strong> (bucket design) are the backbone here.</li>
+<li>Notes <strong>§15 (cost)</strong>: infra-as-code is a cost tool — <code>terraform destroy</code> is the ultimate auto-suspend.</li>
+<li>Interview relevance: platform questions (Q7/Q15/Q19) always include "how do teams get environments?" Answer: <em>composable Terraform modules + per-env compositions</em> — which you're about to build.</li>
+</ul>
+<p><strong>Terraform structure decision (memorize the reasoning):</strong></p>
+<ul>
+<li><code>terraform/bootstrap/</code> — the chicken-and-egg resources (the state bucket itself,
+  project APIs, budget). Applied once with <strong>local</strong> state, then never touched.</li>
+<li><code>terraform/modules/</code> — reusable building blocks (<code>gcs_lake</code>, <code>bigquery</code>, …).</li>
+<li><code>terraform/envs/dev/</code> — a <em>composition</em> that wires modules together with dev-sized
+  knobs. Adding <code>envs/prod</code> later = new folder + bigger knobs, zero module changes.
+  That sentence is a staff-level answer to "how do you promote infra between envs?"</li>
+</ul>
+<h2 id="2-build">2. Build<a class="headerlink" href="#2-build" title="Link to this section">#</a></h2>
+<h3 id="21-repository-skeleton-python-packaging">2.1 Repository skeleton + Python packaging<a class="headerlink" href="#21-repository-skeleton-python-packaging" title="Link to this section">#</a></h3>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>clone<span class="w"> </span>git@github.com:&lt;you&gt;/pipeforge.git<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">cd</span><span class="w"> </span>pipeforge
+mkdir<span class="w"> </span>-p<span class="w"> </span>src/pipeforge/core<span class="w"> </span>tests<span class="w"> </span>terraform/<span class="o">{</span>bootstrap,modules,envs/dev<span class="o">}</span><span class="w"> </span>.github/workflows
+</code></pre></div>
+<p><code>pyproject.toml</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="k">[project]</span>
+<span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;pipeforge&quot;</span>
+<span class="n">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;0.1.0&quot;</span>
+<span class="n">description</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Open-source, metadata-driven data platform on GCP&quot;</span>
+<span class="n">requires-python</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;&gt;=3.11&quot;</span>
+<span class="n">license</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="n">text</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;Apache-2.0&quot;</span><span class="p">}</span>
+<span class="n">dependencies</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+<span class="w">  </span><span class="s2">&quot;typer&gt;=0.12&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;pydantic&gt;=2.7&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;pydantic-settings&gt;=2.2&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="s2">&quot;google-cloud-storage&gt;=2.16&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;google-cloud-bigquery&gt;=3.21&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="s2">&quot;sqlalchemy&gt;=2.0&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;structlog&gt;=24.1&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="k">[project.optional-dependencies]</span>
+<span class="n">dev</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;pytest&gt;=8&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;pytest-cov&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;ruff&gt;=0.4&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;mypy&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;pre-commit&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;types-requests&quot;</span><span class="p">]</span>
+
+<span class="k">[project.scripts]</span>
+<span class="n">pipeforge</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;pipeforge.cli:app&quot;</span>
+
+<span class="k">[build-system]</span>
+<span class="n">requires</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;hatchling&quot;</span><span class="p">]</span>
+<span class="n">build-backend</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;hatchling.build&quot;</span>
+
+<span class="k">[tool.ruff]</span>
+<span class="n">line-length</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">100</span>
+<span class="n">lint</span><span class="p">.</span><span class="n">select</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;E&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;F&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;I&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;B&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;UP&quot;</span><span class="p">]</span>
+
+<span class="k">[tool.pytest.ini_options]</span>
+<span class="n">testpaths</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;tests&quot;</span><span class="p">]</span>
+</code></pre></div>
+<p><code>src/pipeforge/core/settings.py</code> — one config object, env-driven (12-factor):</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">pydantic_settings</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseSettings</span><span class="p">,</span> <span class="n">SettingsConfigDict</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Settings</span><span class="p">(</span><span class="n">BaseSettings</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;All runtime config. Values come from env vars prefixed PF_ (never hardcode).&quot;&quot;&quot;</span>
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">SettingsConfigDict</span><span class="p">(</span><span class="n">env_prefix</span><span class="o">=</span><span class="s2">&quot;PF_&quot;</span><span class="p">,</span> <span class="n">env_file</span><span class="o">=</span><span class="s2">&quot;.env&quot;</span><span class="p">,</span> <span class="n">extra</span><span class="o">=</span><span class="s2">&quot;ignore&quot;</span><span class="p">)</span>
+
+    <span class="n">project_id</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">region</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;us-central1&quot;</span>
+    <span class="n">env</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;dev&quot;</span>
+    <span class="n">raw_bucket</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>          <span class="c1"># filled by terraform output</span>
+    <span class="n">quarantine_bucket</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="n">metadata_db_url</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>     <span class="c1"># set in Phase 2</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">resource_prefix</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;pf-</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="si">}</span><span class="s2">&quot;</span>
+
+
+<span class="n">settings</span> <span class="o">=</span> <span class="n">Settings</span><span class="p">()</span>  <span class="c1"># import-time singleton; tests override via env</span>
+</code></pre></div>
+<p><code>src/pipeforge/core/logging.py</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">structlog</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">configure_logging</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">structlog</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span><span class="n">processors</span><span class="o">=</span><span class="p">[</span>
+        <span class="n">structlog</span><span class="o">.</span><span class="n">processors</span><span class="o">.</span><span class="n">add_log_level</span><span class="p">,</span>
+        <span class="n">structlog</span><span class="o">.</span><span class="n">processors</span><span class="o">.</span><span class="n">TimeStamper</span><span class="p">(</span><span class="n">fmt</span><span class="o">=</span><span class="s2">&quot;iso&quot;</span><span class="p">),</span>
+        <span class="n">structlog</span><span class="o">.</span><span class="n">processors</span><span class="o">.</span><span class="n">JSONRenderer</span><span class="p">(),</span>      <span class="c1"># JSON logs → Cloud Logging-friendly</span>
+    <span class="p">])</span>
+
+<span class="n">log</span> <span class="o">=</span> <span class="n">structlog</span><span class="o">.</span><span class="n">get_logger</span><span class="p">(</span><span class="s2">&quot;pipeforge&quot;</span><span class="p">)</span>
+</code></pre></div>
+<p><code>src/pipeforge/cli.py</code> (grows every phase):</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">typer</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pipeforge.core.logging</span><span class="w"> </span><span class="kn">import</span> <span class="n">configure_logging</span>
+
+<span class="n">app</span> <span class="o">=</span> <span class="n">typer</span><span class="o">.</span><span class="n">Typer</span><span class="p">(</span><span class="n">help</span><span class="o">=</span><span class="s2">&quot;PipeForge — metadata-driven data platform on GCP&quot;</span><span class="p">)</span>
+
+<span class="nd">@app</span><span class="o">.</span><span class="n">callback</span><span class="p">()</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_init</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">configure_logging</span><span class="p">()</span>
+
+<span class="nd">@app</span><span class="o">.</span><span class="n">command</span><span class="p">()</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">version</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Print version.&quot;&quot;&quot;</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">importlib.metadata</span><span class="w"> </span><span class="kn">import</span> <span class="n">version</span> <span class="k">as</span> <span class="n">v</span>
+    <span class="n">typer</span><span class="o">.</span><span class="n">echo</span><span class="p">(</span><span class="n">v</span><span class="p">(</span><span class="s2">&quot;pipeforge&quot;</span><span class="p">))</span>
+</code></pre></div>
+<p>First test, <code>tests/test_cli.py</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">typer.testing</span><span class="w"> </span><span class="kn">import</span> <span class="n">CliRunner</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pipeforge.cli</span><span class="w"> </span><span class="kn">import</span> <span class="n">app</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">test_version_runs</span><span class="p">():</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">CliRunner</span><span class="p">()</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span><span class="n">app</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;version&quot;</span><span class="p">])</span>
+    <span class="k">assert</span> <span class="n">result</span><span class="o">.</span><span class="n">exit_code</span> <span class="o">==</span> <span class="mi">0</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[dev]&quot;</span><span class="w">   </span><span class="c1"># or: uv pip install -e &quot;.[dev]&quot;</span>
+pytest<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>ruff<span class="w"> </span>check<span class="w"> </span>.
+</code></pre></div>
+<p>Add <code>LICENSE</code> (Apache-2.0), <code>.gitignore</code> (Python + Terraform: <code>.terraform/</code>,
+<code>*.tfstate*</code>, <code>.env</code>), and a minimal <code>README.md</code> with the elevator pitch from the
+charter — you'll rewrite it properly in Phase 14.</p>
+<h3 id="22-ci-github-actions">2.2 CI — GitHub Actions<a class="headerlink" href="#22-ci-github-actions" title="Link to this section">#</a></h3>
+<p><code>.github/workflows/ci.yml</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ci</span>
+<span class="nt">on</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">push</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">branches</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">main</span><span class="p p-Indicator">]}</span>
+<span class="w">  </span><span class="nt">pull_request</span><span class="p">:</span>
+<span class="nt">jobs</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">test</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">runs-on</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu-latest</span>
+<span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">actions/checkout@v4</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">actions/setup-python@v5</span>
+<span class="w">        </span><span class="nt">with</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">python-version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;3.11&quot;</span><span class="p p-Indicator">}</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pip install -e &quot;.[dev]&quot;</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ruff check .</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pytest --cov=pipeforge</span>
+<span class="w">  </span><span class="nt">terraform</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">runs-on</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu-latest</span>
+<span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">actions/checkout@v4</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hashicorp/setup-terraform@v3</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">terraform fmt -check -recursive</span>
+<span class="w">        </span><span class="nt">working-directory</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">terraform</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">          </span><span class="no">terraform init -backend=false</span>
+<span class="w">          </span><span class="no">terraform validate</span>
+<span class="w">        </span><span class="nt">working-directory</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">terraform/envs/dev</span>
+</code></pre></div>
+<p>(Real <code>terraform plan</code> in CI needs cloud auth — Workload Identity Federation is a
+Phase 12 stretch goal; <code>validate</code> keeps CI honest until then.)</p>
+<h3 id="23-terraform-bootstrap-local-state-applied-once">2.3 Terraform bootstrap (local state, applied once)<a class="headerlink" href="#23-terraform-bootstrap-local-state-applied-once" title="Link to this section">#</a></h3>
+<p><code>terraform/bootstrap/main.tf</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">terraform</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">required_version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;&gt;= 1.7&quot;</span>
+<span class="w">  </span><span class="nb">required_providers</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nb">google</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="na">source</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;hashicorp/google&quot;, version = &quot;~&gt; 5.30&quot;</span><span class="w"> </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kr">variable</span><span class="w"> </span><span class="nv">&quot;project_id&quot;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="na">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="p">}</span>
+<span class="kr">variable</span><span class="w"> </span><span class="nv">&quot;region&quot;</span><span class="w">     </span><span class="p">{</span><span class="w"> </span><span class="na">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="na">default</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;us-central1&quot;</span><span class="w"> </span><span class="p">}</span>
+<span class="kr">variable</span><span class="w"> </span><span class="nv">&quot;billing_account&quot;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="na">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="p">}</span>
+
+<span class="kr">provider</span><span class="w"> </span><span class="nv">&quot;google&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">project</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.project_id</span>
+<span class="w">  </span><span class="na">region</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="nv">var.region</span>
+<span class="p">}</span>
+
+<span class="c1"># APIs the whole course needs (enabling is free; using them isn&#39;t)</span>
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;google_project_service&quot;</span><span class="w"> </span><span class="nv">&quot;apis&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">for_each</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nf">toset</span><span class="p">([</span>
+<span class="w">    </span><span class="s2">&quot;storage.googleapis.com&quot;, &quot;bigquery.googleapis.com&quot;, &quot;sqladmin.googleapis.com&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">&quot;dataproc.googleapis.com&quot;, &quot;pubsub.googleapis.com&quot;, &quot;run.googleapis.com&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">&quot;secretmanager.googleapis.com&quot;, &quot;cloudkms.googleapis.com&quot;, &quot;dlp.googleapis.com&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">&quot;dataplex.googleapis.com&quot;, &quot;datacatalog.googleapis.com&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">&quot;monitoring.googleapis.com&quot;, &quot;logging.googleapis.com&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">&quot;cloudbilling.googleapis.com&quot;, &quot;billingbudgets.googleapis.com&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">&quot;artifactregistry.googleapis.com&quot;, &quot;compute.googleapis.com&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="p">])</span>
+<span class="w">  </span><span class="na">service</span><span class="w">            </span><span class="o">=</span><span class="w"> </span><span class="nv">each.key</span>
+<span class="w">  </span><span class="na">disable_on_destroy</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="no">false</span>
+<span class="p">}</span>
+
+<span class="c1"># Remote state bucket — versioned, so a bad state push is recoverable</span>
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;google_storage_bucket&quot;</span><span class="w"> </span><span class="nv">&quot;tf_state&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">name</span><span class="w">                        </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;${var.project_id}-tf-state&quot;</span>
+<span class="w">  </span><span class="na">location</span><span class="w">                    </span><span class="o">=</span><span class="w"> </span><span class="nv">var.region</span>
+<span class="w">  </span><span class="na">uniform_bucket_level_access</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="no">true</span>
+<span class="w">  </span><span class="nb">versioning</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="na">enabled</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="no">true</span><span class="w"> </span><span class="p">}</span>
+<span class="w">  </span><span class="na">public_access_prevention</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;enforced&quot;</span>
+<span class="p">}</span>
+
+<span class="c1"># The budget from Phase 0, now as code</span>
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;google_billing_budget&quot;</span><span class="w"> </span><span class="nv">&quot;guardrail&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">billing_account</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.billing_account</span>
+<span class="w">  </span><span class="na">display_name</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;pipeforge-guardrail-tf&quot;</span>
+<span class="w">  </span><span class="nb">budget_filter</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="na">projects</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;projects/${var.project_id}&quot;</span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
+<span class="w">  </span><span class="nb">amount</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nb">specified_amount</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="na">currency_code</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;USD&quot;, units = &quot;25&quot;</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
+<span class="w">  </span><span class="err">dynamic</span><span class="w"> </span><span class="s2">&quot;threshold_rules&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">for_each</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="nv">0.5</span><span class="p">,</span><span class="w"> </span><span class="nv">0.9</span><span class="p">,</span><span class="w"> </span><span class="nv">1.0</span><span class="p">]</span>
+<span class="w">    </span><span class="nb">content</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="na">threshold_percent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">threshold_rules.value</span><span class="w"> </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kr">output</span><span class="w"> </span><span class="nv">&quot;state_bucket&quot;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="na">value</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">google_storage_bucket.tf_state.name</span><span class="w"> </span><span class="p">}</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><span class="nb">cd</span><span class="w"> </span>terraform/bootstrap
+terraform<span class="w"> </span>init
+terraform<span class="w"> </span>apply<span class="w"> </span>-var<span class="w"> </span><span class="nv">project_id</span><span class="o">=</span><span class="nv">$PROJECT_ID</span><span class="w"> </span>-var<span class="w"> </span><span class="nv">billing_account</span><span class="o">=</span>&lt;ACCOUNT_ID&gt;
+</code></pre></div>
+<h3 id="24-first-reusable-module-dev-environment">2.4 First reusable module + dev environment<a class="headerlink" href="#24-first-reusable-module-dev-environment" title="Link to this section">#</a></h3>
+<p><code>terraform/modules/gcs_lake/main.tf</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="kr">variable</span><span class="w"> </span><span class="nv">&quot;project_id&quot;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="na">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="p">}</span>
+<span class="kr">variable</span><span class="w"> </span><span class="nv">&quot;region&quot;</span><span class="w">     </span><span class="p">{</span><span class="w"> </span><span class="na">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="p">}</span>
+<span class="kr">variable</span><span class="w"> </span><span class="nv">&quot;env&quot;</span><span class="w">        </span><span class="p">{</span><span class="w"> </span><span class="na">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="p">}</span>
+
+<span class="nb">locals</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="na">prefix</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;${var.project_id}-pf-${var.env}&quot;</span><span class="w"> </span><span class="p">}</span>
+
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;google_storage_bucket&quot;</span><span class="w"> </span><span class="nv">&quot;zones&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">for_each</span><span class="w">                    </span><span class="o">=</span><span class="w"> </span><span class="nf">toset</span><span class="p">([</span><span class="s2">&quot;raw&quot;, &quot;quarantine&quot;, &quot;artifacts&quot;</span><span class="p">])</span>
+<span class="w">  </span><span class="na">name</span><span class="w">                        </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;${local.prefix}-${each.key}&quot;</span>
+<span class="w">  </span><span class="na">location</span><span class="w">                    </span><span class="o">=</span><span class="w"> </span><span class="nv">var.region</span>
+<span class="w">  </span><span class="na">uniform_bucket_level_access</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="no">true</span>
+<span class="w">  </span><span class="na">public_access_prevention</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;enforced&quot;</span>
+<span class="c1">  # Lifecycle rules arrive in Phase 9 (archival framework) — resist adding them now.</span>
+<span class="p">}</span>
+
+<span class="kr">output</span><span class="w"> </span><span class="nv">&quot;buckets&quot;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nb">value</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="err">for</span><span class="w"> </span><span class="err">k</span><span class="p">,</span><span class="w"> </span><span class="err">b</span><span class="w"> </span><span class="err">in</span><span class="w"> </span><span class="nv">google_storage_bucket.zones</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="na">k</span><span class="w"> </span><span class="o">=</span><span class="err">&gt;</span><span class="w"> </span><span class="nv">b.name</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
+</code></pre></div>
+<p><code>terraform/envs/dev/main.tf</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">terraform</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">required_version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;&gt;= 1.7&quot;</span>
+<span class="w">  </span><span class="kr">backend</span><span class="w"> </span><span class="nv">&quot;gcs&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">bucket</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;REPLACE_WITH_STATE_BUCKET&quot;</span><span class="c1">   # from bootstrap output</span>
+<span class="w">    </span><span class="na">prefix</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;envs/dev&quot;</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="w">  </span><span class="nb">required_providers</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nb">google</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="na">source</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;hashicorp/google&quot;, version = &quot;~&gt; 5.30&quot;</span><span class="w"> </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kr">variable</span><span class="w"> </span><span class="nv">&quot;project_id&quot;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="na">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="p">}</span>
+<span class="kr">variable</span><span class="w"> </span><span class="nv">&quot;region&quot;</span><span class="w">     </span><span class="p">{</span><span class="w"> </span><span class="na">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="na">default</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;us-central1&quot;</span><span class="w"> </span><span class="p">}</span>
+
+<span class="kr">provider</span><span class="w"> </span><span class="nv">&quot;google&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">project</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.project_id</span>
+<span class="w">  </span><span class="na">region</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="nv">var.region</span>
+<span class="p">}</span>
+
+<span class="kr">module</span><span class="w"> </span><span class="nv">&quot;lake&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">source</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;../../modules/gcs_lake&quot;</span>
+<span class="w">  </span><span class="na">project_id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.project_id</span>
+<span class="w">  </span><span class="na">region</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="nv">var.region</span>
+<span class="w">  </span><span class="na">env</span><span class="w">        </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;dev&quot;</span>
+<span class="p">}</span>
+
+<span class="c1"># Runtime SA for pipelines — least privilege grows with the course, never Editor</span>
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;google_service_account&quot;</span><span class="w"> </span><span class="nv">&quot;pipeline&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">account_id</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;pf-dev-pipeline&quot;</span>
+<span class="w">  </span><span class="na">display_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;PipeForge dev pipeline runtime&quot;</span>
+<span class="p">}</span>
+
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;google_storage_bucket_iam_member&quot;</span><span class="w"> </span><span class="nv">&quot;pipeline_rw&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">for_each</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">module.lake.buckets</span>
+<span class="w">  </span><span class="na">bucket</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="nv">each.value</span>
+<span class="w">  </span><span class="na">role</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;roles/storage.objectAdmin&quot;</span>
+<span class="w">  </span><span class="na">member</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;serviceAccount:${google_service_account.pipeline.email}&quot;</span>
+<span class="p">}</span>
+
+<span class="kr">output</span><span class="w"> </span><span class="nv">&quot;buckets&quot;</span><span class="w">        </span><span class="p">{</span><span class="w"> </span><span class="na">value</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">module.lake.buckets</span><span class="w"> </span><span class="p">}</span>
+<span class="kr">output</span><span class="w"> </span><span class="nv">&quot;pipeline_sa&quot;</span><span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="na">value</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">google_service_account.pipeline.email</span><span class="w"> </span><span class="p">}</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><span class="nb">cd</span><span class="w"> </span>terraform/envs/dev
+terraform<span class="w"> </span>init<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>terraform<span class="w"> </span>apply<span class="w"> </span>-var<span class="w"> </span><span class="nv">project_id</span><span class="o">=</span><span class="nv">$PROJECT_ID</span>
+<span class="c1"># Wire outputs into your .env:</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;PF_PROJECT_ID=</span><span class="nv">$PROJECT_ID</span><span class="s2">&quot;</span><span class="w"> </span>&gt;&gt;<span class="w"> </span>../../../.env
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;PF_RAW_BUCKET=</span><span class="k">$(</span>terraform<span class="w"> </span>output<span class="w"> </span>-json<span class="w"> </span>buckets<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>-r<span class="w"> </span>.raw<span class="k">)</span><span class="s2">&quot;</span><span class="w"> </span>&gt;&gt;<span class="w"> </span>../../../.env
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;PF_QUARANTINE_BUCKET=</span><span class="k">$(</span>terraform<span class="w"> </span>output<span class="w"> </span>-json<span class="w"> </span>buckets<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>-r<span class="w"> </span>.quarantine<span class="k">)</span><span class="s2">&quot;</span><span class="w"> </span>&gt;&gt;<span class="w"> </span>../../../.env
+</code></pre></div>
+<h3 id="25-ship-it">2.5 Ship it<a class="headerlink" href="#25-ship-it" title="Link to this section">#</a></h3>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>add<span class="w"> </span>-A<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Engineering foundation: package, CI, terraform bootstrap + dev env&quot;</span>
+git<span class="w"> </span>push<span class="w"> </span>-u<span class="w"> </span>origin<span class="w"> </span>main
+git<span class="w"> </span>tag<span class="w"> </span>v0.1.0<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>v0.1.0
+</code></pre></div>
+<p>Open a GitHub Release for <code>v0.1.0</code> with 3 bullet points. Every phase ends like this.</p>
+<h2 id="3-prove-it">3. Prove it<a class="headerlink" href="#3-prove-it" title="Link to this section">#</a></h2>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> CI green on GitHub (lint + tests + terraform fmt/validate)</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <code>pipeforge version</code> prints <code>0.1.0</code></li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <code>gsutil ls</code> shows raw/quarantine/artifacts buckets; state bucket has versioning</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Budget exists <strong>in Terraform state</strong> (<code>terraform state list | grep budget</code>)</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> The pipeline SA has objectAdmin on the lake buckets and <em>nothing project-wide</em></li>
+</ul>
+<h2 id="4-break-it">4. Break it<a class="headerlink" href="#4-break-it" title="Link to this section">#</a></h2>
+<p>Corrupt your local Terraform state (rename <code>.terraform/</code> and change backend prefix
+to a typo), run <code>plan</code>, observe the blast radius, then recover using the <strong>GCS
+state bucket versioning</strong>. Write a 5-line postmortem in <code>docs/incidents/001-tf-state.md</code>.
+The habit of writing postmortems starts now — they become your interview war stories (§8).</p>
+<h2 id="5-interview-corner">5. Interview corner<a class="headerlink" href="#5-interview-corner" title="Link to this section">#</a></h2>
+<ul>
+<li><em>"How do you manage environments?"</em> → module/composition split, remote state per
+  env, same modules dev→prod with different knobs.</li>
+<li><em>"How do you keep cloud costs sane on a platform team?"</em> → budget-as-code before
+  the first resource, serverless-first, destroy-able envs.</li>
+<li>Rehearse: 60 seconds on why the runtime SA has <strong>no</strong> project-level role (least
+  privilege, M01) and why the state bucket is versioned (recoverability).</li>
+</ul>
+<h2 id="6-stretch-goals">6. Stretch goals<a class="headerlink" href="#6-stretch-goals" title="Link to this section">#</a></h2>
+<ul>
+<li><code>pre-commit</code> with ruff + terraform fmt hooks.</li>
+<li>Add <code>terraform/envs/dev/README.md</code> documenting inputs/outputs — module docs are open-source hygiene.</li>
+<li>Protect <code>main</code> (require PR + green CI) and work via PRs from now on.</li>
+</ul>
+        <nav class="pager">
+          <a class="prev" href="phase-00.html"><span class="dir">← Previous</span><span class="label">00 · Orientation</span></a>
+          <a class="next" href="phase-02.html"><span class="dir">Next →</span><span class="label">02 · Metadata Core</span></a>
+        </nav>
+        <footer class="page-foot">
+          Generated from <a href="https://github.com/thesandx/courses/blob/master/data_platform_mastery/phase_01_foundation/README.md"><code>data_platform_mastery/phase_01_foundation/README.md</code></a> ·
+          Part of the <a href="index.html">Data Platform Mastery</a> course.
+        </footer>
+      </main>
+      <aside class="toc-rail"><div class="toc-title">On this page</div>
+<a href="#1-concepts">1. Concepts</a>
+<a href="#2-build">2. Build</a>
+<a href="#3-prove-it">3. Prove it</a>
+<a href="#4-break-it">4. Break it</a>
+<a href="#5-interview-corner">5. Interview corner</a>
+<a href="#6-stretch-goals">6. Stretch goals</a></aside>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById("themeBtn").addEventListener("click", function () {
+    var cur = document.documentElement.getAttribute("data-theme");
+    localStorage.setItem("dpm-theme", cur === "dark" ? "light" : "dark");
+    location.reload();   // simplest way to re-render mermaid + pygments in the new theme
+  });
+  document.getElementById("menuBtn").addEventListener("click", function () {
+    document.getElementById("sidebar").classList.toggle("open");
+  });
+</script>
+</body>
+</html>

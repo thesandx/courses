@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 07 — Orchestration: the DAG Factory ⑩ (v0.7.0) · Data Platform Mastery</title>
+<meta name="description" content="Data Platform Mastery — build an open-source metadata-driven ETL platform on GCP.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚒️</text></svg>">
+<link rel="stylesheet" href="style.css">
+<script>
+  (function () {
+    var t = localStorage.getItem("dpm-theme");
+    if (!t) t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+</head>
+<body>
+<button class="menu-btn" id="menuBtn" aria-label="Toggle navigation">☰</button>
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">⚒️</span>
+      <span>
+        <span class="brand-title">Data Platform Mastery</span>
+        <span class="brand-sub">Build PipeForge on GCP</span>
+      </span>
+    </a>
+    <nav><div class="nav-group">Start Here</div>
+<a class="nav-item" href="index.html">Course Overview</a>
+<a class="nav-item" href="project-charter.html">Project Charter</a>
+<a class="nav-item" href="interview-map.html">Interview Map</a>
+<div class="nav-group">Build Phases</div>
+<a class="nav-item" href="phase-00.html">00 · Orientation</a>
+<a class="nav-item" href="phase-01.html">01 · Foundation<span class="tag">v0.1.0</span></a>
+<a class="nav-item" href="phase-02.html">02 · Metadata Core<span class="tag">v0.2.0</span></a>
+<a class="nav-item" href="phase-03.html">03 · Batch Ingestion<span class="tag">v0.3.0</span></a>
+<a class="nav-item" href="phase-04.html">04 · Streaming &amp; Kafka<span class="tag">v0.4.0</span></a>
+<a class="nav-item" href="phase-05.html">05 · Spark Processing<span class="tag">v0.5.0</span></a>
+<a class="nav-item" href="phase-06.html">06 · BigQuery Serving<span class="tag">v0.6.0</span></a>
+<a class="nav-item active" href="phase-07.html">07 · Orchestration<span class="tag">v0.7.0</span></a>
+<a class="nav-item" href="phase-08.html">08 · Quality &amp; Recon<span class="tag">v0.8.0</span></a>
+<a class="nav-item" href="phase-09.html">09 · Governance<span class="tag">v0.9.0</span></a>
+<a class="nav-item" href="phase-10.html">10 · Observability &amp; FinOps<span class="tag">v0.10.0</span></a>
+<a class="nav-item" href="phase-11.html">11 · Streamlit Control Plane<span class="tag">v0.11.0</span></a>
+<a class="nav-item" href="phase-12.html">12 · Platform APIs<span class="tag">v0.12.0</span></a>
+<a class="nav-item" href="phase-13.html">13 · Scale &amp; Hardening<span class="tag">v0.13.0</span></a>
+<a class="nav-item" href="phase-14.html">14 · Open-Source Launch<span class="tag">v1.0.0</span></a>
+<div class="nav-group">Endgame</div>
+<a class="nav-item" href="interview-gauntlet.html">Interview Gauntlet<span class="tag">🎯</span></a></nav>
+    <div class="sidebar-foot">
+      <button id="themeBtn" class="theme-btn" title="Toggle dark mode">🌗 Theme</button>
+      <a href="https://github.com/thesandx/courses/tree/master/data_platform_mastery">GitHub ↗</a>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="crumbs">
+      <span class="crumb-group">Build Phases</span>
+      <span class="crumb-sep">/</span>
+      <span class="crumb-page">07 · Orchestration</span>
+      <span class="badge">v0.7.0</span>
+    </header>
+    <div class="content-wrap">
+      <main class="content">
+<h1 id="phase-07-orchestration-the-dag-factory-10-v070">Phase 07 — Orchestration: the DAG Factory ⑩ (<code>v0.7.0</code>)<a class="headerlink" href="#phase-07-orchestration-the-dag-factory-10-v070" title="Link to this section">#</a></h1>
+<blockquote>
+<p><strong>Mission:</strong> Airflow ties the platform together — but you will not write DAGs.
+You'll write a <strong>DAG factory</strong> that generates one standardized pipeline per
+registered dataset from the metadata core. Onboarding a source in Phase 2 now
+means a DAG <em>appears</em>. Plus: real backfills, sensors, pools, and the
+cross-cutting audit wiring.</p>
+</blockquote>
+<h2 id="1-concepts">1. Concepts<a class="headerlink" href="#1-concepts" title="Link to this section">#</a></h2>
+<p>Read notes <strong>§31 (Airflow deep dive)</strong>, <strong>§7 (pipeline design)</strong>, <strong>§13 (backfill)</strong>;
+GCP <strong>M09 (Composer)</strong>.</p>
+<ul>
+<li><strong>Airflow orchestrates; it does not process (§31).</strong> Every task here <em>submits</em>
+  work (Dataproc batch, BQ job, ingestion CLI) and records audit rows. If you find
+  pandas in a PythonOperator, you've failed the phase.</li>
+<li><strong>One DAG per business process (§7)</strong> → one DAG per dataset, uniform shape
+  (charter §5). Uniformity is the win: on-call can debug <em>any</em> pipeline because
+  they all look identical.</li>
+<li><strong>Parse-time vs run-time (the §31 scheduler lesson):</strong> the factory must NOT
+  query Cloud SQL at parse time (the scheduler re-parses constantly; a slow/down
+  DB would take down <em>all</em> scheduling). Instead, <code>pipeforge registry export</code>
+  writes <code>dags/registry_snapshot.json</code>; the factory builds DAGs from the file;
+  CI/CD refreshes it on registry change. Metadata-driven, but parse-safe — a
+  genuinely staff-level detail.</li>
+<li><strong><code>execution_date</code>/<code>data_interval</code> is the spine of correctness:</strong> every task gets
+  the logical date via Jinja (<code>{{ ds }}</code>), which is what makes <code>airflow dags
+  backfill</code> equal "re-run history safely" (§13's parameter-change-not-code-change).</li>
+</ul>
+<h2 id="2-build">2. Build<a class="headerlink" href="#2-build" title="Link to this section">#</a></h2>
+<h3 id="21-local-airflow-dockerdocker-composeairflowyml">2.1 Local Airflow — <code>docker/docker-compose.airflow.yml</code><a class="headerlink" href="#21-local-airflow-dockerdocker-composeairflowyml" title="Link to this section">#</a></h3>
+<p>Use the official Airflow 2.9+ compose (LocalExecutor, Postgres metadata DB),
+mounting <code>./dags</code> and your wheel. Add <code>PF_*</code> env vars. <code>docker compose up</code> →
+http://localhost:8082. (Composer would cost ~$300+/mo idle; local is where DE
+teams actually develop DAGs anyway. You'll do a Composer excursion in 2.6.)</p>
+<h3 id="22-the-factory-dagsdag_factorypy">2.2 The factory — <code>dags/dag_factory.py</code><a class="headerlink" href="#22-the-factory-dagsdag_factorypy" title="Link to this section">#</a></h3>
+<div class="highlight"><pre><span></span><code><span class="sd">&quot;&quot;&quot;Generates one standardized DAG per active dataset from registry_snapshot.json.</span>
+
+<span class="sd">DAG shape (charter §5):</span>
+<span class="sd">  preflight &gt;&gt; ingest_raw &gt;&gt; dq_raw &gt;&gt; promote_odp &gt;&gt; promote_fdp</span>
+<span class="sd">            &gt;&gt; dq_fdp &gt;&gt; build_cdp &gt;&gt; reconcile &gt;&gt; publish</span>
+<span class="sd">DQ/recon tasks are no-op stubs until Phase 8 flips them on. Tenant → pool.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span><span class="o">,</span><span class="w"> </span><span class="nn">pendulum</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">airflow</span><span class="w"> </span><span class="kn">import</span> <span class="n">DAG</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">airflow.operators.python</span><span class="w"> </span><span class="kn">import</span> <span class="n">PythonOperator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">airflow.providers.google.cloud.operators.dataproc</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataprocCreateBatchOperator</span>
+
+<span class="n">SNAPSHOT</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">((</span><span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="s2">&quot;registry_snapshot.json&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">())</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">make_dag</span><span class="p">(</span><span class="n">ds_cfg</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DAG</span><span class="p">:</span>
+    <span class="n">dag</span> <span class="o">=</span> <span class="n">DAG</span><span class="p">(</span>
+        <span class="n">dag_id</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;pf_</span><span class="si">{</span><span class="n">ds_cfg</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+        <span class="n">schedule</span><span class="o">=</span><span class="n">ds_cfg</span><span class="p">[</span><span class="s2">&quot;schedule_cron&quot;</span><span class="p">],</span>
+        <span class="n">start_date</span><span class="o">=</span><span class="n">pendulum</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="n">ds_cfg</span><span class="p">[</span><span class="s2">&quot;start_date&quot;</span><span class="p">]),</span>
+        <span class="n">catchup</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>                      <span class="c1"># backfills are explicit, never accidental</span>
+        <span class="n">max_active_runs</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>                  <span class="c1"># serialize per-dataset (SCD2 must not race itself)</span>
+        <span class="n">default_args</span><span class="o">=</span><span class="p">{</span>
+            <span class="s2">&quot;retries&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+            <span class="s2">&quot;retry_delay&quot;</span><span class="p">:</span> <span class="n">pendulum</span><span class="o">.</span><span class="n">duration</span><span class="p">(</span><span class="n">minutes</span><span class="o">=</span><span class="mi">5</span><span class="p">),</span>
+            <span class="s2">&quot;retry_exponential_backoff&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">&quot;execution_timeout&quot;</span><span class="p">:</span> <span class="n">pendulum</span><span class="o">.</span><span class="n">duration</span><span class="p">(</span><span class="n">hours</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span>
+            <span class="s2">&quot;sla&quot;</span><span class="p">:</span> <span class="n">pendulum</span><span class="o">.</span><span class="n">duration</span><span class="p">(</span><span class="n">minutes</span><span class="o">=</span><span class="n">ds_cfg</span><span class="p">[</span><span class="s2">&quot;sla_freshness_minutes&quot;</span><span class="p">]),</span>
+        <span class="p">},</span>
+        <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;pipeforge&quot;</span><span class="p">,</span> <span class="n">ds_cfg</span><span class="p">[</span><span class="s2">&quot;tenant&quot;</span><span class="p">],</span> <span class="n">ds_cfg</span><span class="p">[</span><span class="s2">&quot;load_pattern&quot;</span><span class="p">]],</span>
+    <span class="p">)</span>
+    <span class="k">with</span> <span class="n">dag</span><span class="p">:</span>
+        <span class="n">ingest</span> <span class="o">=</span> <span class="n">PythonOperator</span><span class="p">(</span>
+            <span class="n">task_id</span><span class="o">=</span><span class="s2">&quot;ingest_raw&quot;</span><span class="p">,</span>
+            <span class="n">python_callable</span><span class="o">=</span><span class="n">run_ingest</span><span class="p">,</span>      <span class="c1"># thin wrapper: pipeforge ingest --dataset X --execution-date {{ ds }}</span>
+            <span class="n">op_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;dataset&quot;</span><span class="p">:</span> <span class="n">ds_cfg</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span> <span class="s2">&quot;execution_date&quot;</span><span class="p">:</span> <span class="s2">&quot;{{ ds }}&quot;</span><span class="p">},</span>
+            <span class="n">pool</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;tenant_</span><span class="si">{</span><span class="n">ds_cfg</span><span class="p">[</span><span class="s1">&#39;tenant&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">promote_odp</span> <span class="o">=</span> <span class="n">DataprocCreateBatchOperator</span><span class="p">(</span>          <span class="c1"># submit; don&#39;t process (§31)</span>
+            <span class="n">task_id</span><span class="o">=</span><span class="s2">&quot;promote_odp&quot;</span><span class="p">,</span>
+            <span class="n">batch</span><span class="o">=</span><span class="n">standardize_batch_spec</span><span class="p">(</span><span class="n">ds_cfg</span><span class="p">,</span> <span class="s2">&quot;{{ ds }}&quot;</span><span class="p">),</span>
+            <span class="n">region</span><span class="o">=</span><span class="s2">&quot;us-central1&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="o">...</span>
+        <span class="n">chain</span><span class="p">(</span><span class="n">preflight</span><span class="p">,</span> <span class="n">ingest</span><span class="p">,</span> <span class="n">dq_raw</span><span class="p">,</span> <span class="n">promote_odp</span><span class="p">,</span> <span class="n">promote_fdp</span><span class="p">,</span> <span class="n">dq_fdp</span><span class="p">,</span>
+              <span class="n">build_cdp</span><span class="p">,</span> <span class="n">reconcile</span><span class="p">,</span> <span class="n">publish</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">dag</span>
+
+<span class="k">for</span> <span class="n">cfg</span> <span class="ow">in</span> <span class="n">SNAPSHOT</span><span class="p">[</span><span class="s2">&quot;datasets&quot;</span><span class="p">]:</span>
+    <span class="k">if</span> <span class="n">cfg</span><span class="p">[</span><span class="s2">&quot;active&quot;</span><span class="p">]:</span>
+        <span class="nb">globals</span><span class="p">()[</span><span class="sa">f</span><span class="s2">&quot;pf_</span><span class="si">{</span><span class="n">cfg</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">make_dag</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>     <span class="c1"># module-level = discoverable</span>
+</code></pre></div>
+<p>Details that matter (each is an interview point):
+- <strong><code>catchup=False</code> + explicit backfill</strong> — accidental catchup on a new DAG with a
+  2-year start_date is a classic self-inflicted incident.
+- <strong><code>max_active_runs=1</code></strong> — MERGE-based FDP jobs must not run concurrently for
+  overlapping keys; serialization is the cheap correctness fix.
+- <strong>Pools per tenant</strong> — your first multi-tenancy control (fairness; one tenant's
+  backfill can't starve another). Expanded in Phase 12.
+- File-drop datasets get a <strong>deferrable GCS sensor</strong> (<code>GCSObjectsWithPrefixExistenceSensorAsync</code>)
+  as preflight — deferrable = doesn't occupy a worker slot while waiting (know why).
+- Streaming datasets get a different template: a sensor-style DAG that <em>monitors</em>
+  the Kafka consumer (lag threshold → alert) rather than moving data.</p>
+<h3 id="23-audit-lineage-wiring">2.3 Audit + lineage wiring<a class="headerlink" href="#23-audit-lineage-wiring" title="Link to this section">#</a></h3>
+<p>Task callbacks (<code>on_success_callback</code> / <code>on_failure_callback</code> / <code>sla_miss_callback</code>)
+write to <code>pipeline_run</code> (adding <code>airflow_dag_id</code>, <code>airflow_run_id</code>) — the ⑧ audit
+model now captures orchestration reality. The <code>publish</code> task stamps dataset
+freshness in the registry (consumed by the Phase 10 SLA monitor and the Phase 11 catalog).</p>
+<h3 id="24-backfill-first-class-pipeforge-backfill">2.4 Backfill, first-class — <code>pipeforge backfill</code><a class="headerlink" href="#24-backfill-first-class-pipeforge-backfill" title="Link to this section">#</a></h3>
+<div class="highlight"><pre><span></span><code>pipeforge<span class="w"> </span>backfill<span class="w"> </span>--dataset<span class="w"> </span>orders<span class="w"> </span>--start<span class="w"> </span><span class="m">2026</span>-06-01<span class="w"> </span>--end<span class="w"> </span><span class="m">2026</span>-06-14<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--layers<span class="w"> </span>odp,fdp,cdp<span class="w"> </span>--parallelism<span class="w"> </span><span class="m">3</span><span class="w"> </span>--priority<span class="w"> </span>recent-first
+</code></pre></div>
+<p>Implementation: either drive <code>airflow dags backfill</code> or (better, and more
+portable) invoke the same task functions directly with the date range, pooled by
+<code>--parallelism</code>, <strong>recent-first</strong> by default (§13: stakeholder-visible dashboards
+heal fastest). It works <em>because</em> every phase before this one was idempotent —
+backfill is where your discipline pays out. Log a <code>pipeline_run</code> row per
+(date, layer) like any other run; notify downstream (print the §13 mantra:
+"never backfill silently").</p>
+<h3 id="25-failure-handling-hardening">2.5 Failure-handling hardening<a class="headerlink" href="#25-failure-handling-hardening" title="Link to this section">#</a></h3>
+<ul>
+<li>Alerting callback → Slack webhook (or just structured log locally) containing:
+  DAG, task, execution_date, error, retry count, <strong>runbook link</strong>, log link — the
+  §9 "debuggable at 3am in 30 seconds" alert.</li>
+<li>Circuit breaker in preflight: if the same source failed ≥3 consecutive runs,
+  short-circuit to <code>source_down</code> state and alert P1 instead of hammering (§8 failure domain 1).</li>
+</ul>
+<h3 id="26-composer-excursion-half-a-day-then-destroy">2.6 Composer excursion (half a day, then destroy)<a class="headerlink" href="#26-composer-excursion-half-a-day-then-destroy" title="Link to this section">#</a></h3>
+<p>Terraform a <code>composer-3</code> small environment <strong>or</strong> just read M09 + price it out and
+write <code>docs/adr/0004-airflow-hosting.md</code>: local/self-managed vs Composer vs
+Astronomer/MWAA — cost, upgrade burden, IAM integration, DAG deploy story
+(<code>gcloud storage cp dags/ …/dags/</code>). If you create it, upload your factory,
+watch it run once, <strong>destroy it the same day</strong>. The ADR is the deliverable; the
+$15 of Composer time is optional.</p>
+<h3 id="27-ship-it">2.7 Ship it<a class="headerlink" href="#27-ship-it" title="Link to this section">#</a></h3>
+<p>Tests: factory produces a DAG per active dataset with correct schedule/pool/tags
+(<code>DagBag(include_examples=False).import_errors == {}</code> — the classic Airflow CI
+test), Jinja dates land in op_kwargs, disabled dataset → no DAG. Tag <code>v0.7.0</code>.</p>
+<h2 id="3-prove-it">3. Prove it<a class="headerlink" href="#3-prove-it" title="Link to this section">#</a></h2>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <code>docker compose up</code> → all NovaMart DAGs visible, zero import errors, parse time &lt; 2s (no DB at parse!)</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Trigger <code>pf_orders</code> for yesterday: all 9 tasks green; <code>pipeline_run</code> has one row per layer with matching <code>airflow_run_id</code></li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Register a brand-new dataset (any public CSV) end-to-end: <code>pipeforge register …</code> → export snapshot → <strong>DAG appears and runs with zero new Python</strong> ← this is the money demo</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> 14-day backfill completes; spot-check 3 dates for idempotency (counts unchanged on re-run)</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Kill a Dataproc task mid-run: retry fires with backoff, audit shows attempt trail</li>
+</ul>
+<h2 id="4-break-it">4. Break it<a class="headerlink" href="#4-break-it" title="Link to this section">#</a></h2>
+<p>Set <code>catchup=True</code> on a copy of a DAG with <code>start_date</code> 60 days ago and watch the
+scheduler queue 60 runs (in a scratch dataset). Kill it, clean up, then write
+<code>docs/incidents/007-accidental-catchup.md</code> — including how pools and
+<code>max_active_runs</code> contained the blast radius.</p>
+<h2 id="5-interview-corner">5. Interview corner<a class="headerlink" href="#5-interview-corner" title="Link to this section">#</a></h2>
+<ul>
+<li><strong>Q7 is now fully yours.</strong> Rehearse the 45-min "ETL framework for 100 sources"
+  answer: registry → contract ceremony → parameter-driven engines → DAG factory →
+  uniform DQ/audit → onboarding = config. You can demo it live.</li>
+<li><em>"How do you do backfills?"</em> → parameterized dates, idempotent writes,
+  recent-first, capped parallelism, notify downstream (§13 verbatim — but from experience).</li>
+<li><em>"Airflow limits?"</em> — parse-time bottleneck (hence snapshot file), no streaming
+  (hence the monitor-DAG pattern), XCom size (pass GCS paths, not data) (§31).</li>
+<li><em>"Airflow vs Dagster?"</em> — you can now argue asset-orientation honestly: your
+  YAML models + registry ARE software-defined assets; Dagster makes that the
+  first-class primitive (§38).</li>
+</ul>
+<h2 id="6-stretch-goals">6. Stretch goals<a class="headerlink" href="#6-stretch-goals" title="Link to this section">#</a></h2>
+<ul>
+<li>Airflow <strong>Datasets</strong> (data-aware scheduling): <code>build_cdp</code> publishes a Dataset;
+  a downstream "ML features" DAG is triggered by it instead of cron.</li>
+<li>Add a <code>pipeforge doctor</code> command: checks registry↔DAG snapshot drift, orphaned DAGs, missing contracts.</li>
+<li>OpenLineage Airflow provider (preview of Phase 9): task-level lineage events emitted automatically.</li>
+</ul>
+        <nav class="pager">
+          <a class="prev" href="phase-06.html"><span class="dir">← Previous</span><span class="label">06 · BigQuery Serving</span></a>
+          <a class="next" href="phase-08.html"><span class="dir">Next →</span><span class="label">08 · Quality &amp; Recon</span></a>
+        </nav>
+        <footer class="page-foot">
+          Generated from <a href="https://github.com/thesandx/courses/blob/master/data_platform_mastery/phase_07_orchestration/README.md"><code>data_platform_mastery/phase_07_orchestration/README.md</code></a> ·
+          Part of the <a href="index.html">Data Platform Mastery</a> course.
+        </footer>
+      </main>
+      <aside class="toc-rail"><div class="toc-title">On this page</div>
+<a href="#1-concepts">1. Concepts</a>
+<a href="#2-build">2. Build</a>
+<a href="#3-prove-it">3. Prove it</a>
+<a href="#4-break-it">4. Break it</a>
+<a href="#5-interview-corner">5. Interview corner</a>
+<a href="#6-stretch-goals">6. Stretch goals</a></aside>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById("themeBtn").addEventListener("click", function () {
+    var cur = document.documentElement.getAttribute("data-theme");
+    localStorage.setItem("dpm-theme", cur === "dark" ? "light" : "dark");
+    location.reload();   // simplest way to re-render mermaid + pygments in the new theme
+  });
+  document.getElementById("menuBtn").addEventListener("click", function () {
+    document.getElementById("sidebar").classList.toggle("open");
+  });
+</script>
+</body>
+</html>

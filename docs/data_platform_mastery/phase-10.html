@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 10 — Observability &amp; FinOps (v0.10.0) · Data Platform Mastery</title>
+<meta name="description" content="Data Platform Mastery — build an open-source metadata-driven ETL platform on GCP.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚒️</text></svg>">
+<link rel="stylesheet" href="style.css">
+<script>
+  (function () {
+    var t = localStorage.getItem("dpm-theme");
+    if (!t) t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+</head>
+<body>
+<button class="menu-btn" id="menuBtn" aria-label="Toggle navigation">☰</button>
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">⚒️</span>
+      <span>
+        <span class="brand-title">Data Platform Mastery</span>
+        <span class="brand-sub">Build PipeForge on GCP</span>
+      </span>
+    </a>
+    <nav><div class="nav-group">Start Here</div>
+<a class="nav-item" href="index.html">Course Overview</a>
+<a class="nav-item" href="project-charter.html">Project Charter</a>
+<a class="nav-item" href="interview-map.html">Interview Map</a>
+<div class="nav-group">Build Phases</div>
+<a class="nav-item" href="phase-00.html">00 · Orientation</a>
+<a class="nav-item" href="phase-01.html">01 · Foundation<span class="tag">v0.1.0</span></a>
+<a class="nav-item" href="phase-02.html">02 · Metadata Core<span class="tag">v0.2.0</span></a>
+<a class="nav-item" href="phase-03.html">03 · Batch Ingestion<span class="tag">v0.3.0</span></a>
+<a class="nav-item" href="phase-04.html">04 · Streaming &amp; Kafka<span class="tag">v0.4.0</span></a>
+<a class="nav-item" href="phase-05.html">05 · Spark Processing<span class="tag">v0.5.0</span></a>
+<a class="nav-item" href="phase-06.html">06 · BigQuery Serving<span class="tag">v0.6.0</span></a>
+<a class="nav-item" href="phase-07.html">07 · Orchestration<span class="tag">v0.7.0</span></a>
+<a class="nav-item" href="phase-08.html">08 · Quality &amp; Recon<span class="tag">v0.8.0</span></a>
+<a class="nav-item" href="phase-09.html">09 · Governance<span class="tag">v0.9.0</span></a>
+<a class="nav-item active" href="phase-10.html">10 · Observability &amp; FinOps<span class="tag">v0.10.0</span></a>
+<a class="nav-item" href="phase-11.html">11 · Streamlit Control Plane<span class="tag">v0.11.0</span></a>
+<a class="nav-item" href="phase-12.html">12 · Platform APIs<span class="tag">v0.12.0</span></a>
+<a class="nav-item" href="phase-13.html">13 · Scale &amp; Hardening<span class="tag">v0.13.0</span></a>
+<a class="nav-item" href="phase-14.html">14 · Open-Source Launch<span class="tag">v1.0.0</span></a>
+<div class="nav-group">Endgame</div>
+<a class="nav-item" href="interview-gauntlet.html">Interview Gauntlet<span class="tag">🎯</span></a></nav>
+    <div class="sidebar-foot">
+      <button id="themeBtn" class="theme-btn" title="Toggle dark mode">🌗 Theme</button>
+      <a href="https://github.com/thesandx/courses/tree/master/data_platform_mastery">GitHub ↗</a>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="crumbs">
+      <span class="crumb-group">Build Phases</span>
+      <span class="crumb-sep">/</span>
+      <span class="crumb-page">10 · Observability &amp; FinOps</span>
+      <span class="badge">v0.10.0</span>
+    </header>
+    <div class="content-wrap">
+      <main class="content">
+<h1 id="phase-10-observability-finops-v0100">Phase 10 — Observability &amp; FinOps (<code>v0.10.0</code>)<a class="headerlink" href="#phase-10-observability-finops-v0100" title="Link to this section">#</a></h1>
+<blockquote>
+<p><strong>Mission:</strong> make the platform's health — and its bill — visible and alarmed.
+Freshness SLAs published and enforced, the three monitoring pillars wired to
+alert tiers, structured logs in Cloud Logging, and a billing-export FinOps
+pipeline that is itself built on PipeForge (the platform monitoring itself is
+the elegance move).</p>
+</blockquote>
+<h2 id="1-concepts">1. Concepts<a class="headerlink" href="#1-concepts" title="Link to this section">#</a></h2>
+<p>Read notes <strong>§9 (monitoring, alerting &amp; SLAs)</strong> — this phase is that section,
+implemented; plus <strong>§15 (cost)</strong>; GCP <strong>M12 (reliability, monitoring &amp; cost)</strong>.</p>
+<ul>
+<li><strong>A green DAG means the code ran — not that the data is right, complete, or
+  fresh (§9).</strong> Hence three independent pillars: pipeline health (Airflow +
+  <code>pipeline_run</code>), data quality (<code>dq_result</code> trends — built in P08), and
+  <strong>freshness</strong> (checked from the <em>serving</em> side, independent of the pipeline
+  that was supposed to produce it — independence is the point: a dead scheduler
+  can't report itself dead).</li>
+<li><strong>SLI → SLO → SLA (§9):</strong> SLI = <code>minutes_since_max_business_ts</code>; SLO = internal
+  target (06:00); SLA = published commitment (08:00). The gap is your reaction buffer.</li>
+<li><strong>Combined freshness+completeness SLA (§17):</strong> "orders CDP by 06:00 with ≥99.5%
+  of source records; 99.9% by noon" — you can <em>compute</em> completeness because
+  manifests (P03) and recon (P08) exist. Most teams can't; say why you can.</li>
+<li><strong>FinOps:</strong> the bill is a dataset. Export billing → BigQuery → model it with
+  your own Dim/Fact builder → alert on anomalies with your own DQ engine. Cost
+  observability uses the same three-pillar thinking as data observability.</li>
+</ul>
+<h2 id="2-build">2. Build<a class="headerlink" href="#2-build" title="Link to this section">#</a></h2>
+<h3 id="21-the-freshness-monitor-the-9-check-that-catches-everything">2.1 The freshness monitor (the §9 "check that catches everything")<a class="headerlink" href="#21-the-freshness-monitor-the-9-check-that-catches-everything" title="Link to this section">#</a></h3>
+<p>A tiny standalone Cloud Run <strong>job</strong> (deliberately outside Airflow), scheduled by
+Cloud Scheduler every 15 min:</p>
+<div class="highlight"><pre><span></span><code><span class="c1">-- one row per CDP/FDP product, driven from the registry&#39;s sla_freshness_minutes</span>
+<span class="k">SELECT</span><span class="w"> </span><span class="n">d</span><span class="p">.</span><span class="n">name</span><span class="p">,</span>
+<span class="w">       </span><span class="n">TIMESTAMP_DIFF</span><span class="p">(</span><span class="k">CURRENT_TIMESTAMP</span><span class="p">(),</span><span class="w"> </span><span class="n">f</span><span class="p">.</span><span class="n">max_business_ts</span><span class="p">,</span><span class="w"> </span><span class="k">MINUTE</span><span class="p">)</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">staleness_min</span><span class="p">,</span>
+<span class="w">       </span><span class="n">d</span><span class="p">.</span><span class="n">sla_freshness_minutes</span><span class="p">,</span>
+<span class="w">       </span><span class="n">TIMESTAMP_DIFF</span><span class="p">(...)</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="n">d</span><span class="p">.</span><span class="n">sla_freshness_minutes</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">breached</span>
+<span class="k">FROM</span><span class="w"> </span><span class="n">registry_datasets</span><span class="w"> </span><span class="n">d</span><span class="w"> </span><span class="k">JOIN</span><span class="w"> </span><span class="n">freshness_probe</span><span class="w"> </span><span class="n">f</span><span class="w"> </span><span class="k">USING</span><span class="w"> </span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+</code></pre></div>
+<p>Breaches write to <code>sla_breach</code> + fire alerts: <strong>freshness breaches page the
+stakeholder too, not just the DE</strong> (§9 routing — they must know before they trust
+a stale dashboard).</p>
+<h3 id="22-cloud-monitoring-wiring-terraform-monitoring-module">2.2 Cloud Monitoring wiring (Terraform <code>monitoring</code> module)<a class="headerlink" href="#22-cloud-monitoring-wiring-terraform-monitoring-module" title="Link to this section">#</a></h3>
+<ul>
+<li><strong>Log-based metrics</strong> from your structlog JSON: <code>pf_run_failed{dataset,layer}</code>,
+  <code>pf_dq_block{dataset}</code>, <code>pf_recon_delta_pct{dataset}</code>, <code>pf_kafka_lag{partition}</code>
+  (pushed by the lag checker).</li>
+<li><strong>Alert policies mapped to the §9 tier table</strong> — implement the table literally:</li>
+</ul>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Tier</th>
+<th>Condition</th>
+<th>Channel</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>P0</td>
+<td>SLA breach on a Tier-1 product; recon delta &gt; 1% on revenue</td>
+<td>pager (email/SMS in dev)</td>
+</tr>
+<tr>
+<td>P1</td>
+<td>DQ block fired; run failed after final retry; Kafka lag &gt; 50% retention</td>
+<td>pager + Slack</td>
+</tr>
+<tr>
+<td>P2</td>
+<td>DQ quarantine &gt; threshold; staleness &gt; 50% of SLA</td>
+<td>Slack</td>
+</tr>
+<tr>
+<td>P3</td>
+<td>DLQ non-empty; cost anomaly &lt; $5</td>
+<td>daily digest</td>
+</tr>
+</tbody>
+</table></div>
+<ul>
+<li>Every alert body carries: dataset, layer, execution_date, observed vs threshold,
+  runbook link (<code>docs/runbooks/&lt;alert&gt;.md</code> — write the three most likely ones now).
+  The §9 standard: <strong>debuggable in 30 seconds at 3 a.m.</strong></li>
+<li>One <strong>dashboard</strong> (Terraform <code>google_monitoring_dashboard</code>): runs by status,
+  freshness heatmap, DQ pass rate, Kafka lag, daily cost.</li>
+</ul>
+<h3 id="23-finops-pipeline-dogfood">2.3 FinOps pipeline (dogfood!)<a class="headerlink" href="#23-finops-pipeline-dogfood" title="Link to this section">#</a></h3>
+<ol>
+<li>Terraform: enable <strong>billing export to BigQuery</strong> (dataset <code>billing</code>).</li>
+<li>Register it as a PipeForge dataset (source kind <code>db</code>, pattern <code>full</code> — it's
+   just another source!). Onboarding takes minutes now; notice that.</li>
+<li>CDP model <code>agg_daily_cost</code> (service × sku × labels.day) + DQ rule
+   <code>VolumeAnomaly</code> on daily cost (±2σ) — a cost spike is a data anomaly, same math.</li>
+<li>Answer with SQL, and keep the answers in <code>docs/finops.md</code>:</li>
+<li>$ per service per week; $ per <strong>pipeline</strong> (join labels/audit)</li>
+<li>BigQuery: top-10 queries by bytes billed (INFORMATION_SCHEMA.JOBS) — find
+     your own worst query and fix it (partition filter? rollup? clustering?)</li>
+<li>The headline number: <strong>cost per 1M rows landed→served</strong>, trended weekly.
+     Owning a unit-economics number for your platform is a staff-level habit (§15).</li>
+</ol>
+<h3 id="24-structured-logging-polish">2.4 Structured logging polish<a class="headerlink" href="#24-structured-logging-polish" title="Link to this section">#</a></h3>
+<p><code>run_context</code> already logs JSON with dataset/layer/execution_date/run_id on every
+line (P01/P02). Verify Cloud Logging groups by <code>jsonPayload.run_id</code>, build one
+saved query per failure mode. When a Dataproc job fails, you should reach the
+root-cause log line in ≤3 clicks — practice it now, not during an incident.</p>
+<h3 id="25-error-budget-mini-exercise-m12">2.5 Error budget mini-exercise (M12)<a class="headerlink" href="#25-error-budget-mini-exercise-m12" title="Link to this section">#</a></h3>
+<p>Define availability for <code>pf_orders</code>: "fraction of days the 06:00 SLO was met,
+trailing 30 days; target 99%". That's ~1 blown morning per quarter. Write the
+policy: budget exhausted → freeze feature work, spend the sprint on reliability.
+One paragraph in <code>docs/slo.md</code> — but it's the paragraph that sounds like a staff
+engineer in interviews.</p>
+<h3 id="26-ship-it">2.6 Ship it<a class="headerlink" href="#26-ship-it" title="Link to this section">#</a></h3>
+<p>Tag <code>v0.10.0</code>.</p>
+<h2 id="3-prove-it">3. Prove it<a class="headerlink" href="#3-prove-it" title="Link to this section">#</a></h2>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Stop the orders generator for a day → freshness monitor pages within 15 min of SLO breach <strong>without Airflow's involvement</strong> (kill the scheduler to prove independence)</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Alert body: dataset, dates, observed/threshold, runbook link all present</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Dashboard shows: green runs, one red DQ block (replay the Phase-8 drill), Kafka lag draining, daily cost line</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <code>agg_daily_cost</code> populated by a normal PipeForge DAG; cost anomaly rule green</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> You can state your platform's cost per 1M rows and its top cost driver from memory</li>
+</ul>
+<h2 id="4-break-it">4. Break it<a class="headerlink" href="#4-break-it" title="Link to this section">#</a></h2>
+<p><strong>Alert-fatigue simulation:</strong> set the freshness threshold to 5 minutes for every
+dataset and let it flap for an afternoon. Count the pages. Feel the §9 lesson
+("alert fatigue is the #1 reason incidents go undetected"), then recalibrate:
+page only P0/P1, digest the rest, delete one alert entirely. Document the
+before/after page counts in <code>docs/incidents/011-alert-fatigue.md</code>.</p>
+<h2 id="5-interview-corner">5. Interview corner<a class="headerlink" href="#5-interview-corner" title="Link to this section">#</a></h2>
+<ul>
+<li>Deliver the <strong>90-second monitoring pitch (§9)</strong> using your own stack: "three
+  pillars… freshness checked serving-side every 15 min, independent of the
+  pipeline… SLO 06:00, SLA 08:00, the gap is my reaction buffer… P0 pages
+  stakeholders on staleness because trust in the dashboard is the product."</li>
+<li><em>"How do you keep platform costs down?"</em> — from your own FinOps data: billing
+  export → cost per pipeline → top query fixed (with the before/after bytes) →
+  budget alerts → serverless/auto-suspend everywhere (§15's quick wins, lived).</li>
+<li><em>"What's your SLA for the warehouse?"</em> — combined freshness+completeness,
+  because you can actually measure completeness (manifests + recon). That answer
+  is rarer than you think.</li>
+</ul>
+<h2 id="6-stretch-goals">6. Stretch goals<a class="headerlink" href="#6-stretch-goals" title="Link to this section">#</a></h2>
+<ul>
+<li>OpenTelemetry traces across ingest→promote→build (span per layer) — see one order's day as a trace.</li>
+<li>Anomaly detection on cost with BigQuery ML (<code>ARIMA_PLUS</code> forecast ± band) instead of ±2σ (M11).</li>
+<li>Publish a public status page (Streamlit page reading <code>sla_breach</code>) — radical transparency, great README material.</li>
+</ul>
+        <nav class="pager">
+          <a class="prev" href="phase-09.html"><span class="dir">← Previous</span><span class="label">09 · Governance</span></a>
+          <a class="next" href="phase-11.html"><span class="dir">Next →</span><span class="label">11 · Streamlit Control Plane</span></a>
+        </nav>
+        <footer class="page-foot">
+          Generated from <a href="https://github.com/thesandx/courses/blob/master/data_platform_mastery/phase_10_observability_finops/README.md"><code>data_platform_mastery/phase_10_observability_finops/README.md</code></a> ·
+          Part of the <a href="index.html">Data Platform Mastery</a> course.
+        </footer>
+      </main>
+      <aside class="toc-rail"><div class="toc-title">On this page</div>
+<a href="#1-concepts">1. Concepts</a>
+<a href="#2-build">2. Build</a>
+<a href="#3-prove-it">3. Prove it</a>
+<a href="#4-break-it">4. Break it</a>
+<a href="#5-interview-corner">5. Interview corner</a>
+<a href="#6-stretch-goals">6. Stretch goals</a></aside>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById("themeBtn").addEventListener("click", function () {
+    var cur = document.documentElement.getAttribute("data-theme");
+    localStorage.setItem("dpm-theme", cur === "dark" ? "light" : "dark");
+    location.reload();   // simplest way to re-render mermaid + pygments in the new theme
+  });
+  document.getElementById("menuBtn").addEventListener("click", function () {
+    document.getElementById("sidebar").classList.toggle("open");
+  });
+</script>
+</body>
+</html>

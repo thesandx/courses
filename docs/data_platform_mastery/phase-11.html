@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 11 — The Streamlit Control Plane (v0.11.0) · Data Platform Mastery</title>
+<meta name="description" content="Data Platform Mastery — build an open-source metadata-driven ETL platform on GCP.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚒️</text></svg>">
+<link rel="stylesheet" href="style.css">
+<script>
+  (function () {
+    var t = localStorage.getItem("dpm-theme");
+    if (!t) t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+</head>
+<body>
+<button class="menu-btn" id="menuBtn" aria-label="Toggle navigation">☰</button>
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">⚒️</span>
+      <span>
+        <span class="brand-title">Data Platform Mastery</span>
+        <span class="brand-sub">Build PipeForge on GCP</span>
+      </span>
+    </a>
+    <nav><div class="nav-group">Start Here</div>
+<a class="nav-item" href="index.html">Course Overview</a>
+<a class="nav-item" href="project-charter.html">Project Charter</a>
+<a class="nav-item" href="interview-map.html">Interview Map</a>
+<div class="nav-group">Build Phases</div>
+<a class="nav-item" href="phase-00.html">00 · Orientation</a>
+<a class="nav-item" href="phase-01.html">01 · Foundation<span class="tag">v0.1.0</span></a>
+<a class="nav-item" href="phase-02.html">02 · Metadata Core<span class="tag">v0.2.0</span></a>
+<a class="nav-item" href="phase-03.html">03 · Batch Ingestion<span class="tag">v0.3.0</span></a>
+<a class="nav-item" href="phase-04.html">04 · Streaming &amp; Kafka<span class="tag">v0.4.0</span></a>
+<a class="nav-item" href="phase-05.html">05 · Spark Processing<span class="tag">v0.5.0</span></a>
+<a class="nav-item" href="phase-06.html">06 · BigQuery Serving<span class="tag">v0.6.0</span></a>
+<a class="nav-item" href="phase-07.html">07 · Orchestration<span class="tag">v0.7.0</span></a>
+<a class="nav-item" href="phase-08.html">08 · Quality &amp; Recon<span class="tag">v0.8.0</span></a>
+<a class="nav-item" href="phase-09.html">09 · Governance<span class="tag">v0.9.0</span></a>
+<a class="nav-item" href="phase-10.html">10 · Observability &amp; FinOps<span class="tag">v0.10.0</span></a>
+<a class="nav-item active" href="phase-11.html">11 · Streamlit Control Plane<span class="tag">v0.11.0</span></a>
+<a class="nav-item" href="phase-12.html">12 · Platform APIs<span class="tag">v0.12.0</span></a>
+<a class="nav-item" href="phase-13.html">13 · Scale &amp; Hardening<span class="tag">v0.13.0</span></a>
+<a class="nav-item" href="phase-14.html">14 · Open-Source Launch<span class="tag">v1.0.0</span></a>
+<div class="nav-group">Endgame</div>
+<a class="nav-item" href="interview-gauntlet.html">Interview Gauntlet<span class="tag">🎯</span></a></nav>
+    <div class="sidebar-foot">
+      <button id="themeBtn" class="theme-btn" title="Toggle dark mode">🌗 Theme</button>
+      <a href="https://github.com/thesandx/courses/tree/master/data_platform_mastery">GitHub ↗</a>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="crumbs">
+      <span class="crumb-group">Build Phases</span>
+      <span class="crumb-sep">/</span>
+      <span class="crumb-page">11 · Streamlit Control Plane</span>
+      <span class="badge">v0.11.0</span>
+    </header>
+    <div class="content-wrap">
+      <main class="content">
+<h1 id="phase-11-the-streamlit-control-plane-v0110">Phase 11 — The Streamlit Control Plane (<code>v0.11.0</code>)<a class="headerlink" href="#phase-11-the-streamlit-control-plane-v0110" title="Link to this section">#</a></h1>
+<blockquote>
+<p><strong>Mission:</strong> give the platform a face. A multi-page Streamlit app — the "UI: DQ
+Scorecard / Search Catalog / Build Job / Operations" block from the reference
+architecture — that turns 10 phases of backend into something a stakeholder can
+<em>see</em>: search the catalog, read a dataset's health, watch pipelines run, trigger
+a backfill, and onboard a brand-new source through a wizard. This app is also
+your interview demo and the screenshots in your README.</p>
+</blockquote>
+<h2 id="1-concepts">1. Concepts<a class="headerlink" href="#1-concepts" title="Link to this section">#</a></h2>
+<ul>
+<li><strong>The control plane reads metadata, never the data plane directly.</strong> Every page
+  is a query against the registry/audit/DQ/recon/lineage tables (Cloud SQL) plus
+  the <code>cdp.dq_scorecard</code> and <code>agg_*</code> tables (BigQuery). If a page needs raw data,
+  the design is wrong — this discipline is why the app stays fast and safe.</li>
+<li><strong>Why a UI matters for a platform (Q7/Q15/§25):</strong> self-serve is the difference
+  between "a framework" and "a platform". The mesh pillar "self-serve data
+  platform" concretely means: a domain engineer onboards a source <em>without
+  talking to you</em>. The wizard is that promise.</li>
+<li>Streamlit's tradeoff (say it honestly in interviews): fastest possible
+  data-team UI, fine for internal tools at modest concurrency; you'd reach for
+  React+API at product scale. Knowing the boundary is the senior signal.</li>
+</ul>
+<h2 id="2-build">2. Build<a class="headerlink" href="#2-build" title="Link to this section">#</a></h2>
+<h3 id="21-app-skeleton-ui">2.1 App skeleton — <code>ui/</code><a class="headerlink" href="#21-app-skeleton-ui" title="Link to this section">#</a></h3>
+<div class="highlight"><pre><span></span><code>ui/
+├── Home.py                      # platform overview: datasets, runs today, SLA status, cost sparkline
+├── pages/
+│   ├── 1_🔍_Catalog.py          # search + dataset detail
+│   ├── 2_✅_DQ_Scorecard.py     # the ④ scorecard
+│   ├── 3_⚙️_Operations.py       # runs, failures, backfill trigger
+│   ├── 4_🧬_Lineage.py          # graph from lineage_edge
+│   ├── 5_🧾_Recon.py            # reconciliation results
+│   └── 6_➕_Onboard_Source.py   # the wizard
+├── lib/                         # cached data access (st.cache_data over repo calls)
+└── Dockerfile
+</code></pre></div>
+<p>Data access rules: <code>st.cache_data(ttl=60)</code> on every query function; a read-only
+DB role for the UI (<code>pf_ui_readonly</code> — least privilege applies to your own apps
+too); BigQuery via the builder's client with <code>maximum_bytes_billed</code> set. </p>
+<h3 id="22-the-pages-what-done-looks-like">2.2 The pages (what "done" looks like)<a class="headerlink" href="#22-the-pages-what-done-looks-like" title="Link to this section">#</a></h3>
+<p><strong>Home:</strong> counts (datasets, sources, runs today by status), SLA breach banner,
+7-day cost sparkline, DQ pass-rate big-number. One screen that answers "is the
+platform healthy?" — your Phase 10 pillars, humanized.</p>
+<p><strong>Catalog 🔍 (the ⑪ face):</strong> search box over name/owner/tags/columns (contract
+JSON makes column search free); dataset page shows: description, owner, layer
+badges, freshness ("data complete through 2026-07-16 23:59" — the §17 honesty
+stamp), schema table from the current contract with PII 🔒 badges on tokenized
+columns, SLA, retention policy, last 14 runs as a status strip, and its DQ score.
+This page <strong>is</strong> a data-product card (§25) — it should read like documentation you'd
+be proud to hand an analyst.</p>
+<p><strong>DQ Scorecard ✅:</strong> heatmap dataset × dimension (pass rate, 14 days); drill-down
+to failing rules with observed-vs-threshold history charts and sample bad rows
+(from <code>dq_result.sample_rows</code>). Mirror of the reference architecture's "DQ
+Scorecard" panel.</p>
+<p><strong>Operations ⚙️:</strong> live runs table (auto-refresh), failure drill-down (error,
+attempt count, log link), and two write actions behind a confirm dialog:
+<em>trigger run</em> and <em>backfill date-range</em> (calls the Phase-12 API — for now, the
+Airflow REST API / <code>pipeforge</code> subprocess). Write actions are logged to
+<code>ui_action_log</code> (who clicked what — the audit habit extends to humans).</p>
+<p><strong>Lineage 🧬:</strong> <code>graphviz_chart</code> (or streamlit-agraph) of <code>lineage_edge</code>,
+clickable from the catalog. Select a node → upstream/downstream lists — the §14
+impact-analysis workflow as a picture.</p>
+<p><strong>Recon 🧾:</strong> per dataset/day: left vs right values, delta%, pass/fail history —
+the page you'd pull up in the "are the numbers right?" meeting.</p>
+<p><strong>Onboard Source ➕ (the money page):</strong> a 4-step wizard — source details →
+dataset config (pattern, keys, dates, PII multiselect, SLA) → contract upload
+(validated live, compat-checked against any previous version) → review &amp; submit.
+Submit calls the registration layer, then shows: "✅ registered — DAG <code>pf_&lt;name&gt;</code>
+will appear on next snapshot export." Then demo it end-to-end with a fresh
+public dataset and time yourself. <strong>Under 10 minutes from wizard to queryable CDP
+data is the platform's headline claim — measure it honestly.</strong></p>
+<h3 id="23-deploy-cloud-run">2.3 Deploy — Cloud Run<a class="headerlink" href="#23-deploy-cloud-run" title="Link to this section">#</a></h3>
+<p>Dockerfile (multi-stage, <code>pip install .</code> + <code>streamlit run ui/Home.py</code>), Artifact
+Registry, <code>cloudrun_service</code> Terraform module: min-instances 0 (scale-to-zero ≈
+free), Cloud SQL connector, service account <code>pf-ui</code>, and <strong>do not make it
+public</strong> — either IAP/identity-aware access or <code>--no-allow-unauthenticated</code> +
+<code>gcloud run services proxy</code> for demos. An open control plane with a backfill
+button is an incident generator; saying <em>why</em> it's locked down is part of the demo.</p>
+<h3 id="24-ship-it">2.4 Ship it<a class="headerlink" href="#24-ship-it" title="Link to this section">#</a></h3>
+<p>Screenshot every page into <code>docs/img/</code> (Phase 14 README uses them). Tag <code>v0.11.0</code>.</p>
+<h2 id="3-prove-it">3. Prove it<a class="headerlink" href="#3-prove-it" title="Link to this section">#</a></h2>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Catalog search "email" finds <code>customers</code> via column-level match, PII badge shown</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Scorecard reproduces the Phase-8 incidents visually (the 10%-volume day is red)</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Backfill triggered from Operations actually runs and appears in the runs table</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Lineage page answers "what breaks if <code>dim_customers</code> changes?" in one click</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Wizard onboarding of a never-seen dataset → queryable in CDP in &lt; 10 min, zero code</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> App on Cloud Run, locked down, cold-starts under ~10s, costs ~$0 idle</li>
+</ul>
+<h2 id="4-break-it">4. Break it<a class="headerlink" href="#4-break-it" title="Link to this section">#</a></h2>
+<p>Let the UI's BigQuery queries run without <code>maximum_bytes_billed</code> and add an
+innocent-looking "All time" filter to the scorecard → watch a full-table scan.
+Set the cap, watch the query get rejected, add date-bounded defaults. Small
+lesson, real habit: <strong>UIs are query-cost amplifiers</strong> (50 users × auto-refresh ×
+unbounded scan = the §15 horror story). <code>docs/incidents/012-ui-cost-amplifier.md</code>.</p>
+<h2 id="5-interview-corner">5. Interview corner<a class="headerlink" href="#5-interview-corner" title="Link to this section">#</a></h2>
+<ul>
+<li>The 10-minute live demo script (write it, rehearse it): Home health → catalog
+  card → wizard onboard → DAG appears → run flows → scorecard updates → lineage →
+  backfill. This demo IS your answer to Q7 — bring a laptop to onsites.</li>
+<li><em>"How do analysts discover and trust data?"</em> — catalog card: owner, SLA,
+  freshness stamp, DQ score, lineage, contract. Trust is <em>shown</em>, not asserted.</li>
+<li><em>"How do you expose platform capabilities to other teams?"</em> — UI for humans,
+  API for machines (Phase 12), both over the same metadata core. Clean answer,
+  and literally your architecture.</li>
+</ul>
+<h2 id="6-stretch-goals">6. Stretch goals<a class="headerlink" href="#6-stretch-goals" title="Link to this section">#</a></h2>
+<ul>
+<li>"Playground" page: run a template-guarded query against any CDP product (dropdown, date range) with bytes-billed shown after — teaches users cost visibly.</li>
+<li>Dark-launch a "Request access" button writing to a <code>access_request</code> table — governance workflow seed.</li>
+<li>Usage analytics: log page views into BigQuery, build <code>agg_ui_usage</code> with your own builder (dogfood again).</li>
+</ul>
+        <nav class="pager">
+          <a class="prev" href="phase-10.html"><span class="dir">← Previous</span><span class="label">10 · Observability &amp; FinOps</span></a>
+          <a class="next" href="phase-12.html"><span class="dir">Next →</span><span class="label">12 · Platform APIs</span></a>
+        </nav>
+        <footer class="page-foot">
+          Generated from <a href="https://github.com/thesandx/courses/blob/master/data_platform_mastery/phase_11_streamlit_control_plane/README.md"><code>data_platform_mastery/phase_11_streamlit_control_plane/README.md</code></a> ·
+          Part of the <a href="index.html">Data Platform Mastery</a> course.
+        </footer>
+      </main>
+      <aside class="toc-rail"><div class="toc-title">On this page</div>
+<a href="#1-concepts">1. Concepts</a>
+<a href="#2-build">2. Build</a>
+<a href="#3-prove-it">3. Prove it</a>
+<a href="#4-break-it">4. Break it</a>
+<a href="#5-interview-corner">5. Interview corner</a>
+<a href="#6-stretch-goals">6. Stretch goals</a></aside>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById("themeBtn").addEventListener("click", function () {
+    var cur = document.documentElement.getAttribute("data-theme");
+    localStorage.setItem("dpm-theme", cur === "dark" ? "light" : "dark");
+    location.reload();   // simplest way to re-render mermaid + pygments in the new theme
+  });
+  document.getElementById("menuBtn").addEventListener("click", function () {
+    document.getElementById("sidebar").classList.toggle("open");
+  });
+</script>
+</body>
+</html>

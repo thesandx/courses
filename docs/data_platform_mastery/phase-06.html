@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 06 — BigQuery Serving: FDP→CDP, the Dim/Fact Builder (v0.6.0) · Data Platform Mastery</title>
+<meta name="description" content="Data Platform Mastery — build an open-source metadata-driven ETL platform on GCP.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚒️</text></svg>">
+<link rel="stylesheet" href="style.css">
+<script>
+  (function () {
+    var t = localStorage.getItem("dpm-theme");
+    if (!t) t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+</head>
+<body>
+<button class="menu-btn" id="menuBtn" aria-label="Toggle navigation">☰</button>
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">⚒️</span>
+      <span>
+        <span class="brand-title">Data Platform Mastery</span>
+        <span class="brand-sub">Build PipeForge on GCP</span>
+      </span>
+    </a>
+    <nav><div class="nav-group">Start Here</div>
+<a class="nav-item" href="index.html">Course Overview</a>
+<a class="nav-item" href="project-charter.html">Project Charter</a>
+<a class="nav-item" href="interview-map.html">Interview Map</a>
+<div class="nav-group">Build Phases</div>
+<a class="nav-item" href="phase-00.html">00 · Orientation</a>
+<a class="nav-item" href="phase-01.html">01 · Foundation<span class="tag">v0.1.0</span></a>
+<a class="nav-item" href="phase-02.html">02 · Metadata Core<span class="tag">v0.2.0</span></a>
+<a class="nav-item" href="phase-03.html">03 · Batch Ingestion<span class="tag">v0.3.0</span></a>
+<a class="nav-item" href="phase-04.html">04 · Streaming &amp; Kafka<span class="tag">v0.4.0</span></a>
+<a class="nav-item" href="phase-05.html">05 · Spark Processing<span class="tag">v0.5.0</span></a>
+<a class="nav-item active" href="phase-06.html">06 · BigQuery Serving<span class="tag">v0.6.0</span></a>
+<a class="nav-item" href="phase-07.html">07 · Orchestration<span class="tag">v0.7.0</span></a>
+<a class="nav-item" href="phase-08.html">08 · Quality &amp; Recon<span class="tag">v0.8.0</span></a>
+<a class="nav-item" href="phase-09.html">09 · Governance<span class="tag">v0.9.0</span></a>
+<a class="nav-item" href="phase-10.html">10 · Observability &amp; FinOps<span class="tag">v0.10.0</span></a>
+<a class="nav-item" href="phase-11.html">11 · Streamlit Control Plane<span class="tag">v0.11.0</span></a>
+<a class="nav-item" href="phase-12.html">12 · Platform APIs<span class="tag">v0.12.0</span></a>
+<a class="nav-item" href="phase-13.html">13 · Scale &amp; Hardening<span class="tag">v0.13.0</span></a>
+<a class="nav-item" href="phase-14.html">14 · Open-Source Launch<span class="tag">v1.0.0</span></a>
+<div class="nav-group">Endgame</div>
+<a class="nav-item" href="interview-gauntlet.html">Interview Gauntlet<span class="tag">🎯</span></a></nav>
+    <div class="sidebar-foot">
+      <button id="themeBtn" class="theme-btn" title="Toggle dark mode">🌗 Theme</button>
+      <a href="https://github.com/thesandx/courses/tree/master/data_platform_mastery">GitHub ↗</a>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="crumbs">
+      <span class="crumb-group">Build Phases</span>
+      <span class="crumb-sep">/</span>
+      <span class="crumb-page">06 · BigQuery Serving</span>
+      <span class="badge">v0.6.0</span>
+    </header>
+    <div class="content-wrap">
+      <main class="content">
+<h1 id="phase-06-bigquery-serving-fdpcdp-the-dimfact-builder-v060">Phase 06 — BigQuery Serving: FDP→CDP, the Dim/Fact Builder (<code>v0.6.0</code>)<a class="headerlink" href="#phase-06-bigquery-serving-fdpcdp-the-dimfact-builder-v060" title="Link to this section">#</a></h1>
+<blockquote>
+<p><strong>Mission:</strong> build the consumption layer. A template-driven <strong>Dim/Fact Builder</strong>
+(the "accelerator" from the reference architecture) turns FDP into CDP star
+schemas, pre-aggregated rollups, and data products — partitioned, clustered,
+cost-measured, and idempotent. This is the phase where the data finally earns
+its keep.</p>
+</blockquote>
+<h2 id="1-concepts">1. Concepts<a class="headerlink" href="#1-concepts" title="Link to this section">#</a></h2>
+<p>Read notes <strong>§6 (data model design)</strong>, <strong>§11 (partitioning)</strong>, <strong>§15 (cost)</strong>;
+GCP <strong>M03/M04 (BigQuery fundamentals &amp; at scale)</strong>.</p>
+<p><strong>Grain first, always (§6).</strong> Before any DDL, say it out loud and write it in the
+model's YAML: <em>"one row in <code>fct_order_lines</code> = one order line item."</em> Undeclared
+grain = double-counted revenue when someone joins to <code>dim_products</code>.</p>
+<p><strong>The CDP is a set of data products, not "the gold dataset".</strong> Each product has an
+owner, an SLA, a declared grain, documented columns, and a freshness stamp — the
+"data as a product" pillar of Data Mesh (§25), implemented small. Enterprise
+architectures call this layer CDP (Consumption Data Products); Databricks calls it
+gold; Kimball calls it the presentation layer. Same thing — say all three names.</p>
+<p><strong>Model set for NovaMart</strong> (star schema, §6's default):</p>
+<div class="highlight"><pre><span></span><code>fct_order_lines   grain: one order line       PK: order_line_sk
+                  FKs: customer_sk (SCD2 as-of!), product_sk, date_key
+                  measures: quantity, unit_price_usd, line_amount_usd, line_amount_local
+fct_sessions      grain: one browsing session (from Phase 5 sessionize)
+dim_customers     SCD2 (from Phase 5) — query pattern: WHERE is_current, or as-of join
+dim_products      SCD1 (overwrite — corrections only, no history requirement)
+dim_date          generated calendar
+agg_daily_revenue grain: one day × product_category — the dashboard rollup
+</code></pre></div>
+<p><strong>The as-of join (§17 late-arriving-fact pattern)</strong> — facts must pick the dimension
+version that was true <em>at event time</em>, not now:</p>
+<div class="highlight"><pre><span></span><code><span class="k">JOIN</span><span class="w"> </span><span class="o">`</span><span class="n">fdp</span><span class="p">.</span><span class="n">dim_customers</span><span class="o">`</span><span class="w"> </span><span class="k">c</span>
+<span class="w">  </span><span class="k">ON</span><span class="w"> </span><span class="n">o</span><span class="p">.</span><span class="n">customer_id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">c</span><span class="p">.</span><span class="n">customer_id</span>
+<span class="w"> </span><span class="k">AND</span><span class="w"> </span><span class="n">o</span><span class="p">.</span><span class="n">order_ts</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="k">c</span><span class="p">.</span><span class="n">effective_from</span><span class="w"> </span><span class="k">AND</span><span class="w"> </span><span class="n">o</span><span class="p">.</span><span class="n">order_ts</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="k">c</span><span class="p">.</span><span class="n">effective_to</span>
+</code></pre></div>
+<p><strong>Cost engineering is part of the design (§15, M04):</strong>
+- <code>PARTITION BY DATE(order_ts)</code> + <code>CLUSTER BY product_sk, customer_sk</code> (≤4 cols).
+- <code>require_partition_filter = true</code> on big facts — a guardrail, not a suggestion.
+- Rollups exist so dashboards never scan raw facts: one daily aggregate serving 50
+  dashboard queries is the single biggest saving in most real platforms (§15's ~$4.6K example).
+- Measure everything with <code>--dry_run</code> bytes-scanned before/after; keep the numbers.</p>
+<h2 id="2-build">2. Build<a class="headerlink" href="#2-build" title="Link to this section">#</a></h2>
+<h3 id="21-terraform-the-cdp-datasets">2.1 Terraform: the CDP datasets<a class="headerlink" href="#21-terraform-the-cdp-datasets" title="Link to this section">#</a></h3>
+<p><code>bigquery</code> module additions: datasets <code>fdp</code>, <code>fdp_staging</code>, <code>cdp</code>; default table
+expiration on <code>fdp_staging</code> (3 days — staging is disposable); <code>cdp</code> labeled
+<code>layer=cdp, owner=analytics</code>. Authorized views come in Phase 9.</p>
+<h3 id="22-the-dimfact-builder-srcpipeforgeserving">2.2 The Dim/Fact Builder — <code>src/pipeforge/serving/</code><a class="headerlink" href="#22-the-dimfact-builder-srcpipeforgeserving" title="Link to this section">#</a></h3>
+<p>Transform-as-config, same philosophy as ingestion. Each model is a YAML + SQL pair:</p>
+<p><code>serving/models/fct_order_lines.yaml</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fct_order_lines</span>
+<span class="nt">layer</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cdp</span>
+<span class="nt">grain</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">one row per order line item</span>
+<span class="nt">owner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">analytics@novamart.dev</span>
+<span class="nt">sla_freshness_minutes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">360</span>
+<span class="nt">partition_field</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">order_date</span>
+<span class="nt">clustering</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">product_sk</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">customer_sk</span><span class="p p-Indicator">]</span>
+<span class="nt">write_mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">partition_overwrite</span><span class="w">         </span><span class="c1"># or: merge | full_refresh</span>
+<span class="nt">depends_on</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">fdp.orders</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">fdp.dim_customers</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">fdp.dim_products</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">fdp.fx_rates</span><span class="p p-Indicator">]</span>
+<span class="nt">tests</span><span class="p">:</span><span class="w">                                   </span><span class="c1"># consumed by Phase 8 DQ engine</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="nv">unique</span><span class="p p-Indicator">,</span><span class="nt"> columns</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">order_line_sk</span><span class="p p-Indicator">],</span><span class="nt"> severity</span><span class="p">:</span><span class="w"> </span><span class="nv">block</span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="nv">not_null</span><span class="p p-Indicator">,</span><span class="nt"> columns</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">customer_sk</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">product_sk</span><span class="p p-Indicator">],</span><span class="nt"> severity</span><span class="p">:</span><span class="w"> </span><span class="nv">block</span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="nv">reconciles_to</span><span class="p p-Indicator">,</span><span class="nt"> source</span><span class="p">:</span><span class="w"> </span><span class="nv">fdp.orders</span><span class="p p-Indicator">,</span><span class="nt"> measure</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;SUM(line_amount_usd)&quot;</span><span class="p p-Indicator">,</span><span class="nt"> tolerance_pct</span><span class="p">:</span><span class="w"> </span><span class="nv">0.1</span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<p><code>serving/models/fct_order_lines.sql.j2</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="k">SELECT</span>
+<span class="w">  </span><span class="err">{{</span><span class="w"> </span><span class="n">sk</span><span class="p">([</span><span class="s1">&#39;o.order_line_id&#39;</span><span class="p">])</span><span class="w"> </span><span class="err">}}</span><span class="w">               </span><span class="k">AS</span><span class="w"> </span><span class="n">order_line_sk</span><span class="p">,</span>
+<span class="w">  </span><span class="k">c</span><span class="p">.</span><span class="n">sk</span><span class="w">                                         </span><span class="k">AS</span><span class="w"> </span><span class="n">customer_sk</span><span class="p">,</span><span class="w">   </span><span class="c1">-- as-of SCD2 join below</span>
+<span class="w">  </span><span class="n">p</span><span class="p">.</span><span class="n">sk</span><span class="w">                                         </span><span class="k">AS</span><span class="w"> </span><span class="n">product_sk</span><span class="p">,</span>
+<span class="w">  </span><span class="nb">DATE</span><span class="p">(</span><span class="n">o</span><span class="p">.</span><span class="n">order_ts</span><span class="p">)</span><span class="w">                             </span><span class="k">AS</span><span class="w"> </span><span class="n">order_date</span><span class="p">,</span>
+<span class="w">  </span><span class="n">o</span><span class="p">.</span><span class="n">quantity</span><span class="p">,</span>
+<span class="w">  </span><span class="n">o</span><span class="p">.</span><span class="n">unit_price_usd</span><span class="p">,</span>
+<span class="w">  </span><span class="n">o</span><span class="p">.</span><span class="n">quantity</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">o</span><span class="p">.</span><span class="n">unit_price_usd</span><span class="w">                </span><span class="k">AS</span><span class="w"> </span><span class="n">line_amount_usd</span><span class="p">,</span>
+<span class="w">  </span><span class="n">o</span><span class="p">.</span><span class="n">quantity</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">o</span><span class="p">.</span><span class="n">unit_price_usd</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">fx</span><span class="p">.</span><span class="n">rate</span><span class="w">      </span><span class="k">AS</span><span class="w"> </span><span class="n">line_amount_local</span>
+<span class="k">FROM</span><span class="w"> </span><span class="o">`</span><span class="err">{{</span><span class="w"> </span><span class="n">project</span><span class="w"> </span><span class="err">}}</span><span class="p">.</span><span class="n">fdp</span><span class="p">.</span><span class="n">orders</span><span class="o">`</span><span class="w"> </span><span class="n">o</span>
+<span class="k">JOIN</span><span class="w"> </span><span class="o">`</span><span class="err">{{</span><span class="w"> </span><span class="n">project</span><span class="w"> </span><span class="err">}}</span><span class="p">.</span><span class="n">fdp</span><span class="p">.</span><span class="n">dim_customers</span><span class="o">`</span><span class="w"> </span><span class="k">c</span>
+<span class="w">  </span><span class="k">ON</span><span class="w"> </span><span class="n">o</span><span class="p">.</span><span class="n">customer_id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">c</span><span class="p">.</span><span class="n">customer_id</span>
+<span class="w"> </span><span class="k">AND</span><span class="w"> </span><span class="n">o</span><span class="p">.</span><span class="n">order_ts</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="k">c</span><span class="p">.</span><span class="n">effective_from</span><span class="w"> </span><span class="k">AND</span><span class="w"> </span><span class="n">o</span><span class="p">.</span><span class="n">order_ts</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="k">c</span><span class="p">.</span><span class="n">effective_to</span>
+<span class="k">JOIN</span><span class="w"> </span><span class="o">`</span><span class="err">{{</span><span class="w"> </span><span class="n">project</span><span class="w"> </span><span class="err">}}</span><span class="p">.</span><span class="n">fdp</span><span class="p">.</span><span class="n">dim_products</span><span class="o">`</span><span class="w"> </span><span class="n">p</span>
+<span class="w">  </span><span class="k">ON</span><span class="w"> </span><span class="n">o</span><span class="p">.</span><span class="n">product_id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">p</span><span class="p">.</span><span class="n">product_id</span><span class="w"> </span><span class="k">AND</span><span class="w"> </span><span class="n">p</span><span class="p">.</span><span class="n">is_current</span>
+<span class="k">LEFT</span><span class="w"> </span><span class="k">JOIN</span><span class="w"> </span><span class="o">`</span><span class="err">{{</span><span class="w"> </span><span class="n">project</span><span class="w"> </span><span class="err">}}</span><span class="p">.</span><span class="n">fdp</span><span class="p">.</span><span class="n">fx_rates</span><span class="o">`</span><span class="w"> </span><span class="n">fx</span>
+<span class="w">  </span><span class="k">ON</span><span class="w"> </span><span class="nb">DATE</span><span class="p">(</span><span class="n">o</span><span class="p">.</span><span class="n">order_ts</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">fx</span><span class="p">.</span><span class="n">rate_date</span><span class="w"> </span><span class="k">AND</span><span class="w"> </span><span class="n">fx</span><span class="p">.</span><span class="n">currency</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;EUR&#39;</span>
+<span class="k">WHERE</span><span class="w"> </span><span class="nb">DATE</span><span class="p">(</span><span class="n">o</span><span class="p">.</span><span class="n">order_ts</span><span class="p">)</span><span class="w"> </span><span class="k">BETWEEN</span><span class="w"> </span><span class="nb">DATE</span><span class="p">(</span><span class="s1">&#39;{{ ds }}&#39;</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="err">{{</span><span class="w"> </span><span class="n">lookback</span><span class="w"> </span><span class="err">}}</span><span class="w"> </span><span class="k">AND</span><span class="w"> </span><span class="nb">DATE</span><span class="p">(</span><span class="s1">&#39;{{ ds }}&#39;</span><span class="p">)</span>
+</code></pre></div>
+<p><code>builder.py</code> renders the template, then executes idempotently by <code>write_mode</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">run_model</span><span class="p">(</span><span class="n">model</span><span class="p">:</span> <span class="n">Model</span><span class="p">,</span> <span class="n">execution_date</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">sql</span> <span class="o">=</span> <span class="n">render</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">ds</span><span class="o">=</span><span class="n">execution_date</span><span class="p">,</span> <span class="n">lookback</span><span class="o">=</span><span class="n">model</span><span class="o">.</span><span class="n">lookback_days</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">model</span><span class="o">.</span><span class="n">write_mode</span> <span class="o">==</span> <span class="s2">&quot;partition_overwrite&quot;</span><span class="p">:</span>
+        <span class="c1"># MERGE-free idempotency for facts (§7 pattern 1):</span>
+        <span class="n">job</span> <span class="o">=</span> <span class="n">bq</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">          DECLARE d_start DATE DEFAULT DATE(&#39;</span><span class="si">{</span><span class="n">execution_date</span><span class="si">}</span><span class="s2">&#39;) - </span><span class="si">{</span><span class="n">model</span><span class="o">.</span><span class="n">lookback_days</span><span class="si">}</span><span class="s2">;</span>
+<span class="s2">          DELETE `</span><span class="si">{</span><span class="n">model</span><span class="o">.</span><span class="n">fqn</span><span class="si">}</span><span class="s2">` WHERE </span><span class="si">{</span><span class="n">model</span><span class="o">.</span><span class="n">partition_field</span><span class="si">}</span><span class="s2"> BETWEEN d_start AND &#39;</span><span class="si">{</span><span class="n">execution_date</span><span class="si">}</span><span class="s2">&#39;;</span>
+<span class="s2">          INSERT `</span><span class="si">{</span><span class="n">model</span><span class="o">.</span><span class="n">fqn</span><span class="si">}</span><span class="s2">` </span><span class="si">{</span><span class="n">sql</span><span class="si">}</span><span class="s2">;</span>
+<span class="s2">        &quot;&quot;&quot;</span><span class="p">,</span> <span class="n">job_config</span><span class="o">=</span><span class="n">QueryJobConfig</span><span class="p">(</span>
+            <span class="n">maximum_bytes_billed</span><span class="o">=</span><span class="n">model</span><span class="o">.</span><span class="n">max_bytes_billed</span><span class="p">))</span>   <span class="c1"># the cost seatbelt, always on</span>
+    <span class="o">...</span>
+    <span class="n">emit_audit</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>  <span class="c1"># rows, bytes_billed, slot_ms -&gt; pipeline_run</span>
+</code></pre></div>
+<p>(Yes, <code>MERGE</code>/<code>INSERT OVERWRITE</code>-style alternatives exist; implementing
+delete+insert in one script and merge for dims means you've personally used all
+three §7 idempotency patterns. Say so.)</p>
+<p>CLI: <code>pipeforge build --model fct_order_lines --execution-date 2026-07-15</code>, plus
+<code>--select cdp.*</code> to run a whole layer in dependency order (topo-sort <code>depends_on</code> —
+a 20-line DAG resolver you'll reuse in Phase 7).</p>
+<h3 id="23-dim_date-rollups">2.3 dim_date + rollups<a class="headerlink" href="#23-dim_date-rollups" title="Link to this section">#</a></h3>
+<ul>
+<li><code>dim_date</code>: one-off generated <code>GENERATE_DATE_ARRAY</code> script (2020→2030).</li>
+<li><code>agg_daily_revenue</code>: partition-overwrite model over <code>fct_order_lines</code>.</li>
+<li>One <strong>materialized view</strong> for a "live-ish" metric (revenue today) — know its
+  constraints (limited SQL surface, auto-refresh economics) vs the rollup table (M04).</li>
+</ul>
+<h3 id="24-prove-the-cost-model-do-not-skip">2.4 Prove the cost model (do not skip)<a class="headerlink" href="#24-prove-the-cost-model-do-not-skip" title="Link to this section">#</a></h3>
+<div class="highlight"><pre><span></span><code>bq<span class="w"> </span>query<span class="w"> </span>--dry_run<span class="w"> </span>--use_legacy_sql<span class="o">=</span><span class="nb">false</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="s1">&#39;SELECT SUM(line_amount_usd) FROM cdp.fct_order_lines&#39;</span><span class="w">                        </span><span class="c1"># full scan</span>
+bq<span class="w"> </span>query<span class="w"> </span>--dry_run<span class="w"> </span>--use_legacy_sql<span class="o">=</span><span class="nb">false</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="s1">&#39;SELECT SUM(line_amount_usd) FROM cdp.fct_order_lines WHERE order_date = &quot;2026-07-15&quot;&#39;</span><span class="w">  </span><span class="c1"># pruned</span>
+</code></pre></div>
+<p>Record both byte counts in <code>docs/adr/0003-cdp-design.md</code>, compute the ratio, and
+multiply to a 2 TB/day production table at $6.25/TB — <em>that</em> number is your §15
+interview ammunition. Then flip <code>require_partition_filter=true</code> and watch the
+first query get <strong>rejected</strong> — the guardrail in action.</p>
+<h3 id="25-ship-it">2.5 Ship it<a class="headerlink" href="#25-ship-it" title="Link to this section">#</a></h3>
+<p>Tests: template rendering, topo-sort ordering, delete+insert window math
+(lookback), as-of join on a crafted SCD2 fixture (customer changes tier mid-month;
+orders before/after pick different versions). Tag <code>v0.6.0</code>.</p>
+<h2 id="3-prove-it">3. Prove it<a class="headerlink" href="#3-prove-it" title="Link to this section">#</a></h2>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <code>SELECT COUNT(*) FROM cdp.fct_order_lines GROUP BY order_line_sk HAVING COUNT(*)&gt;1</code> → empty, even after running the same date 3 times</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Tier-change customer: July-1 order shows old tier, July-15 order shows new tier (SCD2 as-of works)</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Revenue in <code>agg_daily_revenue</code> == revenue in <code>fct_order_lines</code> == manifest-based source estimate within tolerance (recon preview)</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Unfiltered query on the fact table is <strong>rejected</strong> by <code>require_partition_filter</code></li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Bytes-billed for the dashboard query dropped ≥ 10x via the rollup (documented)</li>
+</ul>
+<h2 id="4-break-it">4. Break it<a class="headerlink" href="#4-break-it" title="Link to this section">#</a></h2>
+<p>Change the as-of join to the naive <code>AND c.is_current</code> (what most juniors write),
+rebuild a historical date, and diff revenue-by-tier against the correct version.
+Quantify the misstatement. This is your concrete story for "why does SCD2 matter?"
+— restore, then write <code>docs/incidents/006-current-flag-join.md</code>.</p>
+<h2 id="5-interview-corner">5. Interview corner<a class="headerlink" href="#5-interview-corner" title="Link to this section">#</a></h2>
+<ul>
+<li>Run the full <strong>Q3 (e-commerce warehouse — the most-asked question)</strong> with a 45-min
+  timer. You have now <em>built</em> the canonical answer: declare grain → star schema →
+  SCD2 dims → idempotent daily loads → rollups → cost numbers.</li>
+<li><em>"Star schema or OBT?"</em> — you chose star; know when OBT wins (single predictable
+  dashboard, §6) and mention wide-fact pragmatism.</li>
+<li>dbt fluency without dbt (§32): your YAML+Jinja+<code>depends_on</code>+tests <strong>is</strong> dbt's
+  mental model — <code>ref()</code> ≈ <code>depends_on</code>, materializations ≈ <code>write_mode</code>, dbt tests
+  ≈ your <code>tests:</code> block. Being able to map them shows you understand the concepts,
+  not the tool branding. (Stretch: port two models to real dbt and compare.)</li>
+</ul>
+<h2 id="6-stretch-goals">6. Stretch goals<a class="headerlink" href="#6-stretch-goals" title="Link to this section">#</a></h2>
+<ul>
+<li>Port <code>fct_order_lines</code> + <code>agg_daily_revenue</code> to <strong>dbt</strong> with contracts + tests; run both side by side.</li>
+<li>Add a BI Engine reservation + Looker Studio dashboard on the rollup (M11).</li>
+<li>Feature-store flavor: build <code>cdp.customer_features</code> (RFM metrics) and discuss offline/online split (Q8).</li>
+</ul>
+        <nav class="pager">
+          <a class="prev" href="phase-05.html"><span class="dir">← Previous</span><span class="label">05 · Spark Processing</span></a>
+          <a class="next" href="phase-07.html"><span class="dir">Next →</span><span class="label">07 · Orchestration</span></a>
+        </nav>
+        <footer class="page-foot">
+          Generated from <a href="https://github.com/thesandx/courses/blob/master/data_platform_mastery/phase_06_bigquery_serving/README.md"><code>data_platform_mastery/phase_06_bigquery_serving/README.md</code></a> ·
+          Part of the <a href="index.html">Data Platform Mastery</a> course.
+        </footer>
+      </main>
+      <aside class="toc-rail"><div class="toc-title">On this page</div>
+<a href="#1-concepts">1. Concepts</a>
+<a href="#2-build">2. Build</a>
+<a href="#3-prove-it">3. Prove it</a>
+<a href="#4-break-it">4. Break it</a>
+<a href="#5-interview-corner">5. Interview corner</a>
+<a href="#6-stretch-goals">6. Stretch goals</a></aside>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById("themeBtn").addEventListener("click", function () {
+    var cur = document.documentElement.getAttribute("data-theme");
+    localStorage.setItem("dpm-theme", cur === "dark" ? "light" : "dark");
+    location.reload();   // simplest way to re-render mermaid + pygments in the new theme
+  });
+  document.getElementById("menuBtn").addEventListener("click", function () {
+    document.getElementById("sidebar").classList.toggle("open");
+  });
+</script>
+</body>
+</html>

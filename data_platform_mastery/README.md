@@ -11,6 +11,12 @@
 > metadata-driven data platform on GCP that you own, can demo live in interviews,
 > and can put at the top of your resume.
 
+> 📖 **Prefer a book-style reading experience?** Every page of this course is also
+> rendered as a styled HTML site in [`docs/data_platform_mastery/`](../docs/data_platform_mastery/index.html)
+> (regenerate with `python data_platform_mastery/tools/build_docs.py`). Enable GitHub
+> Pages (Settings → Pages → branch `master`, folder `/docs`) to browse it online at
+> `https://<your-username>.github.io/courses/data_platform_mastery/`.
+
 ---
 
 ## What You Will Build: PipeForge

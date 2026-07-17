@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 04 — Streaming Ingestion with Kafka ② (v0.4.0) · Data Platform Mastery</title>
+<meta name="description" content="Data Platform Mastery — build an open-source metadata-driven ETL platform on GCP.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚒️</text></svg>">
+<link rel="stylesheet" href="style.css">
+<script>
+  (function () {
+    var t = localStorage.getItem("dpm-theme");
+    if (!t) t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+</head>
+<body>
+<button class="menu-btn" id="menuBtn" aria-label="Toggle navigation">☰</button>
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">⚒️</span>
+      <span>
+        <span class="brand-title">Data Platform Mastery</span>
+        <span class="brand-sub">Build PipeForge on GCP</span>
+      </span>
+    </a>
+    <nav><div class="nav-group">Start Here</div>
+<a class="nav-item" href="index.html">Course Overview</a>
+<a class="nav-item" href="project-charter.html">Project Charter</a>
+<a class="nav-item" href="interview-map.html">Interview Map</a>
+<div class="nav-group">Build Phases</div>
+<a class="nav-item" href="phase-00.html">00 · Orientation</a>
+<a class="nav-item" href="phase-01.html">01 · Foundation<span class="tag">v0.1.0</span></a>
+<a class="nav-item" href="phase-02.html">02 · Metadata Core<span class="tag">v0.2.0</span></a>
+<a class="nav-item" href="phase-03.html">03 · Batch Ingestion<span class="tag">v0.3.0</span></a>
+<a class="nav-item active" href="phase-04.html">04 · Streaming &amp; Kafka<span class="tag">v0.4.0</span></a>
+<a class="nav-item" href="phase-05.html">05 · Spark Processing<span class="tag">v0.5.0</span></a>
+<a class="nav-item" href="phase-06.html">06 · BigQuery Serving<span class="tag">v0.6.0</span></a>
+<a class="nav-item" href="phase-07.html">07 · Orchestration<span class="tag">v0.7.0</span></a>
+<a class="nav-item" href="phase-08.html">08 · Quality &amp; Recon<span class="tag">v0.8.0</span></a>
+<a class="nav-item" href="phase-09.html">09 · Governance<span class="tag">v0.9.0</span></a>
+<a class="nav-item" href="phase-10.html">10 · Observability &amp; FinOps<span class="tag">v0.10.0</span></a>
+<a class="nav-item" href="phase-11.html">11 · Streamlit Control Plane<span class="tag">v0.11.0</span></a>
+<a class="nav-item" href="phase-12.html">12 · Platform APIs<span class="tag">v0.12.0</span></a>
+<a class="nav-item" href="phase-13.html">13 · Scale &amp; Hardening<span class="tag">v0.13.0</span></a>
+<a class="nav-item" href="phase-14.html">14 · Open-Source Launch<span class="tag">v1.0.0</span></a>
+<div class="nav-group">Endgame</div>
+<a class="nav-item" href="interview-gauntlet.html">Interview Gauntlet<span class="tag">🎯</span></a></nav>
+    <div class="sidebar-foot">
+      <button id="themeBtn" class="theme-btn" title="Toggle dark mode">🌗 Theme</button>
+      <a href="https://github.com/thesandx/courses/tree/master/data_platform_mastery">GitHub ↗</a>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="crumbs">
+      <span class="crumb-group">Build Phases</span>
+      <span class="crumb-sep">/</span>
+      <span class="crumb-page">04 · Streaming &amp; Kafka</span>
+      <span class="badge">v0.4.0</span>
+    </header>
+    <div class="content-wrap">
+      <main class="content">
+<h1 id="phase-04-streaming-ingestion-with-kafka-2-v040">Phase 04 — Streaming Ingestion with Kafka ② (<code>v0.4.0</code>)<a class="headerlink" href="#phase-04-streaming-ingestion-with-kafka-2-v040" title="Link to this section">#</a></h1>
+<blockquote>
+<p><strong>Mission:</strong> run Kafka for real. Produce NovaMart clickstream events with Avro +
+Schema Registry, consume them with a micro-batching consumer into RAW (and
+optionally straight to BigQuery), route poison messages to a DLQ, watch consumer
+lag, and build the Pub/Sub bridge so you can argue Kafka-vs-managed like someone
+who has operated both.</p>
+</blockquote>
+<h2 id="1-concepts">1. Concepts<a class="headerlink" href="#1-concepts" title="Link to this section">#</a></h2>
+<p>Read notes <strong>§30 (Kafka deep dive)</strong>, <strong>§18 (dedup / delivery semantics)</strong>,
+<strong>§27 (micro-batch vs true streaming)</strong>; GCP <strong>M06 (Pub/Sub)</strong>.</p>
+<p>The five ideas this phase makes physical:</p>
+<ol>
+<li><strong>Kafka is a distributed commit log, not a queue</strong> — retention independent of
+   consumption; you will replay the same topic twice into different sinks to feel it.</li>
+<li><strong>Partition = unit of parallelism <em>and</em> ordering.</strong> You'll key events by
+   <code>session_id</code> (high cardinality, even spread — §30's good-key criteria) and
+   verify per-key ordering survives while global ordering doesn't.</li>
+<li><strong>Delivery semantics are a <em>sink</em> property as much as a broker property.</strong>
+   Your consumer is at-least-once (commit offsets AFTER the GCS write). Duplicates
+   are possible by design → downstream dedup (Phase 5) makes it <strong>effectively-once</strong>.
+   Say the §18 table from memory.</li>
+<li><strong>Micro-batch is a deliberate choice</strong> (§27): the SLA for clickstream analytics
+   is minutes, not milliseconds → a 60s-flush consumer meets it at a fraction of
+   Flink's operational cost. Know the number at which you'd graduate (&lt;30s SLA,
+   stateful event-at-a-time logic).</li>
+<li><strong>Contracts move to the wire</strong>: the Avro schema in the Schema Registry <em>is</em> the
+   Phase-2 contract, now enforced at produce time (§16's "blocked at the
+   producer's build, not your 2am failure").</li>
+</ol>
+<h2 id="2-build">2. Build<a class="headerlink" href="#2-build" title="Link to this section">#</a></h2>
+<h3 id="21-kafka-locally-dockerdocker-composekafkayml">2.1 Kafka locally — <code>docker/docker-compose.kafka.yml</code><a class="headerlink" href="#21-kafka-locally-dockerdocker-composekafkayml" title="Link to this section">#</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">services</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">kafka</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">confluentinc/cp-kafka:7.6.1</span>
+<span class="w">    </span><span class="nt">environment</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">KAFKA_NODE_ID</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="w">      </span><span class="nt">KAFKA_PROCESS_ROLES</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">broker,controller</span><span class="w">        </span><span class="c1"># KRaft — no ZooKeeper (say why in interviews: metadata quorum moved into Kafka itself)</span>
+<span class="w">      </span><span class="nt">KAFKA_CONTROLLER_QUORUM_VOTERS</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1@kafka:29093</span>
+<span class="w">      </span><span class="nt">KAFKA_LISTENERS</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:29093</span>
+<span class="w">      </span><span class="nt">KAFKA_ADVERTISED_LISTENERS</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">PLAINTEXT://localhost:9092</span>
+<span class="w">      </span><span class="nt">KAFKA_CONTROLLER_LISTENER_NAMES</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">CONTROLLER</span>
+<span class="w">      </span><span class="nt">KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span><span class="w">     </span><span class="c1"># RF=1 locally; say &quot;RF=3 + min.insync=2 + acks=all&quot; for prod (§30)</span>
+<span class="w">      </span><span class="nt">KAFKA_AUTO_CREATE_TOPICS_ENABLE</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;false&quot;</span><span class="w">      </span><span class="c1"># explicit topics only — prod hygiene</span>
+<span class="w">    </span><span class="nt">ports</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;9092:9092&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">schema-registry</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">confluentinc/cp-schema-registry:7.6.1</span>
+<span class="w">    </span><span class="nt">depends_on</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">kafka</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">environment</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">SCHEMA_REGISTRY_HOST_NAME</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">schema-registry</span>
+<span class="w">      </span><span class="nt">SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">PLAINTEXT://kafka:9092</span>
+<span class="w">      </span><span class="nt">SCHEMA_REGISTRY_SCHEMA_COMPATIBILITY_LEVEL</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">BACKWARD</span>
+<span class="w">    </span><span class="nt">ports</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;8081:8081&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">kafka-ui</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">provectuslabs/kafka-ui:latest</span>
+<span class="w">    </span><span class="nt">environment</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">KAFKA_CLUSTERS_0_BOOTSTRAP_SERVERS</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kafka:9092</span>
+<span class="w">      </span><span class="nt">KAFKA_CLUSTERS_0_SCHEMAREGISTRY</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://schema-registry:8081</span>
+<span class="w">    </span><span class="nt">ports</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;8080:8080&quot;</span><span class="p p-Indicator">]</span>
+</code></pre></div>
+<p>Create topics deliberately (counts are a design decision, not a default — §11):</p>
+<div class="highlight"><pre><span></span><code>docker<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-it<span class="w"> </span>kafka<span class="w"> </span>kafka-topics<span class="w"> </span>--bootstrap-server<span class="w"> </span>localhost:9092<span class="w"> </span>--create<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--topic<span class="w"> </span>novamart.clickstream.v1<span class="w"> </span>--partitions<span class="w"> </span><span class="m">6</span><span class="w"> </span>--replication-factor<span class="w"> </span><span class="m">1</span>
+docker<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-it<span class="w"> </span>kafka<span class="w"> </span>kafka-topics<span class="w"> </span>--bootstrap-server<span class="w"> </span>localhost:9092<span class="w"> </span>--create<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--topic<span class="w"> </span>novamart.clickstream.v1.dlq<span class="w"> </span>--partitions<span class="w"> </span><span class="m">1</span><span class="w"> </span>--replication-factor<span class="w"> </span><span class="m">1</span>
+</code></pre></div>
+<p>Why 6? Peak 1,500 ev/s ÷ ~10K per partition &lt; 1 — so 6 is pure headroom +
+consumer parallelism. Being able to say "the math says 1, I chose 6 for
+rebalancing granularity and growth" is the point.</p>
+<h3 id="22-avro-contract-producer-generatorsgen_clickstreampy">2.2 Avro contract + producer — <code>generators/gen_clickstream.py</code><a class="headerlink" href="#22-avro-contract-producer-generatorsgen_clickstreampy" title="Link to this section">#</a></h3>
+<p><code>contracts/clickstream.v1.avsc</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;record&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ClickEvent&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;namespace&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;novamart&quot;</span><span class="p">,</span>
+<span class="w"> </span><span class="nt">&quot;fields&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">   </span><span class="p">{</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;event_id&quot;</span><span class="p">,</span><span class="w">   </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;string&quot;</span><span class="p">},</span>
+<span class="w">   </span><span class="p">{</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;session_id&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;string&quot;</span><span class="p">},</span>
+<span class="w">   </span><span class="p">{</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;customer_id&quot;</span><span class="p">,</span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;null&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;string&quot;</span><span class="p">],</span><span class="w"> </span><span class="nt">&quot;default&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">},</span>
+<span class="w">   </span><span class="p">{</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;event_type&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;enum&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;EventType&quot;</span><span class="p">,</span>
+<span class="w">       </span><span class="nt">&quot;symbols&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;page_view&quot;</span><span class="p">,</span><span class="s2">&quot;search&quot;</span><span class="p">,</span><span class="s2">&quot;add_to_cart&quot;</span><span class="p">,</span><span class="s2">&quot;checkout&quot;</span><span class="p">,</span><span class="s2">&quot;purchase&quot;</span><span class="p">]}},</span>
+<span class="w">   </span><span class="p">{</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;url&quot;</span><span class="p">,</span><span class="w">        </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;string&quot;</span><span class="p">},</span>
+<span class="w">   </span><span class="p">{</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;event_ts&quot;</span><span class="p">,</span><span class="w">   </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;long&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;logicalType&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;timestamp-millis&quot;</span><span class="p">}},</span>
+<span class="w">   </span><span class="p">{</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;user_agent&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;null&quot;</span><span class="p">,</span><span class="s2">&quot;string&quot;</span><span class="p">],</span><span class="w"> </span><span class="nt">&quot;default&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">}</span>
+<span class="w"> </span><span class="p">]}</span>
+</code></pre></div>
+<p>Producer essentials (<code>confluent-kafka[avro]</code>):</p>
+<div class="highlight"><pre><span></span><code><span class="n">producer</span> <span class="o">=</span> <span class="n">SerializingProducer</span><span class="p">({</span>
+    <span class="s2">&quot;bootstrap.servers&quot;</span><span class="p">:</span> <span class="s2">&quot;localhost:9092&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;key.serializer&quot;</span><span class="p">:</span> <span class="n">StringSerializer</span><span class="p">(),</span>
+    <span class="s2">&quot;value.serializer&quot;</span><span class="p">:</span> <span class="n">AvroSerializer</span><span class="p">(</span><span class="n">schema_registry_client</span><span class="p">,</span> <span class="n">schema_str</span><span class="p">),</span>
+    <span class="s2">&quot;enable.idempotence&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>     <span class="c1"># dedup layer 1 of 4 (§18): broker drops retry-duplicates</span>
+    <span class="s2">&quot;acks&quot;</span><span class="p">:</span> <span class="s2">&quot;all&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;linger.ms&quot;</span><span class="p">:</span> <span class="mi">20</span><span class="p">,</span> <span class="s2">&quot;batch.size&quot;</span><span class="p">:</span> <span class="mi">65536</span><span class="p">,</span>   <span class="c1"># batching = why Kafka is fast (§30)</span>
+<span class="p">})</span>
+<span class="n">producer</span><span class="o">.</span><span class="n">produce</span><span class="p">(</span><span class="n">topic</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">event</span><span class="p">[</span><span class="s2">&quot;session_id&quot;</span><span class="p">],</span> <span class="n">value</span><span class="o">=</span><span class="n">event</span><span class="p">,</span> <span class="n">on_delivery</span><span class="o">=</span><span class="n">cb</span><span class="p">)</span>
+</code></pre></div>
+<p>The generator simulates sessions (5–30 events each), configurable rate
+(<code>--eps 200</code>), a <code>--late-fraction</code> that emits events with old <code>event_ts</code>
+(event-time vs processing-time fodder), and <code>--poison-fraction</code> that sends
+schema-invalid bytes directly with a raw producer (DLQ fodder).</p>
+<h3 id="23-the-micro-batching-consumer-srcpipeforgeingestionkafka_consumerpy">2.3 The micro-batching consumer — <code>src/pipeforge/ingestion/kafka_consumer.py</code><a class="headerlink" href="#23-the-micro-batching-consumer-srcpipeforgeingestionkafka_consumerpy" title="Link to this section">#</a></h3>
+<p>The heart of the phase. Design (write this docstring first, code second):</p>
+<div class="highlight"><pre><span></span><code>Consumer group: pf-raw-lander
+Loop:
+  poll() up to FLUSH_MAX_EVENTS or FLUSH_INTERVAL_S (60s), buffering per topic-partition
+  deserialize Avro; failures → produce raw bytes + error header to .dlq topic
+  write buffer → gs://raw/source=kafka/dataset=clickstream/ingest_date=&lt;today&gt;/
+                 batch_id=&lt;uuid&gt;/part-&lt;partition&gt;-&lt;first_offset&gt;-&lt;last_offset&gt;.jsonl.gz
+  write _MANIFEST.json (counts, offset ranges per partition)
+  THEN commit offsets (manual, synchronous)          ← at-least-once boundary
+Crash between GCS write and commit ⇒ batch re-lands under a new batch_id
+  ⇒ duplicates in RAW ⇒ removed in ODP by (event_id) dedup. Effectively-once.
+</code></pre></div>
+<p>Implementation notes:
+- <code>enable.auto.commit: false</code>, <code>auto.offset.reset: earliest</code>.
+- Filenames carry offset ranges — your replay/debug breadcrumbs.
+- Emit a <code>pipeline_run</code> audit row per flush (layer=<code>raw</code>, execution_date=today).
+- Expose lag: <code>pipeforge kafka lag --group pf-raw-lander</code> (AdminClient: committed
+  vs high-watermark per partition). <strong>Lag per partition is THE ops metric</strong> (§30) —
+  aggregate lag hides a hot partition.</p>
+<h3 id="24-drills-do-all-four-theyre-the-actual-learning">2.4 Drills (do all four — they're the actual learning)<a class="headerlink" href="#24-drills-do-all-four-theyre-the-actual-learning" title="Link to this section">#</a></h3>
+<ol>
+<li><strong>Ordering:</strong> produce a session's events, consume with 2 consumers; confirm
+   per-session order intact (same key → same partition), global order not.</li>
+<li><strong>Replay (Kappa moment, §21):</strong> <code>kafka-consumer-groups --reset-offsets
+   --to-datetime</code> on a <em>new</em> group; re-land yesterday into a scratch prefix. You
+   just did a streaming backfill (§13).</li>
+<li><strong>Poison pills:</strong> run generator with <code>--poison-fraction 0.01</code>, watch DLQ fill,
+   confirm good events unaffected. Inspect DLQ headers (error, original offset).</li>
+<li><strong>Rebalance:</strong> start 3 consumers on 6 partitions, kill one mid-flush, watch
+   partitions reassign and offsets replay. Count the duplicates in RAW — then
+   <em>keep them</em>: Phase 5 dedup will prove the pipeline is effectively-once.</li>
+</ol>
+<h3 id="25-the-managed-alternative-pubsub-bridge-gcp-m06">2.5 The managed alternative: Pub/Sub bridge (GCP M06)<a class="headerlink" href="#25-the-managed-alternative-pubsub-bridge-gcp-m06" title="Link to this section">#</a></h3>
+<p>Terraform: <code>pubsub</code> module with topic <code>clickstream</code>, a <strong>BigQuery subscription</strong>
+writing into <code>raw_stream.clickstream</code> (schema-mapped), and a DLQ topic with
+max-delivery-attempts. Then a 30-line bridge (<code>pipeforge kafka bridge</code>) consuming
+Kafka → publishing to Pub/Sub.</p>
+<p>Now compare honestly (fill the table yourself in <code>docs/adr/0002-kafka-vs-pubsub.md</code>):
+ops burden, ordering (partitions vs ordering keys), replay (offsets vs
+seek/retention), ecosystem (Connect/Streams), cost model, exactly-once story.
+This ADR is a ready-made staff interview answer.</p>
+<h3 id="26-optional-cloud-drill-kafka-on-a-gce-vm">2.6 Optional cloud drill: Kafka on a GCE VM<a class="headerlink" href="#26-optional-cloud-drill-kafka-on-a-gce-vm" title="Link to this section">#</a></h3>
+<p><code>kafka_vm</code> Terraform module: <code>e2-small</code>, container-optimized OS running the same
+compose file, firewall scoped to your IP. Point generator + consumer at it, feel
+the latency, <strong>then <code>terraform destroy -target=module.kafka_vm</code></strong>. (Managed Kafka
+exists on GCP too — mention Confluent Cloud / Google Managed Kafka in the ADR.)</p>
+<h3 id="27-ship-it">2.7 Ship it<a class="headerlink" href="#27-ship-it" title="Link to this section">#</a></h3>
+<p>Tests: consumer flush logic with a fake consumer (inject poll batches), DLQ
+routing on deserialization error, manifest offset-range correctness. Tag <code>v0.4.0</code>.</p>
+<h2 id="3-prove-it">3. Prove it<a class="headerlink" href="#3-prove-it" title="Link to this section">#</a></h2>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> 100k+ events produced; RAW has gzipped JSONL with offset-stamped filenames</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> DLQ contains exactly the poison messages, with error headers</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Kill-and-restart consumer: no gaps (offset math: sum of manifest ranges == high watermark), duplicates present and <em>counted</em></li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <code>pipeforge kafka lag</code> shows per-partition lag draining to ~0</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Pub/Sub BigQuery subscription shows rows in <code>raw_stream.clickstream</code></li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Schema Registry rejects a backward-incompatible v2 (delete a required field, try to produce)</li>
+</ul>
+<h2 id="4-break-it">4. Break it<a class="headerlink" href="#4-break-it" title="Link to this section">#</a></h2>
+<p>Stop the consumer for 2 hours while the generator runs (or set retention to
+30 min and watch messages <em>expire unconsumed</em> — data loss you caused). Write
+<code>docs/incidents/004-consumer-lag.md</code>: detection (lag alert, not consumer health —
+the §23 lesson), recovery (scale consumers? reset offsets? backfill from where?),
+prevention (retention sized to max tolerable outage; lag alert at 50% of retention).</p>
+<h2 id="5-interview-corner">5. Interview corner<a class="headerlink" href="#5-interview-corner" title="Link to this section">#</a></h2>
+<ul>
+<li>Draw the consumer loop and mark the <strong>at-least-once boundary</strong> (commit after
+  write). Then say where exactly-once actually lives: "EOS covers Kafka-to-Kafka;
+  my sink is GCS, so I do at-least-once + idempotent downstream MERGE —
+  effectively-once" (§18, §30). This precise sentence separates seniors from juniors.</li>
+<li><em>"Kafka or Pub/Sub?"</em> — answer from your ADR, both directions, with the "on GCP
+  with no Kafka expertise in-house, Pub/Sub" honesty (§5 deviation table).</li>
+<li><em>"When Flink?"</em> — sub-30s SLA, event-at-a-time stateful logic (fraud, CEP);
+  otherwise micro-batch wins on ops cost (§27, Q13).</li>
+</ul>
+<h2 id="6-stretch-goals">6. Stretch goals<a class="headerlink" href="#6-stretch-goals" title="Link to this section">#</a></h2>
+<ul>
+<li>Kafka Connect GCS sink connector — compare with your hand-rolled consumer; argue build-vs-buy.</li>
+<li>Add Prometheus JMX exporter + Grafana for broker metrics.</li>
+<li>Implement a consumer <strong>backpressure</strong> test: cap GCS write speed, watch lag grow, reason about scaling (partitions vs consumers).</li>
+</ul>
+        <nav class="pager">
+          <a class="prev" href="phase-03.html"><span class="dir">← Previous</span><span class="label">03 · Batch Ingestion</span></a>
+          <a class="next" href="phase-05.html"><span class="dir">Next →</span><span class="label">05 · Spark Processing</span></a>
+        </nav>
+        <footer class="page-foot">
+          Generated from <a href="https://github.com/thesandx/courses/blob/master/data_platform_mastery/phase_04_streaming_kafka/README.md"><code>data_platform_mastery/phase_04_streaming_kafka/README.md</code></a> ·
+          Part of the <a href="index.html">Data Platform Mastery</a> course.
+        </footer>
+      </main>
+      <aside class="toc-rail"><div class="toc-title">On this page</div>
+<a href="#1-concepts">1. Concepts</a>
+<a href="#2-build">2. Build</a>
+<a href="#3-prove-it">3. Prove it</a>
+<a href="#4-break-it">4. Break it</a>
+<a href="#5-interview-corner">5. Interview corner</a>
+<a href="#6-stretch-goals">6. Stretch goals</a></aside>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById("themeBtn").addEventListener("click", function () {
+    var cur = document.documentElement.getAttribute("data-theme");
+    localStorage.setItem("dpm-theme", cur === "dark" ? "light" : "dark");
+    location.reload();   // simplest way to re-render mermaid + pygments in the new theme
+  });
+  document.getElementById("menuBtn").addEventListener("click", function () {
+    document.getElementById("sidebar").classList.toggle("open");
+  });
+</script>
+</body>
+</html>
