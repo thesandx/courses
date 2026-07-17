@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 03 — Batch Ingestion Framework ② (`v0.3.0`)</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="phase-03-batch-ingestion-framework-2-v030">Phase 03 — Batch Ingestion Framework ② (<code>v0.3.0</code>)</h1>
+<blockquote>
+<p><strong>Mission:</strong> one parameter-driven ingestion engine, three connector types
+(files, JDBC, REST API), all landing in the RAW zone with manifests, contract
+validation, quarantine, and audit rows. Plus the NovaMart data generators that
+feed the rest of the course.</p>
+</blockquote>
+<h2 id="1-concepts">1. Concepts</h2>
+<p>Read notes <strong>§12 (ingestion patterns)</strong> and <strong>§4 (source categories)</strong> first —
+this phase implements the left half of both tables. Also GCP <strong>M02</strong> (lake zoning)
+and <strong>M03</strong> (loading BigQuery, external tables).</p>
+<p><strong>RAW zone rules (§5, §22 Bronze):</strong>
+- <strong>As-is.</strong> No cleaning, no typing, no renames. RAW is your replay/audit insurance.
+  "Making bronze a little clean" is the classic mistake — you lose the original.
+- <strong>Partition by <em>ingestion</em> date, not event date</strong> — late data makes event-date
+  partitioning of raw unpredictable (§1's practical-knowledge example, §11).
+- Append-only, with <strong>batch manifests</strong>: each landed batch writes
+  <code>_MANIFEST.json</code> (rows, bytes, source watermark, contract version, checksum).
+  Downstream promotion reads <em>the manifest</em>, not "whatever files are there" —
+  that's how you make append-only RAW + idempotent ODP coexist.</p>
+<p><strong>Layout convention (memorize — you'll say it in interviews):</strong></p>
+<pre><code>gs://&lt;raw&gt;/source=&lt;source&gt;/dataset=&lt;name&gt;/ingest_date=YYYY-MM-DD/batch_id=&lt;uuid&gt;/
+    part-000.csv            # or .jsonl / .parquet — source-native
+    _MANIFEST.json
+</code></pre>
+<p><strong>The idempotency contract of this phase:</strong> re-running ingestion for the same
+<code>execution_date</code> creates a <em>new</em> batch under the same <code>ingest_date=</code> prefix and
+marks it latest in the manifest index; promotion (Phase 5) always takes the latest
+<strong>complete</strong> batch per execution_date. Result: retries never corrupt, and RAW keeps
+full history. Compare this with the naive "overwrite raw on retry" and be able to
+argue both (§7).</p>
+<p><strong>Watermarks:</strong> incremental JDBC pulls <code>WHERE updated_at &gt; :last_watermark</code>. The
+watermark lives in the <strong>metadata DB</strong> (never in code, never in a local file). And
+say it with me (§12): <strong>incremental extraction misses hard deletes</strong> — we'll prove
+it in Phase 8 recon and fix the discussion with CDC in Phase 5.</p>
+<h2 id="2-build">2. Build</h2>
+<h3 id="21-novamart-generators-generators">2.1 NovaMart generators — <code>generators/</code></h3>
+<ol>
+<li><code>gen_orders.py</code> — writes a daily CSV of ~100k order lines to a <em>landing</em> bucket
+   (simulate a partner drop): 1–3% deliberately malformed rows (bad dates, negative
+   qty, null PKs — the DQ fodder), plus ~0.5% duplicate order_line_ids (dedup fodder),
+   and a <code>--late-fraction</code> flag that stamps some rows with yesterday's <code>order_ts</code>
+   (late-data fodder for Phase 5).</li>
+<li><code>docker/docker-compose.sources.yml</code> — a local <strong>MySQL 8</strong> container seeded with
+   <code>customers</code> (50k) and <code>products</code> (5k) tables, plus <code>gen_oltp_churn.py</code> that
+   updates ~2% of customers/day (tier changes, address moves — SCD2 fodder) and
+   <strong>hard-deletes</strong> a handful (the recon lesson).</li>
+<li><code>fx_rates</code> needs no generator — you'll pull https://api.frankfurter.dev (free, keyless).</li>
+</ol>
+<p>Add a <code>landing</code> bucket to the <code>gcs_lake</code> module (partner drops arrive here, outside RAW).</p>
+<h3 id="22-the-connector-interface-srcpipeforgeingestionbasepy">2.2 The connector interface — <code>src/pipeforge/ingestion/base.py</code></h3>
+<pre><code class="language-python">from abc import ABC, abstractmethod
+from dataclasses import dataclass
+
+@dataclass
+class BatchResult:
+    batch_id: str
+    rows_read: int
+    rows_landed: int
+    rows_quarantined: int
+    bytes_written: int
+    new_watermark: str | None = None
+
+class Connector(ABC):
+    &quot;&quot;&quot;Every connector is constructed from a Dataset row — parameters, not code.&quot;&quot;&quot;
+    def __init__(self, dataset, contract, execution_date: str):
+        self.ds, self.contract, self.execution_date = dataset, contract, execution_date
+
+    @abstractmethod
+    def extract(self) -&gt; &quot;Iterator[dict]&quot;: ...
+
+    def land(self) -&gt; BatchResult:
+        &quot;&quot;&quot;Template method: extract → validate against contract → write RAW + quarantine
+        + _MANIFEST.json. Subclasses only implement extract().&quot;&quot;&quot;
+</code></pre>
+<p><code>land()</code> is where the framework earns its name: contract validation
+(<code>jsonschema.validate</code> per record, invalid → quarantine bucket with the violation
+attached), Hive-style pathing, manifest writing, and metrics into the
+<code>run_context</code> from Phase 2. Write it once; every connector inherits it.</p>
+<h3 id="23-three-connectors">2.3 Three connectors</h3>
+<p><code>file.py</code> (GCS landing → RAW):</p>
+<pre><code class="language-python">class FileConnector(Connector):
+    &quot;&quot;&quot;Moves partner file drops from landing/ to RAW with validation.
+    Config used: dataset.name, contract, expected filename pattern in params.&quot;&quot;&quot;
+    def extract(self):
+        client = storage.Client()
+        prefix = f&quot;drops/{self.ds.name}/{self.execution_date}/&quot;
+        blobs = list(client.list_blobs(settings.landing_bucket, prefix=prefix))
+        if not blobs:
+            raise SourceDataMissing(prefix)     # fail LOUD — silent skip = silent staleness (§1)
+        for blob in blobs:
+            yield from csv.DictReader(io.TextIOWrapper(blob.open(&quot;rb&quot;)))
+</code></pre>
+<p><code>jdbc.py</code> (MySQL incremental) — key logic:</p>
+<pre><code class="language-python">def extract(self):
+    wm = repo.get_watermark(self.ds.dataset_id)            # from ingestion_state table
+    q = text(f&quot;SELECT * FROM {self.ds.name} WHERE {self.ds.watermark_column} &gt; :wm &quot;
+             f&quot;AND {self.ds.watermark_column} &lt;= :ceiling ORDER BY {self.ds.watermark_column}&quot;)
+    # ceiling = execution_date 23:59:59 — a CLOSED window makes the run reproducible/backfillable.
+    # An open-ended query (&quot;&gt; wm&quot;) re-run tomorrow returns different rows = not idempotent.
+    ...
+    self._new_watermark = str(max_seen)
+</code></pre>
+<p>After a successful land, <code>repo.advance_watermark(...)</code> — inside the same audit
+transaction. (Interview nugget: advance the watermark only after durable landing,
+or a crash between the two loses data.)</p>
+<p><code>rest_api.py</code> (fx_rates) — pagination loop, <code>tenacity</code> retries with exponential
+backoff + jitter, explicit timeout, and a politeness rate limit. Small data, but
+the <em>shape</em> (retry/backoff/pagination/closed date window) is what interviews ask about (§4 APIs).</p>
+<p>Add an <code>ingestion_state</code> table via a new Alembic migration (dataset_id PK,
+watermark_value, updated_at) — your first schema evolution, done properly.</p>
+<h3 id="24-cli-wiring">2.4 CLI + wiring</h3>
+<pre><code class="language-bash">pipeforge ingest --dataset orders     --execution-date 2026-07-15   # file
+pipeforge ingest --dataset customers  --execution-date 2026-07-15   # jdbc incremental
+pipeforge ingest --dataset fx_rates   --execution-date 2026-07-15   # api
+</code></pre>
+<p>The <code>ingest</code> command: look up dataset → pick connector class from
+<code>load_pattern</code> (a registry dict, not if/else chains) → run inside <code>run_context</code>.</p>
+<h3 id="25-see-it-in-bigquery-teaser-for-m03">2.5 See it in BigQuery (teaser for M03)</h3>
+<p>Create dataset <code>raw_ext</code> in Terraform and one <strong>external table</strong> over
+<code>gs://…/source=partner_files/dataset=orders/*</code> with hive partitioning. Query your
+raw CSVs with SQL — and note the bytes scanned (external tables don't prune well;
+that's a <em>feature</em> here: it motivates ODP columnar in Phase 5).</p>
+<h3 id="26-ship-it">2.6 Ship it</h3>
+<p>Unit tests: contract-validation split (valid→raw, invalid→quarantine with reason),
+manifest correctness, watermark closed-window logic (freeze time, run twice, second
+run lands zero rows). Tag <code>v0.3.0</code>.</p>
+<h2 id="3-prove-it">3. Prove it</h2>
+<ul>
+<li>[ ] Three datasets land for today's date; <code>gsutil ls</code> shows the exact layout convention</li>
+<li>[ ] <code>_MANIFEST.json</code> rows == audit <code>pipeline_run.rows_written</code></li>
+<li>[ ] Malformed rows are in quarantine <strong>with violation reasons</strong>, and
+      <code>rows_read = rows_landed + rows_quarantined</code> (conservation law — check it in SQL)</li>
+<li>[ ] Re-run same execution_date: new batch_id, watermark unmoved for jdbc (closed window), no duplication downstream risk</li>
+<li>[ ] <code>SELECT COUNT(*)</code> on the external table matches the manifest</li>
+</ul>
+<h2 id="4-break-it">4. Break it</h2>
+<ol>
+<li>Delete the day's partner drop and run ingestion → confirm it fails loudly with
+   <code>SourceDataMissing</code>, audit row <code>failed</code>, not a silent success. (Silent failure is THE
+   DE failure mode — §1.)</li>
+<li>Kill the JDBC run mid-extract (Ctrl-C). Confirm: watermark did NOT advance,
+   re-run lands a complete batch, no gap. Write <code>docs/incidents/003-midrun-crash.md</code>.</li>
+</ol>
+<h2 id="5-interview-corner">5. Interview corner</h2>
+<ul>
+<li>60-second answer to <em>"How do you ingest files reliably?"</em>: landing→validate against
+  contract→quarantine bad→manifest→RAW ingestion-date partitions→audit row→loud
+  failure on missing drop. That's a complete, senior answer.</li>
+<li><em>"Full vs incremental vs CDC?"</em> — you now have the 3-question decision tree (§12)
+  <strong>plus</strong> a personal example: "customers is incremental on <code>updated_at</code>; I know it
+  misses hard deletes — my recon framework catches that drift, and CDC is the fix."</li>
+<li>Say "closed watermark window" out loud in your answer. Interviewers notice.</li>
+</ul>
+<h2 id="6-stretch-goals">6. Stretch goals</h2>
+<ul>
+<li>Content checksum (SHA256) in manifests; verify on promotion (bit-rot paranoia).</li>
+<li>A <code>--dry-run</code> flag printing the plan (rows sampled, target paths) — ops love this.</li>
+<li>Handle <code>.csv.gz</code> transparently; add a JSONL file source.</li>
+</ul>
+</body>
+</html>

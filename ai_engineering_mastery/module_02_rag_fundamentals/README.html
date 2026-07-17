@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 2: RAG Fundamentals — Chunking, Embeddings, and Your First Vector Database</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-2-rag-fundamentals-chunking-embeddings-and-your-first-vector-database">Module 2: RAG Fundamentals — Chunking, Embeddings, and Your First Vector Database</h1>
+<h2 id="learning-objectives">Learning Objectives</h2>
+<ul>
+<li>State precisely what <strong>RAG</strong> (Retrieval-Augmented Generation) is — and recognize
+  what is <em>not</em> RAG, no matter what the slide deck says.</li>
+<li>Choose a <strong>chunking strategy</strong> (fixed-size, sentence-aware, overlapping) and explain
+  the recall/precision trade-off each one makes.</li>
+<li>Build an embedding <strong>indexing pipeline</strong>: chunk → embed → store with metadata.</li>
+<li>Implement a <strong>vector database</strong> core: an index supporting top-k cosine-similarity
+  search — and understand what production stores add on top.</li>
+<li>Feel <em>why</em> the vector store earns its place, by watching keyword search fail first.</li>
+</ul>
+<hr>
+<h2 id="1-what-rag-actually-is">1. What RAG Actually Is</h2>
+<p>RAG is a two-phase architecture:</p>
+<pre><code class="language-mermaid">flowchart LR
+    subgraph Indexing time
+        D[documents] --&gt; C[chunk] --&gt; E[embed] --&gt; V[(vector store)]
+    end
+    subgraph Query time
+        Q[user question] --&gt; QE[embed query] --&gt; R[top-k similar chunks]
+        V --&gt; R
+        R --&gt; P[prompt: context + question] --&gt; L[LLM] --&gt; A[grounded answer]
+    end
+</code></pre>
+<p>The model never "learns" your documents. Every answer is generated fresh from
+whatever chunks retrieval put in the context window. Consequences:
+- <strong>Retrieval quality is an upper bound on answer quality.</strong> The generator cannot
+  cite what it never saw.
+- Updating knowledge = re-indexing a document. No training, no deployment.
+- "We added search to the product" is not RAG unless retrieved text is <em>fed to a
+  generator as context</em>. (The meme's rule 3 exists for a reason.)</p>
+<h2 id="2-chunking-the-most-underrated-decision-in-rag">2. Chunking: The Most Underrated Decision in RAG</h2>
+<p>Embeddings represent one chunk with one vector. Too big, and the vector is a blurry
+average of many topics; too small, and the chunk lacks the context to be useful.</p>
+<table>
+<thead>
+<tr>
+<th>Strategy</th>
+<th>How</th>
+<th>Strength</th>
+<th>Weakness</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Fixed-size</td>
+<td>Every N tokens</td>
+<td>Trivial, uniform budgets</td>
+<td>Cuts sentences/ideas mid-stream</td>
+</tr>
+<tr>
+<td>Sentence-aware</td>
+<td>Split on sentence boundaries, pack to ~N</td>
+<td>Coherent units</td>
+<td>Uneven sizes</td>
+</tr>
+<tr>
+<td>Overlapping</td>
+<td>Fixed/sentence + N-token overlap</td>
+<td>Ideas near borders survive</td>
+<td>Duplicated storage, near-duplicate hits</td>
+</tr>
+<tr>
+<td>Structural</td>
+<td>Split on headings/paragraphs</td>
+<td>Matches author's semantics</td>
+<td>Needs clean documents</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Pitfall:</strong> a chunk that <em>embeds</em> well and a chunk that <em>reads</em> well to the LLM are
+different constraints. Retrieval wants small focused chunks; generation wants enough
+surrounding context. Common fix: <strong>retrieve small, expand to the parent chunk</strong>
+before prompting.</p>
+</blockquote>
+<h2 id="3-the-indexing-pipeline">3. The Indexing Pipeline</h2>
+<p>Each stored record carries the vector <em>and</em> the payload + metadata:</p>
+<pre><code class="language-python">{&quot;id&quot;: 17, &quot;vector&quot;: [...], &quot;text&quot;: &quot;...&quot;, &quot;meta&quot;: {&quot;source&quot;: &quot;handbook.md&quot;, &quot;section&quot;: &quot;refunds&quot;}}
+</code></pre>
+<p>Metadata is not decoration — it powers filtering ("only docs for plan=pro"),
+citations, and re-indexing (delete by <code>source</code>, re-add). Losing the text→vector
+linkage is the classic junior mistake: a vector alone is write-only memory.</p>
+<h2 id="4-a-vector-database-is-top-k-search-plus-discipline">4. A Vector Database Is Top-K Search Plus Discipline</h2>
+<p>The core is embarrassingly small: score the query vector against every stored vector,
+return the k best. That's a <em>brute-force (exact) search</em> — correct and O(N), fine for
+thousands of chunks. Production stores (FAISS, pgvector, Pinecone, …) add:</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>What it buys</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ANN indexes (HNSW, IVF)</td>
+<td>Sub-linear approximate search at millions of vectors</td>
+</tr>
+<tr>
+<td>Metadata filtering</td>
+<td><code>where source = "handbook"</code> before/with vector search</td>
+</tr>
+<tr>
+<td>Persistence, replication</td>
+<td>It's a database — durability and scale</td>
+</tr>
+<tr>
+<td>Hybrid scoring</td>
+<td>Vectors + keywords (you'll build this in Module 3)</td>
+</tr>
+</tbody>
+</table>
+<p>The meme's rule 6 — <em>"add a vector database before you have any vectors"</em> — inverted,
+becomes the engineering rule: <strong>exact search over a list is the right vector database
+until measured latency says otherwise.</strong></p>
+<h2 id="5-why-not-just-keyword-search">5. Why Not Just Keyword Search?</h2>
+<p>Keyword search matches <em>strings</em>; embeddings match <em>meaning</em>. "How do I get my money
+back?" contains zero words from "Refunds are processed within 5 business days" — a
+keyword index scores it 0, an embedding index ranks it top-1. You will reproduce this
+failure in <code>concepts.py</code>, then fix it with the vector store. (Keyword search still
+wins on exact identifiers — Module 3 combines both.)</p>
+<hr>
+<h2 id="key-takeaways">Key Takeaways</h2>
+<ul>
+<li>RAG = retrieve relevant chunks, then generate <em>from them</em>; retrieval caps quality.</li>
+<li>Chunking sets the resolution of retrieval; overlapping/sentence-aware are sane
+  defaults, and "retrieve small, expand big" resolves the embed-vs-read tension.</li>
+<li>Store vector + text + metadata together; metadata drives filters and citations.</li>
+<li>A vector DB core is top-k cosine search; earn ANN indexes with measured latency.</li>
+<li>Semantic search complements keyword search; it does not replace it.</li>
+</ul>
+<p>Next: <a href="../module_03_advanced_rag/README.md">Module 3 — Advanced RAG</a>.</p>
+<hr>
+<h2 id="files-in-this-module">Files in This Module</h2>
+<ul>
+<li><code>concepts.py</code> — chunkers, indexing pipeline, a working in-memory vector database</li>
+<li><code>exercise.py</code> — build <code>VectorStore</code> and an overlapping chunker yourself</li>
+<li><code>solution.py</code> — reference solution</li>
+</ul>
+</body>
+</html>

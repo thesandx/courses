@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 1 Exercise: Project Baseline</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-1-exercise-project-baseline">Module 1 Exercise: Project Baseline</h1>
+<h2 id="goal">Goal</h2>
+<p>Stand up the least-privilege baseline every later module assumes: the required APIs are
+enabled and a dedicated <strong>analytics</strong> service account exists with <em>scoped</em> read access —
+no basic roles, no exported keys. You'll prove the access is correctly narrow.</p>
+<h2 id="tasks">Tasks</h2>
+<p>Create <code>main.tf</code> in an empty directory. Reference <code>solution.tf</code> — try it yourself first.</p>
+<h3 id="todo-1-provider-variables">TODO 1 — Provider &amp; variables</h3>
+<p>Configure the <code>google</code> provider and declare <code>project_id</code> and <code>region</code> (default
+<code>us-central1</code>) variables.</p>
+<h3 id="todo-2-enable-apis">TODO 2 — Enable APIs</h3>
+<p>Enable at least <code>bigquery.googleapis.com</code> and <code>storage.googleapis.com</code> using
+<code>google_project_service</code> with <code>disable_on_destroy = false</code>.</p>
+<h3 id="todo-3-create-an-analytics-reader-service-account">TODO 3 — Create an <code>analytics-reader</code> service account</h3>
+<p><code>account_id = "analytics-reader"</code>, with a clear <code>display_name</code>.</p>
+<h3 id="todo-4-grant-least-privilege">TODO 4 — Grant least privilege</h3>
+<p>Bind the SA to <strong>exactly</strong> <code>roles/bigquery.dataViewer</code> and
+<code>roles/bigquery.jobUser</code> — enough to run queries and read data, nothing else. Use the
+<strong>additive</strong> <code>google_project_iam_member</code> resource.</p>
+<h3 id="todo-5-output-the-sa-email">TODO 5 — Output the SA email.</h3>
+<h2 id="self-verification">Self-Verification</h2>
+<pre><code class="language-bash">terraform init &amp;&amp; terraform apply -var project_id=&quot;$PROJECT_ID&quot;
+
+# The SA exists:
+gcloud iam service-accounts list --filter=&quot;email:analytics-reader*&quot;
+#   → one row for analytics-reader@$PROJECT_ID.iam.gserviceaccount.com
+
+# It has ONLY the two intended roles (no Editor/Owner):
+gcloud projects get-iam-policy &quot;$PROJECT_ID&quot; \
+  --flatten=&quot;bindings[].members&quot; \
+  --filter=&quot;bindings.members:analytics-reader&quot; \
+  --format=&quot;value(bindings.role)&quot;
+#   → roles/bigquery.dataViewer
+#   → roles/bigquery.jobUser        (and NOTHING else)
+
+# The APIs are enabled:
+gcloud services list --enabled --filter=&quot;config.name:(bigquery OR storage)&quot;
+#   → both listed
+</code></pre>
+<h2 id="stretch-goals">Stretch Goals</h2>
+<ol>
+<li>Add an <strong>IAM Deny policy</strong> that denies <code>storage.buckets.delete</code> to the SA even if a
+   future broad grant would allow it.</li>
+<li>Replace the two <code>google_project_iam_member</code> blocks with a single <code>for_each</code> over a
+   <code>toset([...])</code> of roles (as in <code>concepts.tf</code>).</li>
+<li>Enable <strong>uniform bucket-level access</strong> as an org policy constraint (preview only).</li>
+</ol>
+<h2 id="cleanup">Cleanup</h2>
+<pre><code class="language-bash">terraform destroy -var project_id=&quot;$PROJECT_ID&quot;
+</code></pre>
+</body>
+</html>

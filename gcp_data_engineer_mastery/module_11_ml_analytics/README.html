@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 11: ML &amp; Analytics Integration</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-11-ml-analytics-integration">Module 11: ML &amp; Analytics Integration</h1>
+<h2 id="learning-objectives">Learning Objectives</h2>
+<ul>
+<li>Build, evaluate, and predict with <strong>BigQuery ML</strong> models using pure SQL.</li>
+<li>Know <strong>which model type</strong> fits which problem and when to use <strong>AutoML / Vertex AI</strong>
+  instead of BQML.</li>
+<li>Serve features and predictions to <strong>Vertex AI</strong> and understand training/serving skew.</li>
+<li>Present results with <strong>Looker / Looker Studio</strong> and <strong>BI Engine</strong>.</li>
+<li>Recognize the exam's ML-on-GCP decision points.</li>
+</ul>
+<hr>
+<h2 id="1-bigquery-ml-ml-where-the-data-lives">1. BigQuery ML — ML Where the Data Lives</h2>
+<p>Train models with <code>CREATE MODEL</code> — no data movement, no infra. Great when your data is
+already in BigQuery and the model type is supported.</p>
+<pre><code class="language-sql">CREATE OR REPLACE MODEL ml.churn
+OPTIONS(model_type='LOGISTIC_REG', input_label_cols=['churned']) AS
+SELECT tenure_months, monthly_spend, support_tickets, churned
+FROM ml.customers;
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ML.EVALUATE</code></td>
+<td>Metrics (AUC, precision, RMSE…)</td>
+</tr>
+<tr>
+<td><code>ML.PREDICT</code></td>
+<td>Score new rows</td>
+</tr>
+<tr>
+<td><code>ML.EXPLAIN_PREDICT</code></td>
+<td>Feature attributions</td>
+</tr>
+<tr>
+<td><code>TRANSFORM(...)</code></td>
+<td>Bake feature engineering into the model (no serving skew)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="2-choosing-a-model-type">2. Choosing a Model Type</h2>
+<table>
+<thead>
+<tr>
+<th>Problem</th>
+<th>BQML model_type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Binary/multiclass classification</td>
+<td><code>LOGISTIC_REG</code>, <code>BOOSTED_TREE_CLASSIFIER</code>, <code>DNN_CLASSIFIER</code></td>
+</tr>
+<tr>
+<td>Regression</td>
+<td><code>LINEAR_REG</code>, <code>BOOSTED_TREE_REGRESSOR</code></td>
+</tr>
+<tr>
+<td>Clustering</td>
+<td><code>KMEANS</code></td>
+</tr>
+<tr>
+<td>Forecasting</td>
+<td><code>ARIMA_PLUS</code></td>
+</tr>
+<tr>
+<td>Recommendation</td>
+<td><code>MATRIX_FACTORIZATION</code></td>
+</tr>
+<tr>
+<td>Deep/AutoML</td>
+<td><code>DNN_*</code>, <code>AUTOML_CLASSIFIER/REGRESSOR</code></td>
+</tr>
+<tr>
+<td>Use a remote LLM</td>
+<td><code>CREATE MODEL ... REMOTE WITH CONNECTION</code> (Vertex endpoint)</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Exam tip:</strong> demand forecasting → <strong>ARIMA_PLUS</strong>; customer segmentation → <strong>KMEANS</strong>;
+product recs → <strong>MATRIX_FACTORIZATION</strong>.</p>
+</blockquote>
+<h2 id="3-bqml-vs-automl-vs-custom-vertex-ai">3. BQML vs AutoML vs Custom Vertex AI</h2>
+<table>
+<thead>
+<tr>
+<th>Approach</th>
+<th>Use when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>BigQuery ML</strong></td>
+<td>Data in BQ, standard model, SQL team, fast iteration</td>
+</tr>
+<tr>
+<td><strong>AutoML (Vertex)</strong></td>
+<td>Need high accuracy with little ML code, images/text/tabular</td>
+</tr>
+<tr>
+<td><strong>Custom training (Vertex)</strong></td>
+<td>Custom frameworks (TF/PyTorch), full control, large-scale DL</td>
+</tr>
+<tr>
+<td><strong>Pre-trained APIs</strong></td>
+<td>Vision/Speech/NL/Translation — don't train at all</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Trap:</strong> don't build a model when a <strong>pre-trained API</strong> (Vision, Document AI, Natural
+Language) already solves it.</p>
+</blockquote>
+<h2 id="4-vertex-ai-integration-serving-skew">4. Vertex AI Integration &amp; Serving Skew</h2>
+<ul>
+<li>Export BQML models to <strong>Vertex AI</strong> for online serving, or register/monitor them.</li>
+<li><strong>Vertex Feature Store</strong> serves consistent features to training <em>and</em> online inference —
+  prevents <strong>training/serving skew</strong> (features computed differently in each path).</li>
+<li><strong>Vertex Pipelines</strong> orchestrate ML workflows; <strong>Model Monitoring</strong> watches for drift.</li>
+</ul>
+<blockquote>
+<p><strong>Exam tip:</strong> "features differ between training and production" = <strong>training/serving
+skew</strong> → use a <strong>Feature Store</strong> / shared transformation (<code>TRANSFORM</code> in BQML).</p>
+</blockquote>
+<h2 id="5-serving-analytics-looker-bi-engine">5. Serving Analytics: Looker &amp; BI Engine</h2>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Looker</strong></td>
+<td>Governed semantic layer (LookML), enterprise BI, embedded analytics</td>
+</tr>
+<tr>
+<td><strong>Looker Studio</strong></td>
+<td>Free, self-serve dashboards on BigQuery &amp; others</td>
+</tr>
+<tr>
+<td><strong>BI Engine</strong></td>
+<td>In-memory acceleration for sub-second dashboard queries</td>
+</tr>
+<tr>
+<td><strong>Connected Sheets</strong></td>
+<td>Analyze BigQuery from Google Sheets, no SQL</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="exam-focus">🎯 Exam Focus</h2>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Answer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>"Predict churn, data already in BigQuery, SQL team"</td>
+<td><strong>BigQuery ML</strong> (<code>LOGISTIC_REG</code>/boosted tree)</td>
+</tr>
+<tr>
+<td>"Forecast next quarter demand"</td>
+<td>BQML <strong>ARIMA_PLUS</strong></td>
+</tr>
+<tr>
+<td>"Segment customers"</td>
+<td>BQML <strong>KMEANS</strong></td>
+</tr>
+<tr>
+<td>"Recommend products"</td>
+<td>BQML <strong>MATRIX_FACTORIZATION</strong></td>
+</tr>
+<tr>
+<td>"Detect objects in images"</td>
+<td><strong>Vision API</strong> (pre-trained) — don't train</td>
+</tr>
+<tr>
+<td>"High-accuracy tabular model, little ML code"</td>
+<td><strong>AutoML Tabular</strong> (Vertex)</td>
+</tr>
+<tr>
+<td>"Features differ train vs serve"</td>
+<td><strong>Feature Store</strong> / <code>TRANSFORM</code> to fix skew</td>
+</tr>
+<tr>
+<td>"Sub-second executive dashboards on BQ"</td>
+<td><strong>Looker/Looker Studio + BI Engine</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="practice-questions">Practice Questions</h3>
+<ol>
+<li><strong>Churn prediction on data already in BigQuery, team knows SQL not Python.</strong> →
+   <strong>BigQuery ML</strong> logistic regression / boosted tree — no data movement.</li>
+<li><strong>Forecast daily sales for the next 30 days.</strong> → BQML <strong>ARIMA_PLUS</strong>.</li>
+<li><strong>Group customers into unlabeled segments.</strong> → BQML <strong>KMEANS</strong> (unsupervised).</li>
+<li><strong>Classify support images of damaged parts.</strong> → <strong>Vertex AutoML Vision</strong> or the
+   pre-trained <strong>Vision API</strong> if generic labels suffice.</li>
+<li><strong>Model works in training but is wrong in production because features are computed
+   differently.</strong> → <strong>Training/serving skew</strong> → use <strong>Vertex Feature Store</strong> / bake
+   features into <code>TRANSFORM</code>.</li>
+<li><strong>Executives need sub-second dashboards over a huge BigQuery table.</strong> → <strong>Looker (or
+   Looker Studio) with BI Engine</strong>.</li>
+</ol>
+<hr>
+<h2 id="key-takeaways">Key Takeaways</h2>
+<ul>
+<li><strong>BQML</strong> brings ML to the data with SQL; pick the <code>model_type</code> from the problem
+  (ARIMA_PLUS/KMEANS/MATRIX_FACTORIZATION are common exam answers).</li>
+<li>Escalate to <strong>AutoML</strong> for accuracy-with-little-code, <strong>custom Vertex</strong> for full
+  control, <strong>pre-trained APIs</strong> when they already solve it.</li>
+<li>Prevent <strong>training/serving skew</strong> with a Feature Store or <code>TRANSFORM</code>.</li>
+<li>Serve insights with <strong>Looker/Looker Studio</strong> accelerated by <strong>BI Engine</strong>.</li>
+</ul>
+<p>Next: <a href="../module_12_reliability_cost/README.md">Module 12 — Reliability, Monitoring &amp; Cost</a>.</p>
+<hr>
+<h2 id="files-in-this-module">Files in This Module</h2>
+<ul>
+<li><code>concepts.sql</code> — train/evaluate/predict a churn model + a KMEANS segmentation in BQML</li>
+<li><code>concepts.tf</code> — a BI Engine reservation and a BQML-backed dataset</li>
+<li><code>exercise.md</code> — build and evaluate a forecasting model</li>
+<li><code>solution.sql</code> — reference solution</li>
+</ul>
+</body>
+</html>

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 5: Single-Agent Systems — Tool Calling, ReAct, and Failure Modes</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-5-single-agent-systems-tool-calling-react-and-failure-modes">Module 5: Single-Agent Systems — Tool Calling, ReAct, and Failure Modes</h1>
+<h2 id="learning-objectives">Learning Objectives</h2>
+<ul>
+<li>Define an <strong>agent</strong> precisely enough to know when a chatbot is not one (the meme's
+  rule 4 is a real epidemic).</li>
+<li>Implement <strong>tool/function calling</strong>: schema declaration, argument validation, safe
+  dispatch, and result feedback.</li>
+<li>Build the <strong>ReAct loop</strong> (Reason → Act → Observe) with a bounded step budget.</li>
+<li>Name the <strong>failure modes of single agents</strong> — infinite loops, hallucinated tools,
+  malformed arguments, ignored observations — and implement the guard for each.</li>
+<li>Know what frameworks like Pydantic AI actually provide, so you can evaluate rather
+  than worship them.</li>
+</ul>
+<hr>
+<h2 id="1-what-an-agent-is-and-isnt">1. What an Agent Is (and Isn't)</h2>
+<blockquote>
+<p><strong>An agent is an LLM that decides, in a loop, which actions to take next —
+using tools, observing results, and iterating until it judges the task done.</strong></p>
+</blockquote>
+<p>The load-bearing words are <em>decides</em>, <em>loop</em>, and <em>observes</em>:</p>
+<table>
+<thead>
+<tr>
+<th>System</th>
+<th>Loop?</th>
+<th>Model picks actions?</th>
+<th>Verdict</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Chatbot answering from context</td>
+<td>no</td>
+<td>no</td>
+<td>not an agent</td>
+</tr>
+<tr>
+<td>One-shot "call the weather API, then answer" chain</td>
+<td>no</td>
+<td>no (you hardcoded it)</td>
+<td>pipeline, not agent</td>
+</tr>
+<tr>
+<td>RAG with fixed retrieve-then-generate</td>
+<td>no</td>
+<td>no</td>
+<td>pipeline</td>
+</tr>
+<tr>
+<td>Model choosing tools per step until done</td>
+<td>yes</td>
+<td>yes</td>
+<td>agent</td>
+</tr>
+</tbody>
+</table>
+<p>Calling every chatbot an agent isn't just marketing — it makes teams pay agent costs
+(loops, unpredictability, eval difficulty) for chatbot problems.</p>
+<h2 id="2-tool-calling-a-contract-not-magic">2. Tool Calling: A Contract, Not Magic</h2>
+<p>The model never executes anything. It emits a <em>request</em> — <code>{"tool": name, "args":
+{...}}</code> — and your runtime does the dangerous part. That makes the runtime a
+boundary with real responsibilities:</p>
+<pre><code class="language-mermaid">flowchart LR
+    L[LLM] -- tool request --&gt; V[validate: tool exists? args match schema?]
+    V -- ok --&gt; X[execute] --&gt; O[observation] --&gt; L
+    V -- invalid --&gt; E[structured error] --&gt; L
+</code></pre>
+<ol>
+<li><strong>Declare</strong> each tool with a schema (name, typed parameters, description — the
+   description is prompt engineering: the model chooses tools by reading it).</li>
+<li><strong>Validate</strong> every request: unknown tool names and malformed arguments are
+   <em>expected model behavior</em>, not exceptional.</li>
+<li><strong>Return errors as observations.</strong> A validation failure fed back as text lets the
+   model correct itself; a raised exception kills the loop.</li>
+</ol>
+<p>This is exactly the niche Pydantic AI fills in production Python: schemas from type
+hints, automatic validation, retries on bad arguments. After building it by hand
+here, you'll know precisely what you're outsourcing.</p>
+<h2 id="3-the-react-pattern">3. The ReAct Pattern</h2>
+<p>ReAct interleaves explicit reasoning with actions — the model <em>says why</em> before it
+acts, and every result comes back as an observation:</p>
+<pre><code>Thought:      the user wants the invoice total for March
+Action:       lookup_invoice {&quot;month&quot;: &quot;2026-03&quot;}
+Observation:  {&quot;total&quot;: 4200, &quot;status&quot;: &quot;paid&quot;}
+Thought:      I have the total; I can answer now
+Final Answer: your March invoice totaled $4,200 (paid).
+</code></pre>
+<p>The Thought line is not decoration: it forces the model to commit to a plan the
+runtime can log, eval, and debug. When an agent misbehaves, the trace of
+thought/action/observation triples is your stack trace.</p>
+<h2 id="4-failure-modes-and-their-guards">4. Failure Modes and Their Guards</h2>
+<p>Single agents fail in stereotyped ways. Every guard below is implemented in
+<code>concepts.py</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Failure</th>
+<th>Symptom</th>
+<th>Guard</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Infinite loop</td>
+<td>Same action, same args, forever</td>
+<td>Step budget + repeated-action detector</td>
+</tr>
+<tr>
+<td>Hallucinated tool</td>
+<td>Calls <code>send_email</code> which doesn't exist</td>
+<td>Registry validation → error observation</td>
+</tr>
+<tr>
+<td>Malformed arguments</td>
+<td><code>{"month": "March"}</code> where schema wants <code>YYYY-MM</code></td>
+<td>Schema validation → error observation, bounded retries</td>
+</tr>
+<tr>
+<td>Ignored observation</td>
+<td>Tool returned the answer; model re-queries anyway</td>
+<td>Loop detector + forced-answer fallback</td>
+</tr>
+<tr>
+<td>Runaway cost</td>
+<td>40 tool calls for a trivial question</td>
+<td>Budget in <em>calls and tokens</em>, not wall-clock hope</td>
+</tr>
+</tbody>
+</table>
+<p>The meta-rule: <strong>an agent is a while-loop around an unreliable planner.</strong> Everything
+you know about defensive programming applies, with the model as the untrusted input.</p>
+<hr>
+<h2 id="key-takeaways">Key Takeaways</h2>
+<ul>
+<li>Agent = model deciding actions in an observed loop; most "agents" are pipelines.</li>
+<li>Tool calling is a validated contract; the runtime, not the model, executes.</li>
+<li>Feed errors back as observations — self-correction is the cheapest retry.</li>
+<li>ReAct's thoughts are your debuggable trace; log them.</li>
+<li>Budget steps, detect repeats, validate everything: guards are the difference
+  between an agent and an outage.</li>
+</ul>
+<p>Next: <a href="../module_06_multi_agent/README.md">Module 6 — Multi-Agent Systems &amp; MCP</a>.</p>
+<hr>
+<h2 id="files-in-this-module">Files in This Module</h2>
+<ul>
+<li><code>concepts.py</code> — tool registry, validation, a full ReAct loop, every failure mode + guard</li>
+<li><code>exercise.py</code> — build the registry and ReAct loop yourself</li>
+<li><code>solution.py</code> — reference solution</li>
+</ul>
+</body>
+</html>

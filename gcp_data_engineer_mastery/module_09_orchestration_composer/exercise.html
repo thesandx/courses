@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 9 Exercise: A Backfillable Daily Pipeline</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-9-exercise-a-backfillable-daily-pipeline">Module 9 Exercise: A Backfillable Daily Pipeline</h1>
+<h2 id="goal">Goal</h2>
+<p>Author an Airflow DAG that ingests a day's web-log file and produces a daily error-rate
+summary — and can be <strong>safely backfilled</strong> for any past date without duplicating data.
+This is the orchestration skill the exam probes hardest.</p>
+<h2 id="tasks">Tasks</h2>
+<p>Create <code>logs_dag.py</code>. Reference <code>solution.py</code> after attempting.</p>
+<h3 id="todo-1-dag-skeleton">TODO 1 — DAG skeleton</h3>
+<p><code>dag_id="daily_error_rate"</code>, <code>schedule="@daily"</code>, a <code>start_date</code>, <strong><code>catchup=False</code></strong>,
+<code>retries=2</code>, <code>retry_delay=5m</code>.</p>
+<h3 id="todo-2-sensor">TODO 2 — Sensor</h3>
+<p><code>GCSObjectExistenceSensor</code> waiting for <code>logs/{{ ds }}/access.log</code> in your raw bucket.</p>
+<h3 id="todo-3-load">TODO 3 — Load</h3>
+<p><code>GCSToBigQueryOperator</code> loading that file into <code>staging.access_stg</code> with
+<code>WRITE_TRUNCATE</code>.</p>
+<h3 id="todo-4-idempotent-transform">TODO 4 — Idempotent transform</h3>
+<p><code>BigQueryInsertJobOperator</code> that <strong>deletes then inserts</strong> the <code>{{ ds }}</code> partition of
+<code>analytics.error_rate</code> (columns: <code>log_date DATE, total INT64, errors INT64</code>). Re-running
+a date must overwrite, not append.</p>
+<h3 id="todo-5-wire-dependencies">TODO 5 — Wire dependencies</h3>
+<p><code>sensor &gt;&gt; load &gt;&gt; transform</code>.</p>
+<h2 id="self-verification">Self-Verification</h2>
+<pre><code class="language-bash"># Copy the DAG to the Composer bucket:
+gcloud storage cp logs_dag.py &quot;$(terraform -chdir=../ output -raw dag_gcs_prefix)&quot;
+
+# In the Airflow UI (airflow_uri output), the DAG parses with no import errors.
+
+# Trigger a specific past date twice and confirm NO duplication:
+gcloud composer environments run de-orchestration --location=us-central1 \
+  dags trigger -- daily_error_rate -e 2026-07-02
+# (run it again for the same date)
+bq query --use_legacy_sql=false \
+  &quot;SELECT log_date, COUNT(*) FROM analytics.error_rate WHERE log_date='2026-07-02' GROUP BY log_date&quot;
+#   → exactly ONE row (idempotent), not two
+</code></pre>
+<h2 id="stretch-goals">Stretch Goals</h2>
+<ol>
+<li>Add an <code>on_failure_callback</code> that posts to a Pub/Sub topic (alerting).</li>
+<li>Add a task-level <code>sla</code> and observe an SLA miss in the UI.</li>
+<li>Replace the transform with a <strong>DataprocCreateBatchOperator</strong> (Serverless Spark) and
+   compare when you'd use SQL vs Spark here.</li>
+</ol>
+<h2 id="cleanup">Cleanup</h2>
+<pre><code class="language-bash">terraform destroy -var project_id=&quot;$PROJECT_ID&quot;   # deletes the (costly) environment
+</code></pre>
+</body>
+</html>

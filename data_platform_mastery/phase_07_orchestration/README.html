@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 07 — Orchestration: the DAG Factory ⑩ (`v0.7.0`)</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="phase-07-orchestration-the-dag-factory-10-v070">Phase 07 — Orchestration: the DAG Factory ⑩ (<code>v0.7.0</code>)</h1>
+<blockquote>
+<p><strong>Mission:</strong> Airflow ties the platform together — but you will not write DAGs.
+You'll write a <strong>DAG factory</strong> that generates one standardized pipeline per
+registered dataset from the metadata core. Onboarding a source in Phase 2 now
+means a DAG <em>appears</em>. Plus: real backfills, sensors, pools, and the
+cross-cutting audit wiring.</p>
+</blockquote>
+<h2 id="1-concepts">1. Concepts</h2>
+<p>Read notes <strong>§31 (Airflow deep dive)</strong>, <strong>§7 (pipeline design)</strong>, <strong>§13 (backfill)</strong>;
+GCP <strong>M09 (Composer)</strong>.</p>
+<ul>
+<li><strong>Airflow orchestrates; it does not process (§31).</strong> Every task here <em>submits</em>
+  work (Dataproc batch, BQ job, ingestion CLI) and records audit rows. If you find
+  pandas in a PythonOperator, you've failed the phase.</li>
+<li><strong>One DAG per business process (§7)</strong> → one DAG per dataset, uniform shape
+  (charter §5). Uniformity is the win: on-call can debug <em>any</em> pipeline because
+  they all look identical.</li>
+<li><strong>Parse-time vs run-time (the §31 scheduler lesson):</strong> the factory must NOT
+  query Cloud SQL at parse time (the scheduler re-parses constantly; a slow/down
+  DB would take down <em>all</em> scheduling). Instead, <code>pipeforge registry export</code>
+  writes <code>dags/registry_snapshot.json</code>; the factory builds DAGs from the file;
+  CI/CD refreshes it on registry change. Metadata-driven, but parse-safe — a
+  genuinely staff-level detail.</li>
+<li><strong><code>execution_date</code>/<code>data_interval</code> is the spine of correctness:</strong> every task gets
+  the logical date via Jinja (<code>{{ ds }}</code>), which is what makes <code>airflow dags
+  backfill</code> equal "re-run history safely" (§13's parameter-change-not-code-change).</li>
+</ul>
+<h2 id="2-build">2. Build</h2>
+<h3 id="21-local-airflow-dockerdocker-composeairflowyml">2.1 Local Airflow — <code>docker/docker-compose.airflow.yml</code></h3>
+<p>Use the official Airflow 2.9+ compose (LocalExecutor, Postgres metadata DB),
+mounting <code>./dags</code> and your wheel. Add <code>PF_*</code> env vars. <code>docker compose up</code> →
+http://localhost:8082. (Composer would cost ~$300+/mo idle; local is where DE
+teams actually develop DAGs anyway. You'll do a Composer excursion in 2.6.)</p>
+<h3 id="22-the-factory-dagsdag_factorypy">2.2 The factory — <code>dags/dag_factory.py</code></h3>
+<pre><code class="language-python">&quot;&quot;&quot;Generates one standardized DAG per active dataset from registry_snapshot.json.
+
+DAG shape (charter §5):
+  preflight &gt;&gt; ingest_raw &gt;&gt; dq_raw &gt;&gt; promote_odp &gt;&gt; promote_fdp
+            &gt;&gt; dq_fdp &gt;&gt; build_cdp &gt;&gt; reconcile &gt;&gt; publish
+DQ/recon tasks are no-op stubs until Phase 8 flips them on. Tenant → pool.
+&quot;&quot;&quot;
+import json, pendulum
+from pathlib import Path
+from airflow import DAG
+from airflow.operators.python import PythonOperator
+from airflow.providers.google.cloud.operators.dataproc import DataprocCreateBatchOperator
+
+SNAPSHOT = json.loads((Path(__file__).parent / &quot;registry_snapshot.json&quot;).read_text())
+
+def make_dag(ds_cfg: dict) -&gt; DAG:
+    dag = DAG(
+        dag_id=f&quot;pf_{ds_cfg['name']}&quot;,
+        schedule=ds_cfg[&quot;schedule_cron&quot;],
+        start_date=pendulum.parse(ds_cfg[&quot;start_date&quot;]),
+        catchup=False,                      # backfills are explicit, never accidental
+        max_active_runs=1,                  # serialize per-dataset (SCD2 must not race itself)
+        default_args={
+            &quot;retries&quot;: 2,
+            &quot;retry_delay&quot;: pendulum.duration(minutes=5),
+            &quot;retry_exponential_backoff&quot;: True,
+            &quot;execution_timeout&quot;: pendulum.duration(hours=1),
+            &quot;sla&quot;: pendulum.duration(minutes=ds_cfg[&quot;sla_freshness_minutes&quot;]),
+        },
+        tags=[&quot;pipeforge&quot;, ds_cfg[&quot;tenant&quot;], ds_cfg[&quot;load_pattern&quot;]],
+    )
+    with dag:
+        ingest = PythonOperator(
+            task_id=&quot;ingest_raw&quot;,
+            python_callable=run_ingest,      # thin wrapper: pipeforge ingest --dataset X --execution-date {{ ds }}
+            op_kwargs={&quot;dataset&quot;: ds_cfg[&quot;name&quot;], &quot;execution_date&quot;: &quot;{{ ds }}&quot;},
+            pool=f&quot;tenant_{ds_cfg['tenant']}&quot;,
+        )
+        promote_odp = DataprocCreateBatchOperator(          # submit; don't process (§31)
+            task_id=&quot;promote_odp&quot;,
+            batch=standardize_batch_spec(ds_cfg, &quot;{{ ds }}&quot;),
+            region=&quot;us-central1&quot;,
+        )
+        ...
+        chain(preflight, ingest, dq_raw, promote_odp, promote_fdp, dq_fdp,
+              build_cdp, reconcile, publish)
+    return dag
+
+for cfg in SNAPSHOT[&quot;datasets&quot;]:
+    if cfg[&quot;active&quot;]:
+        globals()[f&quot;pf_{cfg['name']}&quot;] = make_dag(cfg)     # module-level = discoverable
+</code></pre>
+<p>Details that matter (each is an interview point):
+- <strong><code>catchup=False</code> + explicit backfill</strong> — accidental catchup on a new DAG with a
+  2-year start_date is a classic self-inflicted incident.
+- <strong><code>max_active_runs=1</code></strong> — MERGE-based FDP jobs must not run concurrently for
+  overlapping keys; serialization is the cheap correctness fix.
+- <strong>Pools per tenant</strong> — your first multi-tenancy control (fairness; one tenant's
+  backfill can't starve another). Expanded in Phase 12.
+- File-drop datasets get a <strong>deferrable GCS sensor</strong> (<code>GCSObjectsWithPrefixExistenceSensorAsync</code>)
+  as preflight — deferrable = doesn't occupy a worker slot while waiting (know why).
+- Streaming datasets get a different template: a sensor-style DAG that <em>monitors</em>
+  the Kafka consumer (lag threshold → alert) rather than moving data.</p>
+<h3 id="23-audit-lineage-wiring">2.3 Audit + lineage wiring</h3>
+<p>Task callbacks (<code>on_success_callback</code> / <code>on_failure_callback</code> / <code>sla_miss_callback</code>)
+write to <code>pipeline_run</code> (adding <code>airflow_dag_id</code>, <code>airflow_run_id</code>) — the ⑧ audit
+model now captures orchestration reality. The <code>publish</code> task stamps dataset
+freshness in the registry (consumed by the Phase 10 SLA monitor and the Phase 11 catalog).</p>
+<h3 id="24-backfill-first-class-pipeforge-backfill">2.4 Backfill, first-class — <code>pipeforge backfill</code></h3>
+<pre><code class="language-bash">pipeforge backfill --dataset orders --start 2026-06-01 --end 2026-06-14 \
+  --layers odp,fdp,cdp --parallelism 3 --priority recent-first
+</code></pre>
+<p>Implementation: either drive <code>airflow dags backfill</code> or (better, and more
+portable) invoke the same task functions directly with the date range, pooled by
+<code>--parallelism</code>, <strong>recent-first</strong> by default (§13: stakeholder-visible dashboards
+heal fastest). It works <em>because</em> every phase before this one was idempotent —
+backfill is where your discipline pays out. Log a <code>pipeline_run</code> row per
+(date, layer) like any other run; notify downstream (print the §13 mantra:
+"never backfill silently").</p>
+<h3 id="25-failure-handling-hardening">2.5 Failure-handling hardening</h3>
+<ul>
+<li>Alerting callback → Slack webhook (or just structured log locally) containing:
+  DAG, task, execution_date, error, retry count, <strong>runbook link</strong>, log link — the
+  §9 "debuggable at 3am in 30 seconds" alert.</li>
+<li>Circuit breaker in preflight: if the same source failed ≥3 consecutive runs,
+  short-circuit to <code>source_down</code> state and alert P1 instead of hammering (§8 failure domain 1).</li>
+</ul>
+<h3 id="26-composer-excursion-half-a-day-then-destroy">2.6 Composer excursion (half a day, then destroy)</h3>
+<p>Terraform a <code>composer-3</code> small environment <strong>or</strong> just read M09 + price it out and
+write <code>docs/adr/0004-airflow-hosting.md</code>: local/self-managed vs Composer vs
+Astronomer/MWAA — cost, upgrade burden, IAM integration, DAG deploy story
+(<code>gcloud storage cp dags/ …/dags/</code>). If you create it, upload your factory,
+watch it run once, <strong>destroy it the same day</strong>. The ADR is the deliverable; the
+$15 of Composer time is optional.</p>
+<h3 id="27-ship-it">2.7 Ship it</h3>
+<p>Tests: factory produces a DAG per active dataset with correct schedule/pool/tags
+(<code>DagBag(include_examples=False).import_errors == {}</code> — the classic Airflow CI
+test), Jinja dates land in op_kwargs, disabled dataset → no DAG. Tag <code>v0.7.0</code>.</p>
+<h2 id="3-prove-it">3. Prove it</h2>
+<ul>
+<li>[ ] <code>docker compose up</code> → all NovaMart DAGs visible, zero import errors, parse time &lt; 2s (no DB at parse!)</li>
+<li>[ ] Trigger <code>pf_orders</code> for yesterday: all 9 tasks green; <code>pipeline_run</code> has one row per layer with matching <code>airflow_run_id</code></li>
+<li>[ ] Register a brand-new dataset (any public CSV) end-to-end: <code>pipeforge register …</code> → export snapshot → <strong>DAG appears and runs with zero new Python</strong> ← this is the money demo</li>
+<li>[ ] 14-day backfill completes; spot-check 3 dates for idempotency (counts unchanged on re-run)</li>
+<li>[ ] Kill a Dataproc task mid-run: retry fires with backoff, audit shows attempt trail</li>
+</ul>
+<h2 id="4-break-it">4. Break it</h2>
+<p>Set <code>catchup=True</code> on a copy of a DAG with <code>start_date</code> 60 days ago and watch the
+scheduler queue 60 runs (in a scratch dataset). Kill it, clean up, then write
+<code>docs/incidents/007-accidental-catchup.md</code> — including how pools and
+<code>max_active_runs</code> contained the blast radius.</p>
+<h2 id="5-interview-corner">5. Interview corner</h2>
+<ul>
+<li><strong>Q7 is now fully yours.</strong> Rehearse the 45-min "ETL framework for 100 sources"
+  answer: registry → contract ceremony → parameter-driven engines → DAG factory →
+  uniform DQ/audit → onboarding = config. You can demo it live.</li>
+<li><em>"How do you do backfills?"</em> → parameterized dates, idempotent writes,
+  recent-first, capped parallelism, notify downstream (§13 verbatim — but from experience).</li>
+<li><em>"Airflow limits?"</em> — parse-time bottleneck (hence snapshot file), no streaming
+  (hence the monitor-DAG pattern), XCom size (pass GCS paths, not data) (§31).</li>
+<li><em>"Airflow vs Dagster?"</em> — you can now argue asset-orientation honestly: your
+  YAML models + registry ARE software-defined assets; Dagster makes that the
+  first-class primitive (§38).</li>
+</ul>
+<h2 id="6-stretch-goals">6. Stretch goals</h2>
+<ul>
+<li>Airflow <strong>Datasets</strong> (data-aware scheduling): <code>build_cdp</code> publishes a Dataset;
+  a downstream "ML features" DAG is triggered by it instead of cron.</li>
+<li>Add a <code>pipeforge doctor</code> command: checks registry↔DAG snapshot drift, orphaned DAGs, missing contracts.</li>
+<li>OpenLineage Airflow provider (preview of Phase 9): task-level lineage events emitted automatically.</li>
+</ul>
+</body>
+</html>

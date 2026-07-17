@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Real-World API Track — From Mock LLM to Production Calls (OpenRouter)</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="real-world-api-track-from-mock-llm-to-production-calls-openrouter">Real-World API Track — From Mock LLM to Production Calls (OpenRouter)</h1>
+<p>Modules 1–8 teach the architecture with deterministic mock LLMs so everything runs
+offline and free. This track is the bridge to real-world projects: the <strong>same
+patterns, now against a live LLM API</strong>. It uses <strong>OpenRouter</strong> through the
+<strong>OpenAI-compatible API</strong> — one key, one client, and you can swap between hundreds
+of models (GPT, Claude, Gemini, Llama, …) by changing a single string, which is
+exactly the Module 8 gateway idea in the real world.</p>
+<p>Each exercise pairs with the module that taught the concept — do the module first,
+then its real-API twin here.</p>
+<h2 id="setup-one-time">Setup (one time)</h2>
+<pre><code class="language-bash">pip install openai                                   # exercises 1-4, 7 (works with any OpenAI-compatible API)
+pip install langchain langchain-openai               # exercise 5
+pip install mcp                                      # exercise 6
+export OPENROUTER_API_KEY=&quot;sk-or-...&quot;                # from https://openrouter.ai/keys
+export OPENROUTER_MODEL=&quot;openai/gpt-4o-mini&quot;         # optional; any OpenRouter model id
+python3 01_first_llm_call.py                         # verify the setup works
+</code></pre>
+<p>The only OpenRouter-specific line in every script is the client construction:</p>
+<pre><code class="language-python">from openai import OpenAI
+client = OpenAI(base_url=&quot;https://openrouter.ai/api/v1&quot;,
+                api_key=os.environ[&quot;OPENROUTER_API_KEY&quot;])
+</code></pre>
+<p>Everything after that is the standard OpenAI-compatible surface
+(<code>client.chat.completions.create(...)</code>) — the same code works against OpenAI
+directly, a local vLLM/Ollama server, or any other compatible endpoint by
+changing <code>base_url</code>. Every script checks for credentials and tells you what's
+missing instead of crashing.</p>
+<h2 id="the-exercises">The Exercises</h2>
+<table>
+<thead>
+<tr>
+<th>Script</th>
+<th>Pairs with</th>
+<th>You will do for real</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>01_first_llm_call.py</code></td>
+<td>Module 1</td>
+<td>Your first API call, structured prompt sections, reading token usage from the response</td>
+</tr>
+<tr>
+<td><code>02_rag_with_real_llm.py</code></td>
+<td>Modules 2–3</td>
+<td>Retrieval from your own vector store + <strong>grounded generation</strong> with JSON-mode citations</td>
+</tr>
+<tr>
+<td><code>03_tool_calling_agent.py</code></td>
+<td>Modules 5–6</td>
+<td>A real agent: OpenAI-style function tools + the ReAct loop you built in Module 5, now driven by a real model</td>
+</tr>
+<tr>
+<td><code>04_eval_llm_judge.py</code></td>
+<td>Modules 7–8</td>
+<td>A real <strong>LLM-as-judge</strong> eval suite: rubric grading, grounding checks, the honest results table</td>
+</tr>
+<tr>
+<td><code>05_langchain_workflow.py</code></td>
+<td>Modules 2–4</td>
+<td><strong>LangChain &amp; AI workflows</strong>: LCEL chains, a classify-and-route workflow, and a RAG chain over your own retriever</td>
+</tr>
+<tr>
+<td><code>06_mcp_real.py</code></td>
+<td>Module 6</td>
+<td><strong>Real MCP</strong>: a FastMCP server over stdio, runtime tool discovery, and an LLM agent calling the discovered tools</td>
+</tr>
+<tr>
+<td><code>07_multi_agent_swarm.py</code></td>
+<td>Module 6</td>
+<td><strong>Multi-agent swarm</strong>: an orchestrator model planning subtasks, parallel specialist workers, conflict-aware synthesis, and the honest cost line</td>
+</tr>
+</tbody>
+</table>
+<p>Do them in order — each reuses ideas (and sometimes code) from the previous one.</p>
+<h2 id="ground-rules-for-the-real-world">Ground Rules for the Real World</h2>
+<ol>
+<li><strong>Never hardcode API keys.</strong> Environment variables or a secrets manager, always.</li>
+<li><strong>Read <code>response.usage</code> on every call</strong> — prompt tokens, completion tokens. If
+   you didn't measure it, you can't optimize it (Module 8). OpenRouter's dashboard
+   shows the per-model cost of every request.</li>
+<li><strong>Handle errors with typed exceptions</strong> (<code>openai.RateLimitError</code>,
+   <code>openai.APIStatusError</code>), never by string-matching messages.</li>
+<li><strong>Check <code>finish_reason</code> before trusting content</strong> — <code>length</code> means truncation,
+   <code>tool_calls</code> means the model wants a tool, not an answer.</li>
+<li><strong>The evals from Module 7 apply unchanged.</strong> A real model makes them <em>more</em>
+   necessary, not less: real models drift, get updated, and different models
+   behind the same OpenRouter key behave differently — the suite is how you
+   compare them honestly.</li>
+</ol>
+<h2 id="cost-expectations">Cost Expectations</h2>
+<p>All four scripts together make ~10 short calls. With the default
+<code>openai/gpt-4o-mini</code> a full run costs a fraction of a cent; pick a bigger model
+via <code>OPENROUTER_MODEL</code> when you want to compare quality (then re-run exercise 4
+and look at the table — that's the whole point).</p>
+<h2 id="where-to-go-next">Where to Go Next</h2>
+<ul>
+<li>Swap the hash embeddings in exercise 2 for a real embedding model and re-run
+  the Module 3 retrieval evals against it — measure the recall jump.</li>
+<li>Add the semantic cache from Module 8 in front of exercise 2's <code>ask()</code> and watch
+  repeated questions cost zero.</li>
+<li>Run exercise 4 against two different <code>OPENROUTER_MODEL</code>s and compare the full
+  tables — a real model benchmark, done honestly (Module 8, rule 14 of the meme).</li>
+<li>Rebuild the DeskMate capstone with exercises 2 + 3 + 4 as the LLM layer — that
+  is a genuinely production-shaped RAG agent.</li>
+</ul>
+</body>
+</html>

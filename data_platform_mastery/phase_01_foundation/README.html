@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 01 — Empty Repo → Engineering Foundation (`v0.1.0`)</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="phase-01-empty-repo-engineering-foundation-v010">Phase 01 — Empty Repo → Engineering Foundation (<code>v0.1.0</code>)</h1>
+<blockquote>
+<p><strong>Mission:</strong> turn the empty repo into a professional project: Python package,
+tests, lint, CI, and a Terraform foundation (remote state, APIs, budget, core
+service accounts, the lake buckets). Nothing "data" happens yet — this phase is
+what separates a portfolio project from a script dump.</p>
+</blockquote>
+<h2 id="1-concepts">1. Concepts</h2>
+<ul>
+<li>GCP course <strong>M01</strong> (IAM, service accounts, least privilege) and <strong>M02</strong> (bucket design) are the backbone here.</li>
+<li>Notes <strong>§15 (cost)</strong>: infra-as-code is a cost tool — <code>terraform destroy</code> is the ultimate auto-suspend.</li>
+<li>Interview relevance: platform questions (Q7/Q15/Q19) always include "how do teams get environments?" Answer: <em>composable Terraform modules + per-env compositions</em> — which you're about to build.</li>
+</ul>
+<p><strong>Terraform structure decision (memorize the reasoning):</strong></p>
+<ul>
+<li><code>terraform/bootstrap/</code> — the chicken-and-egg resources (the state bucket itself,
+  project APIs, budget). Applied once with <strong>local</strong> state, then never touched.</li>
+<li><code>terraform/modules/</code> — reusable building blocks (<code>gcs_lake</code>, <code>bigquery</code>, …).</li>
+<li><code>terraform/envs/dev/</code> — a <em>composition</em> that wires modules together with dev-sized
+  knobs. Adding <code>envs/prod</code> later = new folder + bigger knobs, zero module changes.
+  That sentence is a staff-level answer to "how do you promote infra between envs?"</li>
+</ul>
+<h2 id="2-build">2. Build</h2>
+<h3 id="21-repository-skeleton-python-packaging">2.1 Repository skeleton + Python packaging</h3>
+<pre><code class="language-bash">git clone git@github.com:&lt;you&gt;/pipeforge.git &amp;&amp; cd pipeforge
+mkdir -p src/pipeforge/core tests terraform/{bootstrap,modules,envs/dev} .github/workflows
+</code></pre>
+<p><code>pyproject.toml</code>:</p>
+<pre><code class="language-toml">[project]
+name = &quot;pipeforge&quot;
+version = &quot;0.1.0&quot;
+description = &quot;Open-source, metadata-driven data platform on GCP&quot;
+requires-python = &quot;&gt;=3.11&quot;
+license = {text = &quot;Apache-2.0&quot;}
+dependencies = [
+  &quot;typer&gt;=0.12&quot;, &quot;pydantic&gt;=2.7&quot;, &quot;pydantic-settings&gt;=2.2&quot;,
+  &quot;google-cloud-storage&gt;=2.16&quot;, &quot;google-cloud-bigquery&gt;=3.21&quot;,
+  &quot;sqlalchemy&gt;=2.0&quot;, &quot;structlog&gt;=24.1&quot;,
+]
+
+[project.optional-dependencies]
+dev = [&quot;pytest&gt;=8&quot;, &quot;pytest-cov&quot;, &quot;ruff&gt;=0.4&quot;, &quot;mypy&quot;, &quot;pre-commit&quot;, &quot;types-requests&quot;]
+
+[project.scripts]
+pipeforge = &quot;pipeforge.cli:app&quot;
+
+[build-system]
+requires = [&quot;hatchling&quot;]
+build-backend = &quot;hatchling.build&quot;
+
+[tool.ruff]
+line-length = 100
+lint.select = [&quot;E&quot;, &quot;F&quot;, &quot;I&quot;, &quot;B&quot;, &quot;UP&quot;]
+
+[tool.pytest.ini_options]
+testpaths = [&quot;tests&quot;]
+</code></pre>
+<p><code>src/pipeforge/core/settings.py</code> — one config object, env-driven (12-factor):</p>
+<pre><code class="language-python">from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    &quot;&quot;&quot;All runtime config. Values come from env vars prefixed PF_ (never hardcode).&quot;&quot;&quot;
+    model_config = SettingsConfigDict(env_prefix=&quot;PF_&quot;, env_file=&quot;.env&quot;, extra=&quot;ignore&quot;)
+
+    project_id: str
+    region: str = &quot;us-central1&quot;
+    env: str = &quot;dev&quot;
+    raw_bucket: str = &quot;&quot;          # filled by terraform output
+    quarantine_bucket: str = &quot;&quot;
+    metadata_db_url: str = &quot;&quot;     # set in Phase 2
+
+    @property
+    def resource_prefix(self) -&gt; str:
+        return f&quot;pf-{self.env}&quot;
+
+
+settings = Settings()  # import-time singleton; tests override via env
+</code></pre>
+<p><code>src/pipeforge/core/logging.py</code>:</p>
+<pre><code class="language-python">import structlog
+
+def configure_logging() -&gt; None:
+    structlog.configure(processors=[
+        structlog.processors.add_log_level,
+        structlog.processors.TimeStamper(fmt=&quot;iso&quot;),
+        structlog.processors.JSONRenderer(),      # JSON logs → Cloud Logging-friendly
+    ])
+
+log = structlog.get_logger(&quot;pipeforge&quot;)
+</code></pre>
+<p><code>src/pipeforge/cli.py</code> (grows every phase):</p>
+<pre><code class="language-python">import typer
+from pipeforge.core.logging import configure_logging
+
+app = typer.Typer(help=&quot;PipeForge — metadata-driven data platform on GCP&quot;)
+
+@app.callback()
+def _init() -&gt; None:
+    configure_logging()
+
+@app.command()
+def version() -&gt; None:
+    &quot;&quot;&quot;Print version.&quot;&quot;&quot;
+    from importlib.metadata import version as v
+    typer.echo(v(&quot;pipeforge&quot;))
+</code></pre>
+<p>First test, <code>tests/test_cli.py</code>:</p>
+<pre><code class="language-python">from typer.testing import CliRunner
+from pipeforge.cli import app
+
+def test_version_runs():
+    result = CliRunner().invoke(app, [&quot;version&quot;])
+    assert result.exit_code == 0
+</code></pre>
+<pre><code class="language-bash">pip install -e &quot;.[dev]&quot;   # or: uv pip install -e &quot;.[dev]&quot;
+pytest &amp;&amp; ruff check .
+</code></pre>
+<p>Add <code>LICENSE</code> (Apache-2.0), <code>.gitignore</code> (Python + Terraform: <code>.terraform/</code>,
+<code>*.tfstate*</code>, <code>.env</code>), and a minimal <code>README.md</code> with the elevator pitch from the
+charter — you'll rewrite it properly in Phase 14.</p>
+<h3 id="22-ci-github-actions">2.2 CI — GitHub Actions</h3>
+<p><code>.github/workflows/ci.yml</code>:</p>
+<pre><code class="language-yaml">name: ci
+on:
+  push: {branches: [main]}
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: &quot;3.11&quot;}
+      - run: pip install -e &quot;.[dev]&quot;
+      - run: ruff check .
+      - run: pytest --cov=pipeforge
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform fmt -check -recursive
+        working-directory: terraform
+      - run: |
+          terraform init -backend=false
+          terraform validate
+        working-directory: terraform/envs/dev
+</code></pre>
+<p>(Real <code>terraform plan</code> in CI needs cloud auth — Workload Identity Federation is a
+Phase 12 stretch goal; <code>validate</code> keeps CI honest until then.)</p>
+<h3 id="23-terraform-bootstrap-local-state-applied-once">2.3 Terraform bootstrap (local state, applied once)</h3>
+<p><code>terraform/bootstrap/main.tf</code>:</p>
+<pre><code class="language-hcl">terraform {
+  required_version = &quot;&gt;= 1.7&quot;
+  required_providers {
+    google = { source = &quot;hashicorp/google&quot;, version = &quot;~&gt; 5.30&quot; }
+  }
+}
+
+variable &quot;project_id&quot; { type = string }
+variable &quot;region&quot;     { type = string, default = &quot;us-central1&quot; }
+variable &quot;billing_account&quot; { type = string }
+
+provider &quot;google&quot; {
+  project = var.project_id
+  region  = var.region
+}
+
+# APIs the whole course needs (enabling is free; using them isn't)
+resource &quot;google_project_service&quot; &quot;apis&quot; {
+  for_each = toset([
+    &quot;storage.googleapis.com&quot;, &quot;bigquery.googleapis.com&quot;, &quot;sqladmin.googleapis.com&quot;,
+    &quot;dataproc.googleapis.com&quot;, &quot;pubsub.googleapis.com&quot;, &quot;run.googleapis.com&quot;,
+    &quot;secretmanager.googleapis.com&quot;, &quot;cloudkms.googleapis.com&quot;, &quot;dlp.googleapis.com&quot;,
+    &quot;dataplex.googleapis.com&quot;, &quot;datacatalog.googleapis.com&quot;,
+    &quot;monitoring.googleapis.com&quot;, &quot;logging.googleapis.com&quot;,
+    &quot;cloudbilling.googleapis.com&quot;, &quot;billingbudgets.googleapis.com&quot;,
+    &quot;artifactregistry.googleapis.com&quot;, &quot;compute.googleapis.com&quot;,
+  ])
+  service            = each.key
+  disable_on_destroy = false
+}
+
+# Remote state bucket — versioned, so a bad state push is recoverable
+resource &quot;google_storage_bucket&quot; &quot;tf_state&quot; {
+  name                        = &quot;${var.project_id}-tf-state&quot;
+  location                    = var.region
+  uniform_bucket_level_access = true
+  versioning { enabled = true }
+  public_access_prevention = &quot;enforced&quot;
+}
+
+# The budget from Phase 0, now as code
+resource &quot;google_billing_budget&quot; &quot;guardrail&quot; {
+  billing_account = var.billing_account
+  display_name    = &quot;pipeforge-guardrail-tf&quot;
+  budget_filter { projects = [&quot;projects/${var.project_id}&quot;] }
+  amount { specified_amount { currency_code = &quot;USD&quot;, units = &quot;25&quot; } }
+  dynamic &quot;threshold_rules&quot; {
+    for_each = [0.5, 0.9, 1.0]
+    content { threshold_percent = threshold_rules.value }
+  }
+}
+
+output &quot;state_bucket&quot; { value = google_storage_bucket.tf_state.name }
+</code></pre>
+<pre><code class="language-bash">cd terraform/bootstrap
+terraform init
+terraform apply -var project_id=$PROJECT_ID -var billing_account=&lt;ACCOUNT_ID&gt;
+</code></pre>
+<h3 id="24-first-reusable-module-dev-environment">2.4 First reusable module + dev environment</h3>
+<p><code>terraform/modules/gcs_lake/main.tf</code>:</p>
+<pre><code class="language-hcl">variable &quot;project_id&quot; { type = string }
+variable &quot;region&quot;     { type = string }
+variable &quot;env&quot;        { type = string }
+
+locals { prefix = &quot;${var.project_id}-pf-${var.env}&quot; }
+
+resource &quot;google_storage_bucket&quot; &quot;zones&quot; {
+  for_each                    = toset([&quot;raw&quot;, &quot;quarantine&quot;, &quot;artifacts&quot;])
+  name                        = &quot;${local.prefix}-${each.key}&quot;
+  location                    = var.region
+  uniform_bucket_level_access = true
+  public_access_prevention    = &quot;enforced&quot;
+  # Lifecycle rules arrive in Phase 9 (archival framework) — resist adding them now.
+}
+
+output &quot;buckets&quot; { value = { for k, b in google_storage_bucket.zones : k =&gt; b.name } }
+</code></pre>
+<p><code>terraform/envs/dev/main.tf</code>:</p>
+<pre><code class="language-hcl">terraform {
+  required_version = &quot;&gt;= 1.7&quot;
+  backend &quot;gcs&quot; {
+    bucket = &quot;REPLACE_WITH_STATE_BUCKET&quot;   # from bootstrap output
+    prefix = &quot;envs/dev&quot;
+  }
+  required_providers {
+    google = { source = &quot;hashicorp/google&quot;, version = &quot;~&gt; 5.30&quot; }
+  }
+}
+
+variable &quot;project_id&quot; { type = string }
+variable &quot;region&quot;     { type = string, default = &quot;us-central1&quot; }
+
+provider &quot;google&quot; {
+  project = var.project_id
+  region  = var.region
+}
+
+module &quot;lake&quot; {
+  source     = &quot;../../modules/gcs_lake&quot;
+  project_id = var.project_id
+  region     = var.region
+  env        = &quot;dev&quot;
+}
+
+# Runtime SA for pipelines — least privilege grows with the course, never Editor
+resource &quot;google_service_account&quot; &quot;pipeline&quot; {
+  account_id   = &quot;pf-dev-pipeline&quot;
+  display_name = &quot;PipeForge dev pipeline runtime&quot;
+}
+
+resource &quot;google_storage_bucket_iam_member&quot; &quot;pipeline_rw&quot; {
+  for_each = module.lake.buckets
+  bucket   = each.value
+  role     = &quot;roles/storage.objectAdmin&quot;
+  member   = &quot;serviceAccount:${google_service_account.pipeline.email}&quot;
+}
+
+output &quot;buckets&quot;        { value = module.lake.buckets }
+output &quot;pipeline_sa&quot;    { value = google_service_account.pipeline.email }
+</code></pre>
+<pre><code class="language-bash">cd terraform/envs/dev
+terraform init &amp;&amp; terraform apply -var project_id=$PROJECT_ID
+# Wire outputs into your .env:
+echo &quot;PF_PROJECT_ID=$PROJECT_ID&quot; &gt;&gt; ../../../.env
+echo &quot;PF_RAW_BUCKET=$(terraform output -json buckets | jq -r .raw)&quot; &gt;&gt; ../../../.env
+echo &quot;PF_QUARANTINE_BUCKET=$(terraform output -json buckets | jq -r .quarantine)&quot; &gt;&gt; ../../../.env
+</code></pre>
+<h3 id="25-ship-it">2.5 Ship it</h3>
+<pre><code class="language-bash">git add -A &amp;&amp; git commit -m &quot;Engineering foundation: package, CI, terraform bootstrap + dev env&quot;
+git push -u origin main
+git tag v0.1.0 &amp;&amp; git push origin v0.1.0
+</code></pre>
+<p>Open a GitHub Release for <code>v0.1.0</code> with 3 bullet points. Every phase ends like this.</p>
+<h2 id="3-prove-it">3. Prove it</h2>
+<ul>
+<li>[ ] CI green on GitHub (lint + tests + terraform fmt/validate)</li>
+<li>[ ] <code>pipeforge version</code> prints <code>0.1.0</code></li>
+<li>[ ] <code>gsutil ls</code> shows raw/quarantine/artifacts buckets; state bucket has versioning</li>
+<li>[ ] Budget exists <strong>in Terraform state</strong> (<code>terraform state list | grep budget</code>)</li>
+<li>[ ] The pipeline SA has objectAdmin on the lake buckets and <em>nothing project-wide</em></li>
+</ul>
+<h2 id="4-break-it">4. Break it</h2>
+<p>Corrupt your local Terraform state (rename <code>.terraform/</code> and change backend prefix
+to a typo), run <code>plan</code>, observe the blast radius, then recover using the <strong>GCS
+state bucket versioning</strong>. Write a 5-line postmortem in <code>docs/incidents/001-tf-state.md</code>.
+The habit of writing postmortems starts now — they become your interview war stories (§8).</p>
+<h2 id="5-interview-corner">5. Interview corner</h2>
+<ul>
+<li><em>"How do you manage environments?"</em> → module/composition split, remote state per
+  env, same modules dev→prod with different knobs.</li>
+<li><em>"How do you keep cloud costs sane on a platform team?"</em> → budget-as-code before
+  the first resource, serverless-first, destroy-able envs.</li>
+<li>Rehearse: 60 seconds on why the runtime SA has <strong>no</strong> project-level role (least
+  privilege, M01) and why the state bucket is versioned (recoverability).</li>
+</ul>
+<h2 id="6-stretch-goals">6. Stretch goals</h2>
+<ul>
+<li><code>pre-commit</code> with ruff + terraform fmt hooks.</li>
+<li>Add <code>terraform/envs/dev/README.md</code> documenting inputs/outputs — module docs are open-source hygiene.</li>
+<li>Protect <code>main</code> (require PR + green CI) and work via PRs from now on.</li>
+</ul>
+</body>
+</html>

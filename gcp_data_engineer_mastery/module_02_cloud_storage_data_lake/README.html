@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 2: Cloud Storage &amp; Data Lakes</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-2-cloud-storage-data-lakes">Module 2: Cloud Storage &amp; Data Lakes</h1>
+<h2 id="learning-objectives">Learning Objectives</h2>
+<ul>
+<li>Choose the right <strong>storage class</strong> (Standard/Nearline/Coldline/Archive) and <strong>location
+  type</strong> (region/dual-region/multi-region) for a workload.</li>
+<li>Automate cost with <strong>lifecycle rules</strong>, <strong>Autoclass</strong>, and <strong>object versioning</strong>.</li>
+<li>Design a lakehouse with <strong>raw → curated → consumer</strong> zones.</li>
+<li>Secure buckets with <strong>uniform bucket-level access</strong> and understand signed URLs vs IAM.</li>
+<li>Know when GCS is the answer vs BigQuery/Bigtable.</li>
+</ul>
+<hr>
+<h2 id="1-storage-classes-the-costaccess-tradeoff">1. Storage Classes — the Cost/Access Tradeoff</h2>
+<p>All classes have the <strong>same throughput and millisecond latency</strong>. They differ only in
+<strong>storage price</strong> vs <strong>access cost</strong> and a <strong>minimum storage duration</strong>.</p>
+<table>
+<thead>
+<tr>
+<th>Class</th>
+<th>Best for</th>
+<th>Min duration</th>
+<th>Rel. storage $</th>
+<th>Rel. access $</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Standard</strong></td>
+<td>Hot data, active analytics</td>
+<td>none</td>
+<td>High</td>
+<td>Low</td>
+</tr>
+<tr>
+<td><strong>Nearline</strong></td>
+<td>Accessed &lt; once/month</td>
+<td>30 days</td>
+<td>Medium</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td><strong>Coldline</strong></td>
+<td>Accessed &lt; once/quarter</td>
+<td>90 days</td>
+<td>Low</td>
+<td>High</td>
+</tr>
+<tr>
+<td><strong>Archive</strong></td>
+<td>DR, compliance, rarely read</td>
+<td>365 days</td>
+<td>Lowest</td>
+<td>Highest</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Pitfall:</strong> Early deletion / rewrite before the minimum duration still bills you for
+the <em>full</em> minimum. Don't put churning data in Coldline/Archive.</p>
+</blockquote>
+<h2 id="2-location-types">2. Location Types</h2>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Example</th>
+<th>Availability</th>
+<th>Cost</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Region</td>
+<td><code>us-central1</code></td>
+<td>Single region</td>
+<td>Lowest</td>
+<td>Colocate with Dataflow/Dataproc/BigQuery to avoid egress</td>
+</tr>
+<tr>
+<td>Dual-region</td>
+<td><code>nam4</code></td>
+<td>2 regions, low RPO</td>
+<td>Medium</td>
+<td>HA with predictable placement</td>
+</tr>
+<tr>
+<td>Multi-region</td>
+<td><code>US</code>, <code>EU</code></td>
+<td>Continent-wide</td>
+<td>Highest</td>
+<td>Serving to broad audiences</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Exam trap:</strong> put your bucket in the <strong>same region as your compute and BigQuery
+dataset</strong>. Cross-region reads add latency <strong>and egress cost</strong>, and BigQuery can only
+load/export within the same location.</p>
+</blockquote>
+<h2 id="3-lifecycle-autoclass-versioning">3. Lifecycle, Autoclass &amp; Versioning</h2>
+<ul>
+<li><strong>Lifecycle rules:</strong> conditions (age, class, versions) → actions (<code>SetStorageClass</code>,
+  <code>Delete</code>, <code>AbortIncompleteMultipartUpload</code>).</li>
+<li><strong>Autoclass:</strong> GCS auto-transitions each object between classes based on access — set
+  it and forget lifecycle-class tuning.</li>
+<li><strong>Object versioning:</strong> keeps overwritten/deleted versions (noncurrent) — combine with a
+  lifecycle rule to expire old versions.</li>
+</ul>
+<pre><code class="language-hcl">lifecycle_rule {
+  condition { age = 30 }
+  action { type = &quot;SetStorageClass&quot;; storage_class = &quot;NEARLINE&quot; }
+}
+lifecycle_rule {
+  condition { age = 365 }
+  action { type = &quot;Delete&quot; }
+}
+</code></pre>
+<blockquote>
+<p><strong>Pitfall:</strong> Autoclass and per-object lifecycle <em>class</em> transitions are mutually
+exclusive — use one strategy. You can still keep a <code>Delete</code> lifecycle rule with
+Autoclass on.</p>
+</blockquote>
+<h2 id="4-security-uniform-vs-fine-grained-iam-vs-acls">4. Security: Uniform vs Fine-grained, IAM vs ACLs</h2>
+<ul>
+<li><strong>Uniform bucket-level access (UBLA):</strong> disables per-object ACLs; IAM alone controls
+  access. <strong>Recommended default</strong> — simpler, auditable.</li>
+<li><strong>Signed URLs:</strong> time-limited access to a specific object <strong>without</strong> granting IAM —
+  perfect for letting an external client upload/download one file.</li>
+<li><strong>CMEK:</strong> encrypt with your Cloud KMS key for compliance (Module 10).</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Need</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Simple, auditable access control</td>
+<td>UBLA + IAM</td>
+</tr>
+<tr>
+<td>Give an outsider temporary access to one object</td>
+<td><strong>Signed URL</strong></td>
+</tr>
+<tr>
+<td>Regulatory key control</td>
+<td>CMEK</td>
+</tr>
+<tr>
+<td>Public website assets</td>
+<td><code>allUsers:objectViewer</code> (rare, deliberate)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="5-the-data-lake-lakehouse-zoning-pattern">5. The Data Lake / Lakehouse Zoning Pattern</h2>
+<pre><code class="language-mermaid">flowchart LR
+    S[Sources] --&gt; R[(raw zone&lt;br/&gt;immutable, as-ingested)]
+    R --&gt; C[(curated zone&lt;br/&gt;cleaned, partitioned Parquet)]
+    C --&gt; U[(consumer zone&lt;br/&gt;marts / BigLake)]
+    C --&gt; BQ[BigQuery external / BigLake tables]
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Zone</th>
+<th>Format</th>
+<th>Mutability</th>
+<th>Who reads</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>raw</strong></td>
+<td>source-native (JSON/CSV/Avro)</td>
+<td>append-only, immutable</td>
+<td>pipelines only</td>
+</tr>
+<tr>
+<td><strong>curated</strong></td>
+<td>columnar (Parquet/ORC), partitioned</td>
+<td>rewritten by ETL</td>
+<td>analysts, BigLake</td>
+</tr>
+<tr>
+<td><strong>consumer</strong></td>
+<td>marts, aggregates</td>
+<td>published</td>
+<td>BI, apps</td>
+</tr>
+</tbody>
+</table>
+<p>Query lake files in place with <strong>BigLake tables</strong> (governed external tables) — you get
+BigQuery security/metadata over GCS without loading. This is the modern "lakehouse."</p>
+<hr>
+<h2 id="exam-focus">🎯 Exam Focus</h2>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Answer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>"Data read a few times a year, minimize storage cost"</td>
+<td><strong>Coldline</strong> (Archive only if truly &lt;1/yr)</td>
+</tr>
+<tr>
+<td>"Bucket + Dataproc + BigQuery, minimize cost/latency"</td>
+<td>Put all in the <strong>same region</strong></td>
+</tr>
+<tr>
+<td>"Let a partner upload one file, no GCP account"</td>
+<td><strong>Signed URL</strong> (resumable/PUT)</td>
+</tr>
+<tr>
+<td>"Automatically tier data by access without tuning"</td>
+<td><strong>Autoclass</strong></td>
+</tr>
+<tr>
+<td>"Keep deleted objects recoverable for 30 days"</td>
+<td><strong>Versioning</strong> + lifecycle to expire noncurrent &gt;30d</td>
+</tr>
+<tr>
+<td>"Query files in GCS with BigQuery security/governance"</td>
+<td><strong>BigLake</strong> table</td>
+</tr>
+</tbody>
+</table>
+<h3 id="practice-questions">Practice Questions</h3>
+<ol>
+<li><strong>Logs written once, read only for the rare audit within 30 days, then kept 7 years
+   for compliance.</strong> → Standard (or Nearline) for first 30 days → lifecycle to <strong>Archive</strong>
+   for long-term retention; add a <strong>retention policy/bucket lock</strong> for compliance.</li>
+<li><strong>A pipeline in <code>us-central1</code> loads a bucket in the <code>EU</code> multi-region — why is the load
+   failing / expensive?</strong> → BigQuery/Dataflow can't cross locations for loads and you pay
+   egress. Colocate the bucket in <code>us-central1</code> (or dataset in <code>EU</code>).</li>
+<li><strong>You need to hand an external analyst read access to exactly one object for 1 hour.</strong>
+   → <strong>Signed URL</strong> with 1-hour expiry — not an IAM grant.</li>
+<li><strong>Cheapest correct class for data accessed on average once a month.</strong> → <strong>Nearline</strong>.</li>
+<li><strong>Best way to enforce that no objects use legacy ACLs.</strong> → Enable <strong>uniform
+   bucket-level access</strong>.</li>
+</ol>
+<hr>
+<h2 id="key-takeaways">Key Takeaways</h2>
+<ul>
+<li>Classes trade storage $ for access $ + a minimum-duration penalty — match to access
+  frequency.</li>
+<li><strong>Colocate</strong> bucket, compute, and BigQuery dataset in one region.</li>
+<li>Automate tiering with <strong>Autoclass</strong> or <strong>lifecycle</strong>; protect data with <strong>versioning</strong>
+  and retention locks.</li>
+<li>Prefer <strong>UBLA + IAM</strong>; use <strong>signed URLs</strong> for keyless external access; query in place
+  with <strong>BigLake</strong>.</li>
+</ul>
+<p>Next: <a href="../module_03_bigquery_fundamentals/README.md">Module 3 — BigQuery Fundamentals</a>.</p>
+<hr>
+<h2 id="files-in-this-module">Files in This Module</h2>
+<ul>
+<li><code>concepts.tf</code> — a lakehouse-zoned bucket with lifecycle, versioning, and UBLA</li>
+<li><code>exercise.md</code> — build raw/curated buckets with tiering and a retention policy</li>
+<li><code>solution.tf</code> — reference solution</li>
+</ul>
+</body>
+</html>

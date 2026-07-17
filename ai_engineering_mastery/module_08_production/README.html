@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 8: Production AI Engineering — Gateways, Caching, Observability, Cost</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-8-production-ai-engineering-gateways-caching-observability-cost">Module 8: Production AI Engineering — Gateways, Caching, Observability, Cost</h1>
+<h2 id="learning-objectives">Learning Objectives</h2>
+<ul>
+<li>Build an <strong>LLM gateway</strong> that earns its box in the diagram: model routing,
+  fallback on failure, and centralized accounting — not "one mysterious box".</li>
+<li>Implement a <strong>semantic cache</strong> (the Redis rule, done right): exact-match + embedding
+  similarity, TTLs, and the invalidation trap.</li>
+<li>Add <strong>OpenTelemetry-style tracing</strong> to an AI pipeline — spans with timing, token
+  counts, and parent/child structure — and know why <em>this</em> system especially needs it.</li>
+<li>Account for <strong>cost per request</strong> and reason about the cost/accuracy/latency
+  triangle with numbers instead of adjectives.</li>
+<li><strong>Benchmark honestly</strong>: report the full metric table against a baseline, not the
+  one metric you win.</li>
+</ul>
+<hr>
+<h2 id="1-the-llm-gateway">1. The LLM Gateway</h2>
+<p>Every team draws it; few can say what it does. A gateway is justified by exactly
+three jobs, all of which need one choke point in front of N models:</p>
+<table>
+<thead>
+<tr>
+<th>Job</th>
+<th>Mechanism</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Routing</strong></td>
+<td>Send each request to the cheapest model that meets its quality tier (classify-tier traffic must not pay frontier-model prices)</td>
+</tr>
+<tr>
+<td><strong>Fallback</strong></td>
+<td>Provider outage or rate limit → retry on the next model in the tier, transparently</td>
+</tr>
+<tr>
+<td><strong>Accounting</strong></td>
+<td>Every token in/out metered per caller in ONE place — the bill is per token (Module 1)</td>
+</tr>
+</tbody>
+</table>
+<p>If your gateway does none of these, it is a proxy with a cool name. <code>concepts.py</code>
+builds all three in ~60 lines, with a flaky provider to prove fallback.</p>
+<h2 id="2-semantic-caching">2. Semantic Caching</h2>
+<p>"We should add Redis" is a punchline until you notice LLM calls are <em>expensive,
+slow, and frequently repeated</em>. Two cache layers:</p>
+<ol>
+<li><strong>Exact cache</strong> — key = hash(model + prompt). Trivial, safe, hits only identical
+   prompts.</li>
+<li><strong>Semantic cache</strong> — embed the prompt; if a stored prompt's similarity exceeds a
+   threshold, serve its answer. Catches paraphrases ("reset my password" / "how do I
+   reset my password?").</li>
+</ol>
+<p>The trap is <strong>invalidation</strong>: a cached answer outlives the document it came from.
+Cache entries need TTLs <em>and</em> source-based invalidation (the refund policy changed →
+purge every answer that cited it). The threshold is a precision dial: too low and
+users get <em>answers to someone else's question</em> — a cache-shaped hallucination.</p>
+<h2 id="3-observability-traces-for-a-nondeterministic-system">3. Observability: Traces for a Nondeterministic System</h2>
+<p>Logs tell you a request happened; <strong>traces</strong> tell you what it spent and where. A
+trace is a tree of <strong>spans</strong> — each with a name, start/end time, and attributes
+(model, tokens, cache hit, retrieved doc ids):</p>
+<pre><code>trace: answer_question                     total=812ms  tokens=1450
+├── span: cache_lookup                     3ms   hit=false
+├── span: retrieve                         40ms  k=3
+├── span: llm_call (gateway)               760ms model=medium tokens_in=1200 tokens_out=250
+└── span: grounding_check                  9ms   grounded=true
+</code></pre>
+<p>AI pipelines need this <em>more</em> than normal services: the same code path varies 10× in
+latency and cost depending on model behavior. Instrument first, then debug — but note
+the meme's rule 7 cuts the other way too: spans that no one queries are just
+expensive logs. Emit attributes you will actually alert on (cost, tokens, grounded?).</p>
+<h2 id="4-the-cost-accuracy-latency-triangle">4. The Cost / Accuracy / Latency Triangle</h2>
+<p>Every architecture choice in this course moves you on this triangle:</p>
+<table>
+<thead>
+<tr>
+<th>Lever</th>
+<th>Cost</th>
+<th>Accuracy</th>
+<th>Latency</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Bigger model</td>
+<td>↑↑</td>
+<td>↑</td>
+<td>↑</td>
+</tr>
+<tr>
+<td>More retrieval (larger k)</td>
+<td>↑</td>
+<td>↑ then ↓ (context rot)</td>
+<td>↑</td>
+</tr>
+<tr>
+<td>Reranking stage</td>
+<td>↑</td>
+<td>↑</td>
+<td>↑</td>
+</tr>
+<tr>
+<td>Semantic cache</td>
+<td>↓↓ on hits</td>
+<td>= (if threshold honest)</td>
+<td>↓↓ on hits</td>
+</tr>
+<tr>
+<td>Agentic loop</td>
+<td>↑ per step</td>
+<td>↑ on hard tasks</td>
+<td>↑↑</td>
+</tr>
+</tbody>
+</table>
+<p>The discipline: attach <em>numbers</em> from your traces and evals to each lever, then
+argue. "We should use agents" costs 3–10× per request — worth it exactly when evals
+show the accuracy jump (and per the meme's rule 12: dashboards of per-request cost
+are what keep the live demo from burning the budget).</p>
+<h2 id="5-honest-benchmarking">5. Honest Benchmarking</h2>
+<p>Cherry-picking the one metric you win is the final boss of AI-engineering
+self-deception. The antidote is mechanical:
+- Fix the eval suite (Modules 3 + 7) <em>before</em> running the comparison.
+- Report <strong>every</strong> metric — accuracy, grounded rate, p50 latency, cost per query —
+  for baseline and candidate, in one table.
+- Declare the trade-off in words: "candidate: +9pt grounded, +40% cost."</p>
+<p><code>concepts.py</code> benchmarks a cached-gateway pipeline against a naive one and prints
+the full table, wins and losses both.</p>
+<hr>
+<h2 id="key-takeaways">Key Takeaways</h2>
+<ul>
+<li>A gateway = routing + fallback + accounting at one choke point, or it's just a box.</li>
+<li>Cache exact first, semantic second; thresholds are precision dials and invalidation
+  is the real problem (TTL + purge by source).</li>
+<li>Trace spans with token/cost attributes — nondeterministic systems are undebuggable
+  without them; emit only what you'll query.</li>
+<li>Argue cost/accuracy/latency with measured numbers, never adjectives.</li>
+<li>Benchmarks report the whole table against a fixed suite — including the losses.</li>
+</ul>
+<p>Next: the <a href="../capstone/README.md">Capstone</a>.</p>
+<hr>
+<h2 id="files-in-this-module">Files in This Module</h2>
+<ul>
+<li><code>concepts.py</code> — gateway with routing/fallback/metering, two-layer cache, tracer, full benchmark</li>
+<li><code>exercise.py</code> — build the gateway, semantic cache, and tracer yourself</li>
+<li><code>solution.py</code> — reference solution</li>
+</ul>
+</body>
+</html>

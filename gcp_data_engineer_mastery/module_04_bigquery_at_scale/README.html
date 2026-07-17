@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 4: BigQuery at Scale — Performance &amp; Cost</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-4-bigquery-at-scale-performance-cost">Module 4: BigQuery at Scale — Performance &amp; Cost</h1>
+<h2 id="learning-objectives">Learning Objectives</h2>
+<ul>
+<li>Design <strong>partitioning</strong> and <strong>clustering</strong> to slash bytes scanned.</li>
+<li>Choose between <strong>on-demand</strong> and <strong>capacity (slot/editions)</strong> pricing.</li>
+<li>Use <strong>materialized views</strong>, <strong>BI Engine</strong>, and <strong>search indexes</strong> to speed dashboards.</li>
+<li>Diagnose queries with the <strong>query plan</strong> and avoid the classic anti-patterns.</li>
+<li>Control cost with <strong>partition expiration, <code>maximum_bytes_billed</code>, and dry runs</strong>.</li>
+</ul>
+<hr>
+<h2 id="1-partitioning-prune-whole-blocks">1. Partitioning: Prune Whole Blocks</h2>
+<p>A partitioned table is physically split so a <code>WHERE</code> on the partition column reads only
+matching partitions.</p>
+<table>
+<thead>
+<tr>
+<th>Partition type</th>
+<th>Column</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Time-unit</strong></td>
+<td><code>DATE</code>/<code>TIMESTAMP</code>/<code>DATETIME</code> (hour/day/month/year)</td>
+<td>Time-series, logs, events</td>
+</tr>
+<tr>
+<td><strong>Ingestion-time</strong></td>
+<td>pseudo-column <code>_PARTITIONTIME</code></td>
+<td>You don't control a time column</td>
+</tr>
+<tr>
+<td><strong>Integer range</strong></td>
+<td>INT64 bucketed</td>
+<td>Numeric key like customer_id ranges</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-sql">CREATE TABLE analytics.events (
+  event_ts TIMESTAMP, user_id STRING, action STRING
+)
+PARTITION BY DATE(event_ts)
+OPTIONS (partition_expiration_days = 90, require_partition_filter = TRUE);
+</code></pre>
+<blockquote>
+<p><strong>Pitfall:</strong> <code>require_partition_filter = TRUE</code> forces every query to include a partition
+predicate — the single best guardrail against accidental full-table scans. Also: max
+<strong>4,000 partitions</strong> per table.</p>
+</blockquote>
+<h2 id="2-clustering-sort-within-partitions">2. Clustering: Sort Within Partitions</h2>
+<p>Clustering sorts data by up to <strong>4 columns</strong>, so filters/aggregations on those columns
+read less. It's complementary to partitioning.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Partitioning</th>
+<th>Clustering</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Granularity</td>
+<td>Coarse (whole partitions)</td>
+<td>Fine (sorted blocks)</td>
+</tr>
+<tr>
+<td>Cardinality fit</td>
+<td>Low-medium (dates)</td>
+<td><strong>High</strong> (user_id, sku)</td>
+</tr>
+<tr>
+<td>Cost guarantee</td>
+<td>Predictable prune</td>
+<td>Best-effort (auto-reclustered)</td>
+</tr>
+<tr>
+<td>Limit</td>
+<td>4,000 partitions</td>
+<td>4 columns, <strong>order matters</strong> (most-filtered first)</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Exam pattern:</strong> <em>partition by date, cluster by the high-cardinality columns you
+filter/group on</em> (e.g. <code>PARTITION BY DATE(ts) CLUSTER BY customer_id, sku</code>).</p>
+</blockquote>
+<h2 id="3-pricing-models">3. Pricing Models</h2>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>You pay for</th>
+<th>Best when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>On-demand</strong></td>
+<td>Bytes <strong>scanned</strong> ($/TiB)</td>
+<td>Spiky/unpredictable, low volume</td>
+</tr>
+<tr>
+<td><strong>Editions (capacity)</strong></td>
+<td><strong>Slot-hours</strong> (autoscale + baseline), Standard/Enterprise/Enterprise Plus</td>
+<td>Steady, high volume; predictable cost</td>
+</tr>
+<tr>
+<td><strong>Flat-rate commitments</strong></td>
+<td>Reserved slots (1yr/3yr)</td>
+<td>Large, stable workloads (discount)</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Trap:</strong> on-demand has a <strong>per-query bytes-scanned</strong> cost — a single <code>SELECT *</code> on a
+huge table can be expensive. Cap it with <code>maximum_bytes_billed</code>.</p>
+</blockquote>
+<h2 id="4-speeding-up-reads">4. Speeding Up Reads</h2>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>What it does</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Materialized view</strong></td>
+<td>Precomputes &amp; <strong>incrementally</strong> maintains an aggregate</td>
+<td>Repeated GROUP BY dashboards</td>
+</tr>
+<tr>
+<td><strong>BI Engine</strong></td>
+<td>In-memory acceleration for BI/Looker</td>
+<td>Sub-second dashboards</td>
+</tr>
+<tr>
+<td><strong>Search index</strong></td>
+<td>Indexes text/columns for <code>SEARCH()</code> and point lookups</td>
+<td>Needle-in-haystack lookups</td>
+</tr>
+<tr>
+<td><strong>Table snapshot / clone</strong></td>
+<td>Cheap point-in-time copies</td>
+<td>Backups, dev copies</td>
+</tr>
+</tbody>
+</table>
+<p>Materialized views auto-rewrite: queries against the <strong>base table</strong> can be transparently
+served from the MV ("smart tuning").</p>
+<h2 id="5-reading-the-query-plan">5. Reading the Query Plan</h2>
+<p><code>EXPLAIN</code>-style stages appear in the console / <code>INFORMATION_SCHEMA.JOBS</code>. Watch for:
+- <strong>High "bytes shuffled"</strong> → a big JOIN; consider denormalizing / broadcast.
+- <strong>Skew</strong> (one slot does most work) → skewed join key; salt it.
+- <strong>Repartition stages</strong> → often from <code>ORDER BY</code> on huge sets; limit or pre-aggregate.</p>
+<pre><code class="language-sql">-- Find your most expensive queries in the last day:
+SELECT job_id, total_bytes_billed, total_slot_ms, query
+FROM `region-us`.INFORMATION_SCHEMA.JOBS
+WHERE creation_time &gt; TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)
+ORDER BY total_bytes_billed DESC
+LIMIT 10;
+</code></pre>
+<hr>
+<h2 id="exam-focus">🎯 Exam Focus</h2>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Answer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>"Queries always filter by date and customer"</td>
+<td><code>PARTITION BY DATE(ts) CLUSTER BY customer_id</code></td>
+</tr>
+<tr>
+<td>"Prevent accidental full scans"</td>
+<td><code>require_partition_filter = TRUE</code> + <code>maximum_bytes_billed</code></td>
+</tr>
+<tr>
+<td>"Same dashboard aggregate runs all day"</td>
+<td><strong>Materialized view</strong> (+ BI Engine)</td>
+</tr>
+<tr>
+<td>"Steady multi-TB daily workload, predictable bill"</td>
+<td><strong>Editions / slot commitments</strong></td>
+</tr>
+<tr>
+<td>"Spiky, occasional queries"</td>
+<td><strong>On-demand</strong></td>
+</tr>
+<tr>
+<td>"Table has 6 years of daily data — partition limit?"</td>
+<td>Max 4,000 partitions → partition by <strong>month</strong>, or expire old partitions</td>
+</tr>
+</tbody>
+</table>
+<h3 id="practice-questions">Practice Questions</h3>
+<ol>
+<li><strong>A 5 TB events table is always filtered by <code>event_date</code> and grouped by <code>country</code>.
+   Design it.</strong> → <code>PARTITION BY event_date CLUSTER BY country</code>. Partition prunes dates;
+   clustering speeds the group-by.</li>
+<li><strong>Analysts keep running unbounded <code>SELECT *</code> and blowing the budget.</strong> →
+   <code>require_partition_filter = TRUE</code>, set <code>maximum_bytes_billed</code>, and educate on column
+   selection; consider Editions with a slot cap.</li>
+<li><strong>A Looker dashboard recomputes the same daily revenue rollup thousands of times.</strong> →
+   <strong>Materialized view</strong> for the rollup + <strong>BI Engine</strong> for in-memory serving.</li>
+<li><strong>10 years of daily data — you hit a partition limit. Fix?</strong> → 3,650 daily partitions
+   is under 4,000 but close; partition by <strong>month</strong> or apply <code>partition_expiration_days</code>.</li>
+<li><strong>Workload is steady at 8 TB scanned/day; how to make cost predictable?</strong> → Move from
+   on-demand to <strong>Editions / committed slots</strong>.</li>
+</ol>
+<hr>
+<h2 id="key-takeaways">Key Takeaways</h2>
+<ul>
+<li><strong>Partition</strong> (coarse, low-cardinality time) + <strong>cluster</strong> (fine, high-cardinality
+  filters) = dramatic bytes-scanned reduction.</li>
+<li>Guardrails: <code>require_partition_filter</code>, <code>maximum_bytes_billed</code>, partition expiration,
+  dry runs.</li>
+<li><strong>On-demand</strong> for spiky; <strong>Editions/commitments</strong> for steady, high-volume.</li>
+<li>Accelerate reads with <strong>materialized views, BI Engine, search indexes</strong>.</li>
+</ul>
+<p>Next: <a href="../module_05_choosing_a_database/README.md">Module 5 — Choosing the Right Database</a>.</p>
+<hr>
+<h2 id="files-in-this-module">Files in This Module</h2>
+<ul>
+<li><code>concepts.tf</code> — a partitioned + clustered table and a materialized view</li>
+<li><code>optimize.sql</code> — tuning queries, dry runs, INFORMATION_SCHEMA cost analysis</li>
+<li><code>exercise.md</code> — redesign a slow table for scale</li>
+<li><code>solution.tf</code> / <code>solution.sql</code> — reference solution</li>
+</ul>
+</body>
+</html>

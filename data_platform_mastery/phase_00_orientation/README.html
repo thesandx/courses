@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 00 — Orientation &amp; Ground School</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="phase-00-orientation-ground-school">Phase 00 — Orientation &amp; Ground School</h1>
+<blockquote>
+<p><strong>Mission:</strong> set up your machine, your GCP project, and your head. No PipeForge
+code yet — but you leave this phase with cost guardrails armed, tooling verified,
+the target architecture drawn from memory, and your first volume-estimation done.</p>
+</blockquote>
+<h2 id="1-concepts">1. Concepts</h2>
+<p><strong>Read now (in this order):</strong>
+- System-design notes <strong>§1–§2</strong> — how DE interviews differ from SWE, and the 7-step framework. This course is the framework made physical.
+- Notes <strong>§5</strong> — the 6-layer architecture. PipeForge is that diagram.
+- GCP course <strong>M01 Foundations</strong> — projects, IAM, resource hierarchy, <code>gcloud</code>.
+- The two docs at the course root: <strong>PROJECT_CHARTER.md</strong> and <strong>INTERVIEW_MAP.md</strong>.</p>
+<p><strong>The mental model for the whole course:</strong></p>
+<blockquote>
+<p>DE system design starts from the <strong>source</strong> and works <strong>forward</strong> (§1). So does
+this course: phases 2–4 are sources and ingestion, 5–6 are processing and
+serving, 7–10 are the cross-cutting spine (orchestration, quality, governance,
+observability), 11–12 are the product surface, 13–14 are scale and launch.</p>
+</blockquote>
+<p><strong>Why "metadata-driven" is the theme:</strong> the staff-level version of almost every
+platform question (Q7, Q15, Q19) is "how do you make the <em>N+1th</em> source cost ~zero
+engineering?" The answer is always: a registry + a generic engine + generated
+orchestration. Hold that sentence; you'll implement it for 12 phases.</p>
+<h2 id="2-build">2. Build</h2>
+<h3 id="21-local-tooling">2.1 Local tooling</h3>
+<pre><code class="language-bash"># Python 3.11+, uv (or pipx/poetry), Docker Desktop / Engine, Terraform &gt;= 1.7, git
+python3 --version          # 3.11+
+docker --version &amp;&amp; docker compose version
+terraform -version
+# gcloud CLI (includes bq + gsutil): https://cloud.google.com/sdk/docs/install
+gcloud init
+gcloud auth login
+gcloud auth application-default login    # ADC — what Terraform &amp; client libs use
+</code></pre>
+<h3 id="22-gcp-project-the-budget-do-this-before-anything-else">2.2 GCP project + THE BUDGET (do this before anything else)</h3>
+<pre><code class="language-bash">export PROJECT_ID=&quot;pipeforge-$(whoami)-dev&quot;    # must be globally unique
+gcloud projects create &quot;$PROJECT_ID&quot;
+gcloud billing accounts list                    # note ACCOUNT_ID
+gcloud billing projects link &quot;$PROJECT_ID&quot; --billing-account=ACCOUNT_ID
+gcloud config set project &quot;$PROJECT_ID&quot;
+
+# Budget with alerts at 50/90/100% of $25 — the seatbelt for the entire course
+gcloud services enable billingbudgets.googleapis.com
+gcloud billing budgets create \
+  --billing-account=ACCOUNT_ID \
+  --display-name=&quot;pipeforge-guardrail&quot; \
+  --budget-amount=25USD \
+  --threshold-rule=percent=0.5 --threshold-rule=percent=0.9 --threshold-rule=percent=1.0
+</code></pre>
+<p>In Phase 1 you'll re-create this budget in Terraform — clicking first, codifying
+second is the allowed workflow (course ground rule #1).</p>
+<p><strong>Cost model of the course</strong> (so nothing surprises you):</p>
+<table>
+<thead>
+<tr>
+<th>Resource</th>
+<th>Phase</th>
+<th>Cost behavior</th>
+<th>Guardrail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GCS + BigQuery storage</td>
+<td>3+</td>
+<td>pennies at demo volume</td>
+<td>lifecycle rules (P09)</td>
+</tr>
+<tr>
+<td>BigQuery queries</td>
+<td>6+</td>
+<td>$6.25/TB scanned</td>
+<td>partition filters + <code>maximum_bytes_billed</code></td>
+</tr>
+<tr>
+<td>Cloud SQL db-f1-micro</td>
+<td>2+</td>
+<td>~$9/mo if left running</td>
+<td><code>gcloud sql instances patch ... --activation-policy=NEVER</code> when idle</td>
+</tr>
+<tr>
+<td>Dataproc <strong>Serverless</strong></td>
+<td>5+</td>
+<td>per-second while a batch runs</td>
+<td>nothing idles; still, small data</td>
+</tr>
+<tr>
+<td>Kafka VM (e2-small, optional)</td>
+<td>4</td>
+<td>~$13/mo if left running</td>
+<td>run Kafka in Docker locally; VM only for the cloud drill, then stop</td>
+</tr>
+<tr>
+<td>Airflow</td>
+<td>7</td>
+<td>$0 (local Docker)</td>
+<td>Composer is a read-only excursion unless you accept ~$300+/mo</td>
+</tr>
+<tr>
+<td>Cloud Run (API+UI)</td>
+<td>11–12</td>
+<td>scale-to-zero ≈ $0</td>
+<td>min instances = 0</td>
+</tr>
+</tbody>
+</table>
+<h3 id="23-estimation-drill-your-first-interview-rep-4-19">2.3 Estimation drill (your first interview rep — §4, §19)</h3>
+<p>On paper, no calculator, estimate for NovaMart (numbers in the charter §2):</p>
+<ol>
+<li>Clickstream: 500 ev/s × 400 B → GB/day raw? Parquet (÷5–10)? Events/day?</li>
+<li>If peak = 3× average, how many Kafka partitions at ~10K msgs/s each?</li>
+<li><code>orders</code> at 100k rows/day × 1 KB — does this need Spark? (Scale thresholds, §3.)</li>
+<li>90 days of RAW clickstream in GCS Standard at $0.02/GB-mo — monthly cost?</li>
+</ol>
+<details><summary>Answers</summary>
+
+1. 500×400 B = 200 KB/s ≈ **17 GB/day** raw ≈ 2–3.5 GB/day Parquet; 43.2M events/day.
+2. Peak 1,500 ev/s → **1–2 partitions** suffice; provision 6 for headroom/keyed parallelism (small numbers are a *correct* answer — say so).
+3. 100 MB/day — **pandas/BQ load, no Spark needed** for ingestion; Spark earns its place on clickstream + SCD2 merges.
+4. ~1.5 TB × $0.02 ≈ **$30/mo at full production volume**; at demo volume (~5%) ≈ $1.5. This is why the course caps generator throughput.
+</details>
+
+<h3 id="24-architecture-redraw">2.4 Architecture redraw</h3>
+<p>Close everything. On a whiteboard/paper, redraw the PipeForge architecture:
+6 layers left→right, the metadata core underneath driving ingestion, the
+cross-cutting bar (workflow, DQ, recon, audit, tokenization, archival, lineage).
+Compare against the README diagram. Repeat until the redraw takes &lt; 3 minutes —
+you will draw exactly this in interviews.</p>
+<h3 id="25-create-your-empty-github-repo">2.5 Create your empty GitHub repo</h3>
+<p>Create a <strong>public</strong> repo named <code>pipeforge</code> (or your own name — check it's not
+taken if you care about uniqueness), empty, no README. Phase 1 makes the first commit.</p>
+<h2 id="3-prove-it">3. Prove it</h2>
+<ul>
+<li>[ ] <code>gcloud config get-value project</code> prints your project; budget visible in console</li>
+<li>[ ] <code>terraform -version</code> ≥ 1.7; Docker runs <code>hello-world</code></li>
+<li>[ ] ADC works: <code>python -c "import google.auth; print(google.auth.default()[1])"</code> prints the project</li>
+<li>[ ] Estimation drill answers within 2× of the key</li>
+<li>[ ] Architecture redraw &lt; 3 min</li>
+<li>[ ] Empty GitHub repo exists</li>
+</ul>
+<h2 id="4-interview-corner">4. Interview corner</h2>
+<p>Rehearse the opening move you'll use in every real interview (§2 power move):</p>
+<blockquote>
+<p>"I'll walk through requirements, sources and volumes, architecture, data model,
+pipeline design, deep dives, then monitoring and SLAs. Does that work for you?"</p>
+</blockquote>
+<p>Then deliver a 2-minute overview of PipeForge as if the interviewer asked
+"design an ETL platform" — using only the charter. Record yourself. Cringe. Repeat.</p>
+<h2 id="5-stretch-goals">5. Stretch goals</h2>
+<ul>
+<li>Read notes <strong>§10 (Top 15 mistakes)</strong> and pin it above your desk.</li>
+<li>Do GCP course <strong>M01 practice questions</strong>; start a PDE-exam error log.</li>
+</ul>
+</body>
+</html>

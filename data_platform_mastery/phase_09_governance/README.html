@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 09 — Governance: Tokenization, Lineage, Archival, Catalog ③⑨⑪ (`v0.9.0`)</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="phase-09-governance-tokenization-lineage-archival-catalog-3911-v090">Phase 09 — Governance: Tokenization, Lineage, Archival, Catalog ③⑨⑪ (<code>v0.9.0</code>)</h1>
+<blockquote>
+<p><strong>Mission:</strong> the platform grows a conscience. PII is tokenized before it leaves
+RAW ③, every job emits lineage that answers "who breaks if I change this?" ⑪,
+data ages through storage tiers and dies on schedule ⑨, and everything is
+discoverable in a governed catalog. This phase is what makes the project
+credible to anyone who has worked in a bank — which is exactly what the
+reference architecture is.</p>
+</blockquote>
+<h2 id="1-concepts">1. Concepts</h2>
+<p>Read notes <strong>§14 (lineage)</strong>, <strong>§16 (contracts/PII)</strong>, compliance bullets in
+<strong>§3</strong>; GCP <strong>M10 (governance &amp; security)</strong> — this phase is M10 made real.</p>
+<p><strong>Tokenization ③ — why tokens and not just masking/encryption?</strong>
+- <em>Masking</em> destroys utility (can't join on <code>j***@x.com</code>).
+- <em>Plain encryption</em> is reversible wherever the key is — and ciphertext differs
+  per row/nonce, so joins break.
+- <strong>Deterministic tokenization</strong> replaces <code>email</code> with a stable token: same input
+  → same token, so <strong>joins, GROUP BYs, and COUNT DISTINCTs still work</strong> across
+  every table, while re-identification requires the KMS-held key. That property —
+  <em>referential integrity preserved, PII removed</em> — is the whole point, and a
+  sentence interviewers reward.
+- Where: at ODP→FDP promotion. RAW keeps original (locked-down bucket, short
+  retention); FDP/CDP — the layers analysts touch — carry only tokens. Tightly
+  scoped detokenization on demand.
+- GDPR <strong>right-to-delete</strong> becomes: delete the customer's row in the token
+  vault / crypto-key material and the tokens across 200 tables become permanently
+  meaningless — <strong>crypto-shredding</strong>. Compare with the alternative (DELETE across
+  every derived table + backfills) and you understand why this pattern exists.</p>
+<p><strong>Lineage ⑪ (§14):</strong> table-level first (70% of value, 20% of effort). You have an
+unfair advantage: every movement already flows through <em>your</em> framework code, so
+lineage capture is one emit call per task — no log parsing. OpenLineage is the
+open standard (job/run/dataset events); Dataplex catalogs the BigQuery side
+automatically.</p>
+<p><strong>Archival &amp; purge ⑨ (§15 storage tiers):</strong> hot → Nearline/Coldline/Archive →
+delete, driven by the <code>archival_policy</code> metadata per dataset. Partition expiry
+handles BigQuery; lifecycle rules handle GCS; a purge job handles
+right-to-delete. "Data has a lifecycle" is a cost story AND a compliance story —
+tell it as both.</p>
+<h2 id="2-build">2. Build</h2>
+<h3 id="21-tokenization-service-srcpipeforgetokenization">2.1 Tokenization service — <code>src/pipeforge/tokenization/</code></h3>
+<pre><code class="language-python">class DeterministicTokenizer:
+    &quot;&quot;&quot;HMAC-SHA256(value, key) -&gt; token. Key lives in Cloud KMS (never in code/env).
+    Deterministic =&gt; joinable. Keyed =&gt; not rainbow-table-able (unlike bare SHA256
+    of an email — low-entropy inputs make unsalted hashes reversible; say this).&quot;&quot;&quot;
+    def __init__(self, key_ref: str):        # e.g. kms://.../cryptoKeys/pf-tokenize
+        self._key = kms_unwrap(key_ref)
+    def tokenize(self, value: str) -&gt; str:
+        return &quot;tok_&quot; + hmac.new(self._key, value.lower().encode(), &quot;sha256&quot;).hexdigest()[:32]
+</code></pre>
+<ul>
+<li>Terraform: KMS keyring + key; <code>token_vault</code> table (token → encrypted original,
+  KMS-wrapped) for <em>authorized</em> detokenization; IAM so only the pipeline SA and a
+  dedicated <code>pf-detokenize</code> SA can use the key.</li>
+<li>Wire into ODP→FDP: <code>dataset.pii_columns</code> (declared at registration — the Phase-2
+  ceremony pays off) are tokenized in the Spark job via a UDF-free approach where
+  possible (precompute with <code>F.sha2</code> + key via <code>expr</code>? No — keyed HMAC needs the
+  key; use a pandas_udf and note the §29 UDF cost, or tokenize in the BQ MERGE with
+  <code>AEAD</code>/<code>DETERMINISTIC_ENCRYPT</code> — implement one, document the other).</li>
+<li><strong>DLP excursion:</strong> run one Cloud DLP inspection job over a RAW sample; let it
+  <em>discover</em> PII you forgot to declare (it will find the user_agent IPs). Auto-DQ
+  rule: "DLP finds PII in a non-PII column → P1". Discovery (DLP) vs enforcement
+  (your tokenizer) — two halves of the control.</li>
+</ul>
+<h3 id="22-gdpr-purge-pipeforge-purge-customer-c12345">2.2 GDPR purge — <code>pipeforge purge --customer C12345</code></h3>
+<ol>
+<li>Look up tokens via vault; 2. crypto-shred vault row (and/or per-customer key);</li>
+<li>DELETE from RAW (the only place originals live) + expire from quarantine;</li>
+<li>record an immutable <code>purge_log</code> row (who, what, when, legal basis) — deletion
+itself must be auditable. Run it against a churned demo customer and verify
+CDP aggregates still work (tokens now orphaned-but-meaningless).</li>
+</ol>
+<h3 id="23-lineage-srcpipeforgelineageopenlineage_emitterpy">2.3 Lineage — <code>src/pipeforge/lineage/openlineage_emitter.py</code></h3>
+<p>Emit OpenLineage RunEvents (START/COMPLETE/FAIL) from <code>run_context</code> — one
+integration point, all jobs covered. Facets: rowcounts (from audit), schema (from
+contract), DQ summary (from Phase 8 stretch). Sink: <strong>Marquez</strong> locally
+(docker-compose) — explore the graph UI; also write edges to your <code>lineage_edge</code>
+table (the Streamlit catalog reads this — no hard dependency on Marquez).</p>
+<p>Impact analysis CLI (the §14 use case):</p>
+<pre><code class="language-bash">pipeforge lineage downstream --dataset fdp.dim_customers
+# -&gt; cdp.fct_order_lines, cdp.agg_daily_revenue, cdp.customer_features, &lt;dashboard: revenue_daily&gt;
+</code></pre>
+<p>Run it <em>before</em> the Phase-2 rename scenario and you've closed the loop: contract
+change → blast radius known → owners notified → then deploy (§14 verbatim).</p>
+<h3 id="24-archival-purge-framework">2.4 Archival &amp; purge framework</h3>
+<ul>
+<li><strong>GCS lifecycle (Terraform, per bucket):</strong> RAW: Standard → Nearline @30d →
+  Coldline @90d → delete @365d (per <code>archival_policy</code>); quarantine: delete @30d;
+  landing: delete @7d (staging is disposable — §15).</li>
+<li><strong>BigQuery:</strong> <code>partition_expiration_days</code> on ODP externals' underlying data and
+  big CDP facts per policy; <code>fdp_staging</code> tables expire in 3 days (already done —
+  now driven from metadata).</li>
+<li>Nightly <code>pipeforge archival enforce</code> reconciles metadata policies ↔ actual
+  Terraform/table settings and reports drift (governance = declared vs actual,
+  continuously compared — same philosophy as recon).</li>
+</ul>
+<h3 id="25-catalog-11-dataplex-your-registry">2.5 Catalog ⑪ — Dataplex + your registry</h3>
+<ul>
+<li>Terraform: Dataplex lake/zones mapping RAW/ODP (GCS) and FDP/CDP (BQ);
+  aspect/tag templates for <code>owner</code>, <code>layer</code>, <code>pii</code>, <code>sla</code>.</li>
+<li>Sync job: registry → Dataplex labels, so console search shows your governance
+  metadata. (Collibra in the reference architecture ≈ Dataplex/DataHub here —
+  same role: the enterprise face of metadata. Say that mapping in interviews.)</li>
+<li>Column-level access: BigQuery <strong>policy tags</strong> on any FDP column that holds
+  tokens; analysts' group lacks the fine-grained reader role → they see the column
+  exists but can't read it. One authorized view in <code>cdp</code> proving the
+  "govern at the semantic layer" pattern.</li>
+</ul>
+<h3 id="26-ship-it">2.6 Ship it</h3>
+<p>Tests: tokenizer determinism + case-folding, purge leaves aggregates queryable
+but identity unrecoverable, lifecycle policy renderer, lineage emitter payloads.
+Tag <code>v0.9.0</code>.</p>
+<h2 id="3-prove-it">3. Prove it</h2>
+<ul>
+<li>[ ] <code>fdp.dim_customers.email</code> contains only <code>tok_*</code> values; joining orders↔customers on tokenized email still works (determinism)</li>
+<li>[ ] Detokenization works for the authorized SA and <strong>fails with 403</strong> for your analyst test account</li>
+<li>[ ] <code>pipeforge purge</code> on a demo customer: vault row gone, RAW rows gone, purge_log row written, dashboards unchanged</li>
+<li>[ ] Marquez shows the full graph raw→odp→fdp→cdp for orders; <code>lineage downstream</code> lists correct blast radius</li>
+<li>[ ] <code>gsutil lifecycle get</code> on RAW matches the registered policy; drift job reports clean</li>
+<li>[ ] DLP job finds the undeclared IP column; you register it as PII and the next run tokenizes it</li>
+</ul>
+<h2 id="4-break-it">4. Break it</h2>
+<p>Rotate the tokenization key <strong>without</strong> a migration plan (new key = different
+tokens = every join between old FDP partitions and new ones silently breaks —
+COUNT DISTINCT customers doubles). Catch it via the Phase-8 distribution check,
+then design proper rotation (dual-write window / re-tokenization backfill) in
+<code>docs/incidents/010-token-key-rotation.md</code>. Key rotation breaking determinism is
+a genuinely advanced war story — few candidates have it.</p>
+<h2 id="5-interview-corner">5. Interview corner</h2>
+<ul>
+<li><em>"How do you handle PII?"</em> — the full staff answer, from experience: declare at
+  registration → tokenize at the trust boundary (ODP→FDP) → policy tags +
+  authorized views for defense in depth → DLP for discovery of the undeclared →
+  crypto-shredding for right-to-delete → immutable purge audit.</li>
+<li><em>"A team wants to rename a column. Walk me through it."</em> — contract compat check
+  (P02) + lineage blast radius (P09) + change protocol (§16). Three phases of your
+  own platform, one coherent answer.</li>
+<li>Data Mesh (§25/Q19): your catalog + ownership + SLAs per data product = the
+  "data as a product" pillar; your platform = the "self-serve platform" pillar.
+  Argue honestly when mesh is org-overkill.</li>
+</ul>
+<h2 id="6-stretch-goals">6. Stretch goals</h2>
+<ul>
+<li>CMEK on the RAW bucket + BQ datasets (M10) — customer-managed keys end to end.</li>
+<li>Deploy <strong>DataHub</strong> instead of/alongside Marquez; ingest BigQuery + your registry; compare with Dataplex.</li>
+<li>VPC Service Controls perimeter around the project (read M10 first; this one bites).</li>
+</ul>
+</body>
+</html>

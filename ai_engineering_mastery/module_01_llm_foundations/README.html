@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 1: LLM Foundations — Tokens, Vectors, Attention, Prompts</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-1-llm-foundations-tokens-vectors-attention-prompts">Module 1: LLM Foundations — Tokens, Vectors, Attention, Prompts</h1>
+<h2 id="learning-objectives">Learning Objectives</h2>
+<ul>
+<li>Explain what a <strong>token</strong> is, why models bill and truncate by tokens, and estimate
+  token counts for a piece of text.</li>
+<li>Represent text as <strong>vectors (embeddings)</strong> and measure semantic closeness with
+  <strong>cosine similarity</strong> — the primitive under every vector database.</li>
+<li>Demystify <strong>attention</strong>: implement it as a softmax-weighted lookup and see why
+  "context" is literally what the model attends to.</li>
+<li>Structure prompts deliberately — role, instructions, context, examples, output
+  format — instead of concatenating strings and hoping.</li>
+<li>Decide between <strong>prompting and fine-tuning</strong> with an engineering rubric, not vibes.</li>
+</ul>
+<hr>
+<h2 id="1-tokens-the-unit-of-everything">1. Tokens: The Unit of Everything</h2>
+<p>LLMs never see words. Text is split into <strong>tokens</strong> (subword pieces) by a tokenizer;
+the model consumes and produces token IDs. Every hard limit you will ever hit —
+context window, pricing, latency, truncation — is denominated in tokens.</p>
+<table>
+<thead>
+<tr>
+<th>Fact</th>
+<th>Engineering consequence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>~4 characters ≈ 1 token in English</td>
+<td>Estimate budget as <code>len(text) / 4</code> before calling</td>
+</tr>
+<tr>
+<td>Pricing is per input + output token</td>
+<td>Long prompts cost money <em>on every call</em></td>
+</tr>
+<tr>
+<td>Context windows are token-bounded</td>
+<td>Retrieval (Module 2+) exists to spend tokens well</td>
+</tr>
+<tr>
+<td>Rare words split into many tokens</td>
+<td>Domain jargon inflates budgets and confuses models</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Pitfall:</strong> counting characters or words to check "will this fit?" fails exactly
+when it matters — code, URLs, and non-English text have very different token/char
+ratios. Estimate with a tokenizer (or a calibrated heuristic), never with <code>len()</code>.</p>
+</blockquote>
+<h2 id="2-embeddings-meaning-as-geometry">2. Embeddings: Meaning as Geometry</h2>
+<p>An <strong>embedding</strong> maps text to a fixed-length vector such that <em>semantically similar
+texts land near each other</em>. Similarity is measured with <strong>cosine similarity</strong> — the
+angle between vectors, ignoring length:</p>
+<pre><code>cos(a, b) = (a · b) / (|a| · |b|)          # 1.0 = same direction, 0 = unrelated
+</code></pre>
+<p>This one function powers vector databases, semantic caches (Module 8), memory
+(Module 7), and RAG (Modules 2–4). In this course we use deterministic hash-based
+embeddings — the geometry and the engineering are identical to production; only the
+quality of "meaning" differs.</p>
+<h2 id="3-attention-context-is-a-weighted-lookup">3. Attention: Context Is a Weighted Lookup</h2>
+<p>Attention answers: <em>for this query, how much should each piece of context contribute?</em>
+Mechanically it is three steps — score, normalize, blend:</p>
+<pre><code class="language-mermaid">flowchart LR
+    Q[query vector] --&gt; S[dot product with each key]
+    S --&gt; W[softmax → weights that sum to 1]
+    W --&gt; O[weighted sum of values]
+</code></pre>
+<p>That is the whole trick. Two consequences you will exploit all course:
+- <strong>Everything in context competes for weight.</strong> Irrelevant context doesn't just waste
+  tokens — it dilutes attention over the relevant parts ("context rot", Module 7).
+- <strong>The model can only attend to what you put in front of it.</strong> RAG is attention's
+  supply chain.</p>
+<h2 id="4-prompting-as-engineering">4. Prompting as Engineering</h2>
+<p>A production prompt is a structured document, not a sentence:</p>
+<table>
+<thead>
+<tr>
+<th>Section</th>
+<th>Purpose</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Role</td>
+<td>Set persona and stakes</td>
+<td>"You are a support engineer for AcmeDB."</td>
+</tr>
+<tr>
+<td>Instructions</td>
+<td>The task, constraints, refusal rules</td>
+<td>"Answer only from the provided context."</td>
+</tr>
+<tr>
+<td>Context</td>
+<td>Retrieved documents, state</td>
+<td>"[doc 1] … [doc 2] …"</td>
+</tr>
+<tr>
+<td>Examples (few-shot)</td>
+<td>Show, don't tell, the format</td>
+<td>Q/A pairs</td>
+</tr>
+<tr>
+<td>Output format</td>
+<td>Machine-parseable contract</td>
+<td>"Reply as JSON: {answer, sources}"</td>
+</tr>
+</tbody>
+</table>
+<p>Few-shot examples are the cheapest capability upgrade that exists: you are steering
+the model's pattern-completion with in-context evidence.</p>
+<blockquote>
+<p><strong>Pitfall:</strong> instructions buried mid-context get less attention than instructions at
+the start or end. Put the contract where the model will weight it.</p>
+</blockquote>
+<h2 id="5-prompt-or-fine-tune">5. Prompt or Fine-Tune?</h2>
+<p>The meme says <em>"Fine-tune nothing, prompt everything"</em> — and as a default it is
+right, but for a reason you should be able to defend:</p>
+<table>
+<thead>
+<tr>
+<th>Situation</th>
+<th>Reach for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Model lacks <em>knowledge</em> (your docs, fresh data)</td>
+<td><strong>RAG</strong> — fine-tuning is a terrible database</td>
+</tr>
+<tr>
+<td>Model lacks <em>format/style/tone</em> consistency</td>
+<td>Prompting first; fine-tune if examples don't stick</td>
+</tr>
+<tr>
+<td>Need lower latency/cost at huge volume, fixed task</td>
+<td>Fine-tune a smaller model on the big model's outputs</td>
+</tr>
+<tr>
+<td>Task changes weekly</td>
+<td>Prompting — fine-tunes are frozen the day they finish</td>
+</tr>
+</tbody>
+</table>
+<p>Fine-tuning changes <em>behavior</em>, not <em>knowledge</em>. If the answer isn't in the weights or
+the context, no amount of tuning makes it appear — that's a hallucination factory
+(Module 8 measures those).</p>
+<hr>
+<h2 id="key-takeaways">Key Takeaways</h2>
+<ul>
+<li>Tokens are the currency: budget, price, and truncate in tokens, never characters.</li>
+<li>Cosine similarity over embeddings is the primitive under RAG, caching, and memory.</li>
+<li>Attention = softmax-weighted lookup; context quality <em>is</em> answer quality.</li>
+<li>Prompts are structured documents with a contract, not clever sentences.</li>
+<li>Default to prompting + retrieval; fine-tune for behavior at scale, never for facts.</li>
+</ul>
+<p>Next: <a href="../module_02_rag_fundamentals/README.md">Module 2 — RAG Fundamentals</a>.</p>
+<hr>
+<h2 id="files-in-this-module">Files in This Module</h2>
+<ul>
+<li><code>concepts.py</code> — tokenizer, embeddings, cosine similarity, attention, prompt assembly</li>
+<li><code>exercise.py</code> — implement the similarity/attention/prompt primitives yourself</li>
+<li><code>solution.py</code> — reference solution</li>
+</ul>
+</body>
+</html>

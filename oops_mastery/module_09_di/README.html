@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 9: Dependency Injection — Wiring Objects Without Glue Everywhere</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-9-dependency-injection-wiring-objects-without-glue-everywhere">Module 9: Dependency Injection — Wiring Objects Without Glue Everywhere</h1>
+<h2 id="learning-objectives">Learning Objectives</h2>
+<ul>
+<li>Define DI precisely: <strong>objects receive their collaborators; they don't construct
+  them</strong> — and connect it to DIP (Module 5).</li>
+<li>Use <code>typing.Protocol</code> as the seam between services and implementations.</li>
+<li>Structure an application around a <strong>composition root</strong> — the single place where
+  concrete objects are chosen and wired.</li>
+<li>Swap real implementations for <strong>fakes</strong> in tests without patching.</li>
+<li>Build (and know when to skip) a minimal <strong>DI container</strong> with constructor-signature
+  inspection.</li>
+</ul>
+<hr>
+<h2 id="1-the-problem-di-solves">1. The Problem DI Solves</h2>
+<pre><code class="language-python"># ✗ hidden, hardcoded dependencies
+class SignupService:
+    def __init__(self):
+        self.db = PostgresUserRepo(&quot;prod-dsn&quot;)      # constructs its own deps
+        self.mailer = SmtpMailer(&quot;smtp.corp&quot;)       # untestable without a server
+
+# ✓ dependencies injected
+class SignupService:
+    def __init__(self, repo: UserRepo, mailer: Mailer):
+        self.repo, self.mailer = repo, mailer
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Hardcoded</th>
+<th>Injected</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Test needs a real DB/SMTP or monkeypatching</td>
+<td>Test passes in-memory fakes</td>
+</tr>
+<tr>
+<td>Swapping impl = editing the class</td>
+<td>Swapping impl = editing one wiring line</td>
+</tr>
+<tr>
+<td>Dependency graph invisible</td>
+<td>Constructor signature <em>is</em> the documentation</td>
+</tr>
+<tr>
+<td>Import arrows point at details</td>
+<td>Arrows point at Protocols (DIP)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Constructor injection</strong> is the default — dependencies are explicit and the object
+is valid from birth. Method injection (pass per call) suits per-request values;
+attribute injection hides requirements and should be rare.</p>
+<h2 id="2-protocols-are-the-seam">2. Protocols Are the Seam</h2>
+<pre><code class="language-python">class UserRepo(Protocol):
+    def add(self, user: User) -&gt; None: ...
+    def get(self, user_id: str) -&gt; User | None: ...
+
+class Mailer(Protocol):
+    def send(self, to: str, subject: str, body: str) -&gt; None: ...
+</code></pre>
+<p>The service depends only on these shapes. <code>InMemoryUserRepo</code> (tests) and
+<code>PostgresUserRepo</code> (prod) conform structurally — no shared base class required
+(Module 4). Small, per-client protocols keep ISP intact (Module 5).</p>
+<h2 id="3-the-composition-root">3. The Composition Root</h2>
+<p>All construction happens in <strong>one place</strong>, at the outermost layer (your <code>main()</code>):</p>
+<pre><code class="language-mermaid">flowchart TD
+    M[&quot;main() — composition root&quot;] --&gt;|builds| R[(PostgresRepo)]
+    M --&gt;|builds| S[SmtpMailer]
+    M --&gt;|&quot;injects both into&quot;| Svc[SignupService]
+    Svc --&gt;|depends on| P1{{UserRepo Protocol}}
+    Svc --&gt;|depends on| P2{{Mailer Protocol}}
+    R -.conforms.-&gt; P1
+    S -.conforms.-&gt; P2
+</code></pre>
+<pre><code class="language-python">def main(env: str):
+    if env == &quot;test&quot;:
+        repo, mailer = InMemoryUserRepo(), FakeMailer()
+    else:
+        repo, mailer = PostgresUserRepo(dsn), SmtpMailer(host)
+    return SignupService(repo, mailer)          # the ONLY place `Signup` is wired
+</code></pre>
+<blockquote>
+<p><strong>Pitfall:</strong> scattering construction (<code>Service()</code> deep inside handlers) recreates
+the original problem one layer down. If a class needs a dependency <em>sometimes</em>,
+inject a <strong>factory</strong> (<code>Callable[[], Connection]</code>), not the built object.</p>
+</blockquote>
+<h2 id="4-testing-fakes-beat-mocks">4. Testing: Fakes Beat Mocks</h2>
+<pre><code class="language-python">class FakeMailer:
+    def __init__(self): self.outbox = []
+    def send(self, to, subject, body): self.outbox.append((to, subject))
+
+def test_signup_sends_welcome():
+    mailer = FakeMailer()
+    svc = SignupService(InMemoryUserRepo(), mailer)
+    svc.signup(&quot;ada@example.com&quot;)
+    assert mailer.outbox == [(&quot;ada@example.com&quot;, &quot;Welcome!&quot;)]
+</code></pre>
+<p>A <strong>fake</strong> is a real, simple implementation of the protocol; assertions read as
+behavior ("what's in the outbox"), not as interaction choreography
+(<code>mock.assert_called_once_with</code>). No <code>unittest.mock.patch</code>, no import-path
+surgery — that's the DI dividend.</p>
+<h2 id="5-a-minimal-container-and-when-not-to-bother">5. A Minimal Container (and when not to bother)</h2>
+<p>For big graphs, hand-wiring gets verbose. A container automates it: register a
+concrete class per protocol, then <strong>resolve</strong> — the container reads constructor
+type hints and recursively builds the tree.</p>
+<pre><code class="language-python">class Container:
+    def register(self, protocol, provider, *, singleton=False): ...
+    def resolve(self, cls):
+        hints = typing.get_type_hints(cls.__init__)   # inspect the constructor
+        deps = {name: self.resolve(dep) for name, dep in hints.items()
+                if name != &quot;return&quot;}
+        return cls(**deps)
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Registration kind</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>register(Proto, Impl)</code></td>
+<td>build a fresh <code>Impl</code> per resolve (<em>transient</em>)</td>
+</tr>
+<tr>
+<td><code>register(Proto, Impl, singleton=True)</code></td>
+<td>build once, share (<em>singleton scope</em>)</td>
+</tr>
+<tr>
+<td><code>register(Proto, lambda: Impl(cfg))</code></td>
+<td>custom factory for awkward constructors</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Pitfall:</strong> containers hide wiring errors until <code>resolve()</code> runs — you traded
+compile-time visibility for convenience. For an app with &lt; ~10 services, the
+explicit composition root is <em>better</em>: readable, greppable, debuggable. Reach for
+a container when the graph, not the pattern, is the pain.</p>
+</blockquote>
+<hr>
+<h2 id="key-takeaways">Key Takeaways</h2>
+<ul>
+<li>DI = pass collaborators in; constructor injection is the default.</li>
+<li>Depend on Protocols; conform structurally; wire concretions in one composition root.</li>
+<li>Fakes make tests read as behavior, and DI makes fakes trivial to install.</li>
+<li>A container is signature-driven auto-wiring — powerful, but overkill for small graphs.</li>
+</ul>
+<p>Next: <a href="../module_10_microservice/README.md">Module 10 — Microservice Architecture</a>.</p>
+<hr>
+<h2 id="files-in-this-module">Files in This Module</h2>
+<ul>
+<li><code>concepts.py</code> — the refactor, composition root, fakes, and a working mini-container</li>
+<li><code>exercise.py</code> — build a notification pipeline with DI + your own container</li>
+<li><code>solution.py</code> — reference solution</li>
+</ul>
+</body>
+</html>

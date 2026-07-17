@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 1: Foundations &amp; the GCP Data Landscape</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-1-foundations-the-gcp-data-landscape">Module 1: Foundations &amp; the GCP Data Landscape</h1>
+<h2 id="learning-objectives">Learning Objectives</h2>
+<ul>
+<li>Navigate the GCP <strong>resource hierarchy</strong> (Organization → Folder → Project → Resource)
+  and know where quotas, billing, and IAM policies attach.</li>
+<li>Distinguish the three IAM principals and role types, and apply <strong>least privilege</strong> with
+  service accounts.</li>
+<li>Enable APIs and manage projects with <code>gcloud</code>, <code>bq</code>, and <code>gsutil</code>.</li>
+<li>Map the <strong>PDE exam blueprint</strong> to the five data-engineering domains.</li>
+<li>Apply a <strong>service-selection mental model</strong> you'll reuse in every later module.</li>
+</ul>
+<hr>
+<h2 id="1-the-resource-hierarchy">1. The Resource Hierarchy</h2>
+<p>Every GCP resource lives in a tree. IAM policies and org policies set on a node are
+<strong>inherited</strong> by everything beneath it — this is the single most tested governance idea.</p>
+<pre><code class="language-mermaid">flowchart TD
+    O[Organization&lt;br/&gt;example.com] --&gt; F1[Folder: data-platform]
+    F1 --&gt; P1[Project: dp-prod]
+    F1 --&gt; P2[Project: dp-dev]
+    P1 --&gt; R1[BigQuery dataset]
+    P1 --&gt; R2[GCS bucket]
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Level</th>
+<th>What attaches here</th>
+<th>Exam-relevant fact</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Organization</td>
+<td>Org policies, top-level IAM</td>
+<td>Root of inheritance; tied to a Cloud Identity/Workspace domain</td>
+</tr>
+<tr>
+<td>Folder</td>
+<td>IAM, org policy overrides</td>
+<td>Model departments/environments</td>
+</tr>
+<tr>
+<td>Project</td>
+<td>Billing account, APIs, quotas, IAM</td>
+<td><strong>The unit of billing, isolation, and quota</strong></td>
+</tr>
+<tr>
+<td>Resource</td>
+<td>Resource-level IAM (e.g. a bucket)</td>
+<td>Most granular; adds to inherited policy</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Pitfall:</strong> IAM is <strong>additive and union-based</strong> — you cannot <em>subtract</em> an inherited
+grant with a lower-level policy (there is no "deny by absence"). To remove access you
+revoke it at the level it was granted, or use an explicit <strong>IAM Deny policy</strong>.</p>
+</blockquote>
+<h2 id="2-iam-principals-roles-bindings">2. IAM: Principals, Roles, Bindings</h2>
+<ul>
+<li><strong>Principals (members):</strong> Google accounts, <strong>service accounts</strong>, Google Groups,
+  domains, and <code>allAuthenticatedUsers</code>/<code>allUsers</code>.</li>
+<li><strong>Roles:</strong> collections of permissions. Three tiers:</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Role type</th>
+<th>Examples</th>
+<th>Use when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Basic</strong> (primitive)</td>
+<td><code>roles/owner</code>, <code>roles/editor</code>, <code>roles/viewer</code></td>
+<td>Almost never in production — too broad</td>
+</tr>
+<tr>
+<td><strong>Predefined</strong></td>
+<td><code>roles/bigquery.dataEditor</code>, <code>roles/dataflow.worker</code></td>
+<td>The default choice — least privilege</td>
+</tr>
+<tr>
+<td><strong>Custom</strong></td>
+<td>your own permission set</td>
+<td>When predefined roles are still too broad</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>Binding:</strong> <code>principal → role</code> on a resource. The policy is the set of bindings.</li>
+</ul>
+<pre><code class="language-hcl"># Grant a pipeline's service account only what it needs — not Editor.
+resource &quot;google_project_iam_member&quot; &quot;sa_bq_jobs&quot; {
+  project = var.project_id
+  role    = &quot;roles/bigquery.jobUser&quot;          # run queries...
+  member  = &quot;serviceAccount:${google_service_account.pipeline.email}&quot;
+}
+</code></pre>
+<blockquote>
+<p><strong>Pitfall:</strong> <code>google_project_iam_policy</code> is <strong>authoritative</strong> and overwrites the entire
+project policy — it can lock you out. Prefer <code>google_project_iam_member</code> (adds one
+binding) unless you truly own the whole policy.</p>
+</blockquote>
+<h3 id="service-accounts-sa">Service accounts (SA)</h3>
+<p>Automation identity. Two things people confuse:
+- <strong>Who can <em>act as<em> the SA</em><em> — <code>roles/iam.serviceAccountUser</code> (impersonation / attach).
+- </em><em>What the SA can </em>do</em></strong> — roles granted <em>to</em> the SA on resources.</p>
+<p>Prefer <strong>attaching a SA to a service</strong> (Dataflow, Dataproc, Composer) or <strong>short-lived
+impersonation</strong> over exporting long-lived JSON keys. Exported keys are the #1 credential
+leak on the exam and in real life.</p>
+<h2 id="3-the-cli-trio">3. The CLI Trio</h2>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Scope</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gcloud</code></td>
+<td>Everything (projects, IAM, services, compute…)</td>
+<td><code>gcloud services enable bigquery.googleapis.com</code></td>
+</tr>
+<tr>
+<td><code>bq</code></td>
+<td>BigQuery</td>
+<td><code>bq query --use_legacy_sql=false 'SELECT 1'</code></td>
+</tr>
+<tr>
+<td><code>gsutil</code> / <code>gcloud storage</code></td>
+<td>Cloud Storage</td>
+<td><code>gcloud storage cp file.csv gs://bucket/</code></td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-bash">gcloud config set project &quot;$PROJECT_ID&quot;
+gcloud projects get-iam-policy &quot;$PROJECT_ID&quot; --format=json   # audit who has what
+gcloud services list --enabled                               # which APIs are on
+</code></pre>
+<h2 id="4-the-pde-exam-blueprint">4. The PDE Exam Blueprint</h2>
+<p>The exam maps to five domains. This course is organized around them:</p>
+<table>
+<thead>
+<tr>
+<th>Domain</th>
+<th>Weight (approx.)</th>
+<th>Covered in</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Designing data processing systems</td>
+<td>~22%</td>
+<td>01, 05, all "which service" tables</td>
+</tr>
+<tr>
+<td>Ingesting &amp; processing the data</td>
+<td>~25%</td>
+<td>06, 07, 08, 09</td>
+</tr>
+<tr>
+<td>Storing the data</td>
+<td>~20%</td>
+<td>02, 03, 04, 05</td>
+</tr>
+<tr>
+<td>Preparing &amp; using data for analysis</td>
+<td>~15%</td>
+<td>03, 04, 11</td>
+</tr>
+<tr>
+<td>Maintaining &amp; automating workloads</td>
+<td>~18%</td>
+<td>09, 10, 12</td>
+</tr>
+</tbody>
+</table>
+<h2 id="5-a-service-selection-mental-model">5. A Service-Selection Mental Model</h2>
+<p>For any "which service?" question, filter on these axes <strong>in order</strong>:</p>
+<pre><code class="language-mermaid">flowchart TD
+    Q[Requirement] --&gt; L{Latency?}
+    L --&gt;|&quot;ms, transactional&quot;| DB[Cloud SQL / Spanner / Bigtable]
+    L --&gt;|&quot;seconds, streaming&quot;| ST[Pub/Sub + Dataflow]
+    L --&gt;|&quot;analytical, big scans&quot;| BQ[BigQuery]
+    DB --&gt; C{Global + strong consistency?}
+    C --&gt;|yes| SP[Spanner]
+    C --&gt;|no, high-throughput KV| BT[Bigtable]
+    C --&gt;|relational OLTP| SQL[Cloud SQL]
+</code></pre>
+<p>Axes: <strong>latency</strong>, <strong>consistency</strong>, <strong>scale/throughput</strong>, <strong>structure</strong> (relational /
+KV / document / analytical), <strong>cost model</strong> (serverless vs provisioned), and
+<strong>managed-ness</strong>. Memorize these; every later module refines one branch.</p>
+<hr>
+<h2 id="exam-focus">🎯 Exam Focus</h2>
+<table>
+<thead>
+<tr>
+<th>If the question says…</th>
+<th>Reach for…</th>
+<th>Because</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>"remove one user's access org-wide"</td>
+<td>IAM <strong>Deny policy</strong></td>
+<td>Additive model can't subtract via lower policy</td>
+</tr>
+<tr>
+<td>"third-party needs to run our jobs, no keys"</td>
+<td><strong>SA impersonation</strong> / Workload Identity</td>
+<td>Avoids exported JSON keys</td>
+</tr>
+<tr>
+<td>"isolate cost &amp; quota per team"</td>
+<td>Separate <strong>projects</strong></td>
+<td>Project = billing/quota boundary</td>
+</tr>
+<tr>
+<td>"grant least privilege to run queries but not edit data"</td>
+<td><code>bigquery.jobUser</code> + <code>bigquery.dataViewer</code></td>
+<td>Split job-run from data-edit</td>
+</tr>
+<tr>
+<td>"policy must apply to all current &amp; future projects in a dept"</td>
+<td>Set IAM on the <strong>Folder</strong></td>
+<td>Inheritance</td>
+</tr>
+</tbody>
+</table>
+<h3 id="practice-questions">Practice Questions</h3>
+<ol>
+<li><strong>A team must run BigQuery queries but must not be able to delete tables. Which role
+   set?</strong> → <code>roles/bigquery.jobUser</code> (run jobs) + <code>roles/bigquery.dataViewer</code> (read
+   data). <code>dataEditor</code>/<code>dataOwner</code> would allow deletes.</li>
+<li><strong>You granted <code>roles/storage.admin</code> at the folder level and now want to remove it for
+   one project.</strong> → You cannot "un-inherit." Either revoke at the folder and re-grant
+   narrowly, or add an <strong>IAM Deny policy</strong> on that project.</li>
+<li><strong>An external partner's app must call your Pub/Sub without long-lived keys.</strong> →
+   Configure <strong>Workload Identity Federation</strong> / SA impersonation; never export a key.</li>
+<li><strong>Which resource is the unit of billing and quota isolation?</strong> → The <strong>Project</strong>.</li>
+<li><strong><code>google_project_iam_policy</code> vs <code>google_project_iam_member</code> — which is safe to add a
+   single binding in a shared project?</strong> → <code>_member</code> (additive). <code>_policy</code> is
+   authoritative and overwrites everything.</li>
+</ol>
+<hr>
+<h2 id="key-takeaways">Key Takeaways</h2>
+<ul>
+<li>The hierarchy inherits IAM top-down; policy is <strong>additive</strong> — use Deny policies to
+  subtract.</li>
+<li>Prefer <strong>predefined roles + dedicated service accounts</strong>; avoid basic roles and
+  exported keys.</li>
+<li>The <strong>project</strong> is the isolation, billing, and quota unit.</li>
+<li>Every service choice reduces to latency / consistency / scale / structure / cost.</li>
+</ul>
+<p>Next: <a href="../module_02_cloud_storage_data_lake/README.md">Module 2 — Cloud Storage &amp; Data Lakes</a>.</p>
+<hr>
+<h2 id="files-in-this-module">Files in This Module</h2>
+<ul>
+<li><code>concepts.tf</code> — enables the data APIs and provisions a least-privilege pipeline SA</li>
+<li><code>exercise.md</code> — stand up a project baseline: APIs, SA, and scoped IAM</li>
+<li><code>solution.tf</code> — reference solution</li>
+</ul>
+</body>
+</html>

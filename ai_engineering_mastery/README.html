@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Engineering Mastery — every buzzword, done properly</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="ai-engineering-mastery-every-buzzword-done-properly">AI Engineering Mastery — every buzzword, done properly</h1>
+<p>You have seen the joke: <em>"How to become an AI Engineer in 2026: say 'we should use
+agents' twice per meeting, call every search feature RAG, add a vector database before
+you have any vectors…"</em> This course is the serious answer. Every term the meme
+lampoons — <strong>RAG, vector databases, AI agents, multi-agent systems, MCP, LLM gateways,
+semantic caching, observability, fine-tuning vs. prompting, prompt-cost optimization,
+hallucinations, benchmarking and evals</strong> — is a real engineering discipline, and here
+you will implement each one from first principles in plain Python.</p>
+<p>Eight progressive modules and one capstone take you from tokens and vector similarity
+to a production-shaped, observable, cost-accounted agentic RAG pipeline. Every module
+pairs a deep-dive README with runnable code, a hands-on exercise, and a reference
+solution. No API keys, no third-party packages — a deterministic mock LLM and
+hash-based embeddings make every file runnable offline, so you learn the <em>architecture</em>
+instead of fighting SDKs.</p>
+<h2 id="who-this-is-for">Who This Is For</h2>
+<ul>
+<li>Engineers who can call an LLM API but want to understand what RAG, agents, and evals
+  actually are under the hood — well enough to build (or reject!) each one.</li>
+<li>Developers tired of buzzword-driven design who want the judgment to say <em>when</em> a
+  vector database, an agent, or a multi-agent system is genuinely warranted.</li>
+<li>Anyone preparing for AI-engineering interviews where chunking trade-offs, ReAct,
+  reranking, context budgets, and eval design come up.</li>
+</ul>
+<h2 id="how-each-module-is-structured">How Each Module Is Structured</h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>README.md</code></td>
+<td>Learning objectives + deep-dive concepts with tables and diagrams</td>
+</tr>
+<tr>
+<td><code>concepts.py</code></td>
+<td>Annotated, runnable examples — <code>python3 concepts.py</code> prints proof of every idea</td>
+</tr>
+<tr>
+<td><code>exercise.py</code></td>
+<td>Lab with numbered TODOs and self-verification checks</td>
+</tr>
+<tr>
+<td><code>solution.py</code></td>
+<td>Complete reference solution</td>
+</tr>
+</tbody>
+</table>
+<h2 id="the-curriculum">The Curriculum</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Module</th>
+<th>You Will Master</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>01</td>
+<td><strong><a href="module_01_llm_foundations/README.md">LLM Foundations</a></strong></td>
+<td>Tokens, embeddings, cosine similarity, attention as weighted lookup, prompting patterns, fine-tune vs. prompt</td>
+</tr>
+<tr>
+<td>02</td>
+<td><strong><a href="module_02_rag_fundamentals/README.md">RAG Fundamentals</a></strong></td>
+<td>Chunking strategies, embedding pipelines, building a vector database (indexing, top-k similarity search)</td>
+</tr>
+<tr>
+<td>03</td>
+<td><strong><a href="module_03_advanced_rag/README.md">Advanced RAG</a></strong></td>
+<td>Why naive RAG plateaus, hybrid search (BM25 + vectors + RRF), query rewriting (multi-query, HyDE), cross-encoder reranking, retrieval evals</td>
+</tr>
+<tr>
+<td>04</td>
+<td><strong><a href="module_04_rag_architectures/README.md">RAG Architectures</a></strong></td>
+<td>GraphRAG, Agentic RAG, multimodal RAG, common pitfalls, and a decision framework for choosing</td>
+</tr>
+<tr>
+<td>05</td>
+<td><strong><a href="module_05_single_agent/README.md">Single-Agent Systems</a></strong></td>
+<td>Tool/function calling, the ReAct loop, argument validation, agent failure modes and the guards that catch them</td>
+</tr>
+<tr>
+<td>06</td>
+<td><strong><a href="module_06_multi_agent/README.md">Multi-Agent Systems &amp; MCP</a></strong></td>
+<td>Orchestrator–worker pattern, an MCP-style tool protocol, information isolation, planning — and when one agent is enough</td>
+</tr>
+<tr>
+<td>07</td>
+<td><strong><a href="module_07_context_memory_evals/README.md">Context, Memory &amp; Evals</a></strong></td>
+<td>Context-window budgeting, short/long-term memory, summarization, and a real eval harness (exact match, grounding, LLM-as-judge)</td>
+</tr>
+<tr>
+<td>08</td>
+<td><strong><a href="module_08_production/README.md">Production AI Engineering</a></strong></td>
+<td>LLM gateway (routing, fallback), semantic caching, OpenTelemetry-style tracing, cost accounting, hallucination detection, honest benchmarking</td>
+</tr>
+<tr>
+<td>🏆</td>
+<td><strong><a href="capstone/README.md">Capstone</a></strong></td>
+<td><em>DeskMate</em> — a support-desk agentic RAG pipeline that applies every module, with evals and traces to prove it works</td>
+</tr>
+<tr>
+<td>🌍</td>
+<td><strong><a href="real_world_track/README.md">Real-World API Track</a></strong></td>
+<td>The bridge to production: the same patterns against a live LLM API (OpenRouter / OpenAI-compatible) — real calls, real RAG with citations, real tool-calling agents, LLM-as-judge evals, LangChain workflows, real MCP, and a multi-agent swarm</td>
+</tr>
+</tbody>
+</table>
+<h2 id="prerequisites-tooling">Prerequisites &amp; Tooling</h2>
+<p>Python 3.11+ and a terminal — no third-party packages, no API keys for modules
+1–8 and the capstone. The <a href="real_world_track/README.md">Real-World API Track</a> is
+the exception by design: it needs <code>pip install openai</code> (+ <code>langchain</code>, <code>mcp</code> for
+its later exercises) and an OpenRouter API key.</p>
+<pre><code class="language-bash">python3 --version                                   # 3.11 or newer
+cd ai_engineering_mastery
+python3 module_01_llm_foundations/concepts.py       # every concepts.py runs standalone
+</code></pre>
+<h2 id="suggested-learning-path">Suggested Learning Path</h2>
+<pre><code class="language-mermaid">flowchart LR
+    A[01 foundations] --&gt; B[02 rag] --&gt; C[03 advanced rag] --&gt; D[04 architectures]
+    D --&gt; E[05 single agent] --&gt; F[06 multi-agent + MCP]
+    F --&gt; G[07 context, memory, evals] --&gt; H[08 production] --&gt; Z[🏆 Capstone]
+</code></pre>
+<p>Modules 1–4 teach <em>retrieval</em> (data in, relevant context out), 5–6 teach <em>agency</em>
+(models that act), 7–8 teach <em>engineering</em> (making it measurable, affordable, and
+debuggable). Do them in order — later modules import ideas, vocabulary, and sometimes
+code shapes from earlier ones.</p>
+<h2 id="ground-rules">Ground Rules</h2>
+<ol>
+<li><strong>Run everything.</strong> Each <code>concepts.py</code> prints and asserts observable results — read
+   the output next to the source.</li>
+<li><strong>Attempt every exercise before opening the solution.</strong> The struggle is the course.</li>
+<li><strong>Retrieval before generation.</strong> Most "the model is dumb" bugs are "the context was
+   wrong" bugs. You'll measure this yourself in Module 3.</li>
+<li><strong>No component before its problem.</strong> You earn the vector database in Module 2 by
+   first feeling keyword search fail — the meme's rule 6, inverted.</li>
+<li><strong>If you didn't eval it, it doesn't work.</strong> Every module from 3 onward ends by
+   measuring the thing it built.</li>
+</ol>
+<p>Start with <a href="module_01_llm_foundations/README.md">module_01_llm_foundations</a>.</p>
+</body>
+</html>

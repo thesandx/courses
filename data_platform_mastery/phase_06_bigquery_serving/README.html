@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 06 — BigQuery Serving: FDP→CDP, the Dim/Fact Builder (`v0.6.0`)</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="phase-06-bigquery-serving-fdpcdp-the-dimfact-builder-v060">Phase 06 — BigQuery Serving: FDP→CDP, the Dim/Fact Builder (<code>v0.6.0</code>)</h1>
+<blockquote>
+<p><strong>Mission:</strong> build the consumption layer. A template-driven <strong>Dim/Fact Builder</strong>
+(the "accelerator" from the reference architecture) turns FDP into CDP star
+schemas, pre-aggregated rollups, and data products — partitioned, clustered,
+cost-measured, and idempotent. This is the phase where the data finally earns
+its keep.</p>
+</blockquote>
+<h2 id="1-concepts">1. Concepts</h2>
+<p>Read notes <strong>§6 (data model design)</strong>, <strong>§11 (partitioning)</strong>, <strong>§15 (cost)</strong>;
+GCP <strong>M03/M04 (BigQuery fundamentals &amp; at scale)</strong>.</p>
+<p><strong>Grain first, always (§6).</strong> Before any DDL, say it out loud and write it in the
+model's YAML: <em>"one row in <code>fct_order_lines</code> = one order line item."</em> Undeclared
+grain = double-counted revenue when someone joins to <code>dim_products</code>.</p>
+<p><strong>The CDP is a set of data products, not "the gold dataset".</strong> Each product has an
+owner, an SLA, a declared grain, documented columns, and a freshness stamp — the
+"data as a product" pillar of Data Mesh (§25), implemented small. Enterprise
+architectures call this layer CDP (Consumption Data Products); Databricks calls it
+gold; Kimball calls it the presentation layer. Same thing — say all three names.</p>
+<p><strong>Model set for NovaMart</strong> (star schema, §6's default):</p>
+<pre><code>fct_order_lines   grain: one order line       PK: order_line_sk
+                  FKs: customer_sk (SCD2 as-of!), product_sk, date_key
+                  measures: quantity, unit_price_usd, line_amount_usd, line_amount_local
+fct_sessions      grain: one browsing session (from Phase 5 sessionize)
+dim_customers     SCD2 (from Phase 5) — query pattern: WHERE is_current, or as-of join
+dim_products      SCD1 (overwrite — corrections only, no history requirement)
+dim_date          generated calendar
+agg_daily_revenue grain: one day × product_category — the dashboard rollup
+</code></pre>
+<p><strong>The as-of join (§17 late-arriving-fact pattern)</strong> — facts must pick the dimension
+version that was true <em>at event time</em>, not now:</p>
+<pre><code class="language-sql">JOIN `fdp.dim_customers` c
+  ON o.customer_id = c.customer_id
+ AND o.order_ts &gt;= c.effective_from AND o.order_ts &lt; c.effective_to
+</code></pre>
+<p><strong>Cost engineering is part of the design (§15, M04):</strong>
+- <code>PARTITION BY DATE(order_ts)</code> + <code>CLUSTER BY product_sk, customer_sk</code> (≤4 cols).
+- <code>require_partition_filter = true</code> on big facts — a guardrail, not a suggestion.
+- Rollups exist so dashboards never scan raw facts: one daily aggregate serving 50
+  dashboard queries is the single biggest saving in most real platforms (§15's ~$4.6K example).
+- Measure everything with <code>--dry_run</code> bytes-scanned before/after; keep the numbers.</p>
+<h2 id="2-build">2. Build</h2>
+<h3 id="21-terraform-the-cdp-datasets">2.1 Terraform: the CDP datasets</h3>
+<p><code>bigquery</code> module additions: datasets <code>fdp</code>, <code>fdp_staging</code>, <code>cdp</code>; default table
+expiration on <code>fdp_staging</code> (3 days — staging is disposable); <code>cdp</code> labeled
+<code>layer=cdp, owner=analytics</code>. Authorized views come in Phase 9.</p>
+<h3 id="22-the-dimfact-builder-srcpipeforgeserving">2.2 The Dim/Fact Builder — <code>src/pipeforge/serving/</code></h3>
+<p>Transform-as-config, same philosophy as ingestion. Each model is a YAML + SQL pair:</p>
+<p><code>serving/models/fct_order_lines.yaml</code>:</p>
+<pre><code class="language-yaml">name: fct_order_lines
+layer: cdp
+grain: one row per order line item
+owner: analytics@novamart.dev
+sla_freshness_minutes: 360
+partition_field: order_date
+clustering: [product_sk, customer_sk]
+write_mode: partition_overwrite         # or: merge | full_refresh
+depends_on: [fdp.orders, fdp.dim_customers, fdp.dim_products, fdp.fx_rates]
+tests:                                   # consumed by Phase 8 DQ engine
+  - {type: unique, columns: [order_line_sk], severity: block}
+  - {type: not_null, columns: [customer_sk, product_sk], severity: block}
+  - {type: reconciles_to, source: fdp.orders, measure: &quot;SUM(line_amount_usd)&quot;, tolerance_pct: 0.1}
+</code></pre>
+<p><code>serving/models/fct_order_lines.sql.j2</code>:</p>
+<pre><code class="language-sql">SELECT
+  {{ sk(['o.order_line_id']) }}               AS order_line_sk,
+  c.sk                                         AS customer_sk,   -- as-of SCD2 join below
+  p.sk                                         AS product_sk,
+  DATE(o.order_ts)                             AS order_date,
+  o.quantity,
+  o.unit_price_usd,
+  o.quantity * o.unit_price_usd                AS line_amount_usd,
+  o.quantity * o.unit_price_usd * fx.rate      AS line_amount_local
+FROM `{{ project }}.fdp.orders` o
+JOIN `{{ project }}.fdp.dim_customers` c
+  ON o.customer_id = c.customer_id
+ AND o.order_ts &gt;= c.effective_from AND o.order_ts &lt; c.effective_to
+JOIN `{{ project }}.fdp.dim_products` p
+  ON o.product_id = p.product_id AND p.is_current
+LEFT JOIN `{{ project }}.fdp.fx_rates` fx
+  ON DATE(o.order_ts) = fx.rate_date AND fx.currency = 'EUR'
+WHERE DATE(o.order_ts) BETWEEN DATE('{{ ds }}') - {{ lookback }} AND DATE('{{ ds }}')
+</code></pre>
+<p><code>builder.py</code> renders the template, then executes idempotently by <code>write_mode</code>:</p>
+<pre><code class="language-python">def run_model(model: Model, execution_date: str) -&gt; None:
+    sql = render(model, ds=execution_date, lookback=model.lookback_days)
+    if model.write_mode == &quot;partition_overwrite&quot;:
+        # MERGE-free idempotency for facts (§7 pattern 1):
+        job = bq.query(f&quot;&quot;&quot;
+          DECLARE d_start DATE DEFAULT DATE('{execution_date}') - {model.lookback_days};
+          DELETE `{model.fqn}` WHERE {model.partition_field} BETWEEN d_start AND '{execution_date}';
+          INSERT `{model.fqn}` {sql};
+        &quot;&quot;&quot;, job_config=QueryJobConfig(
+            maximum_bytes_billed=model.max_bytes_billed))   # the cost seatbelt, always on
+    ...
+    emit_audit(...)  # rows, bytes_billed, slot_ms -&gt; pipeline_run
+</code></pre>
+<p>(Yes, <code>MERGE</code>/<code>INSERT OVERWRITE</code>-style alternatives exist; implementing
+delete+insert in one script and merge for dims means you've personally used all
+three §7 idempotency patterns. Say so.)</p>
+<p>CLI: <code>pipeforge build --model fct_order_lines --execution-date 2026-07-15</code>, plus
+<code>--select cdp.*</code> to run a whole layer in dependency order (topo-sort <code>depends_on</code> —
+a 20-line DAG resolver you'll reuse in Phase 7).</p>
+<h3 id="23-dim_date-rollups">2.3 dim_date + rollups</h3>
+<ul>
+<li><code>dim_date</code>: one-off generated <code>GENERATE_DATE_ARRAY</code> script (2020→2030).</li>
+<li><code>agg_daily_revenue</code>: partition-overwrite model over <code>fct_order_lines</code>.</li>
+<li>One <strong>materialized view</strong> for a "live-ish" metric (revenue today) — know its
+  constraints (limited SQL surface, auto-refresh economics) vs the rollup table (M04).</li>
+</ul>
+<h3 id="24-prove-the-cost-model-do-not-skip">2.4 Prove the cost model (do not skip)</h3>
+<pre><code class="language-bash">bq query --dry_run --use_legacy_sql=false \
+  'SELECT SUM(line_amount_usd) FROM cdp.fct_order_lines'                        # full scan
+bq query --dry_run --use_legacy_sql=false \
+  'SELECT SUM(line_amount_usd) FROM cdp.fct_order_lines WHERE order_date = &quot;2026-07-15&quot;'  # pruned
+</code></pre>
+<p>Record both byte counts in <code>docs/adr/0003-cdp-design.md</code>, compute the ratio, and
+multiply to a 2 TB/day production table at $6.25/TB — <em>that</em> number is your §15
+interview ammunition. Then flip <code>require_partition_filter=true</code> and watch the
+first query get <strong>rejected</strong> — the guardrail in action.</p>
+<h3 id="25-ship-it">2.5 Ship it</h3>
+<p>Tests: template rendering, topo-sort ordering, delete+insert window math
+(lookback), as-of join on a crafted SCD2 fixture (customer changes tier mid-month;
+orders before/after pick different versions). Tag <code>v0.6.0</code>.</p>
+<h2 id="3-prove-it">3. Prove it</h2>
+<ul>
+<li>[ ] <code>SELECT COUNT(*) FROM cdp.fct_order_lines GROUP BY order_line_sk HAVING COUNT(*)&gt;1</code> → empty, even after running the same date 3 times</li>
+<li>[ ] Tier-change customer: July-1 order shows old tier, July-15 order shows new tier (SCD2 as-of works)</li>
+<li>[ ] Revenue in <code>agg_daily_revenue</code> == revenue in <code>fct_order_lines</code> == manifest-based source estimate within tolerance (recon preview)</li>
+<li>[ ] Unfiltered query on the fact table is <strong>rejected</strong> by <code>require_partition_filter</code></li>
+<li>[ ] Bytes-billed for the dashboard query dropped ≥ 10x via the rollup (documented)</li>
+</ul>
+<h2 id="4-break-it">4. Break it</h2>
+<p>Change the as-of join to the naive <code>AND c.is_current</code> (what most juniors write),
+rebuild a historical date, and diff revenue-by-tier against the correct version.
+Quantify the misstatement. This is your concrete story for "why does SCD2 matter?"
+— restore, then write <code>docs/incidents/006-current-flag-join.md</code>.</p>
+<h2 id="5-interview-corner">5. Interview corner</h2>
+<ul>
+<li>Run the full <strong>Q3 (e-commerce warehouse — the most-asked question)</strong> with a 45-min
+  timer. You have now <em>built</em> the canonical answer: declare grain → star schema →
+  SCD2 dims → idempotent daily loads → rollups → cost numbers.</li>
+<li><em>"Star schema or OBT?"</em> — you chose star; know when OBT wins (single predictable
+  dashboard, §6) and mention wide-fact pragmatism.</li>
+<li>dbt fluency without dbt (§32): your YAML+Jinja+<code>depends_on</code>+tests <strong>is</strong> dbt's
+  mental model — <code>ref()</code> ≈ <code>depends_on</code>, materializations ≈ <code>write_mode</code>, dbt tests
+  ≈ your <code>tests:</code> block. Being able to map them shows you understand the concepts,
+  not the tool branding. (Stretch: port two models to real dbt and compare.)</li>
+</ul>
+<h2 id="6-stretch-goals">6. Stretch goals</h2>
+<ul>
+<li>Port <code>fct_order_lines</code> + <code>agg_daily_revenue</code> to <strong>dbt</strong> with contracts + tests; run both side by side.</li>
+<li>Add a BI Engine reservation + Looker Studio dashboard on the rollup (M11).</li>
+<li>Feature-store flavor: build <code>cdp.customer_features</code> (RFM metrics) and discuss offline/online split (Q8).</li>
+</ul>
+</body>
+</html>

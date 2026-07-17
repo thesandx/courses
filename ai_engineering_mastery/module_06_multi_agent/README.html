@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 6: Multi-Agent Systems &amp; MCP — Orchestration, Isolation, Planning</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-6-multi-agent-systems-mcp-orchestration-isolation-planning">Module 6: Multi-Agent Systems &amp; MCP — Orchestration, Isolation, Planning</h1>
+<h2 id="learning-objectives">Learning Objectives</h2>
+<ul>
+<li>Know <strong>when multiple agents beat one</strong> — and why the honest answer is "less often
+  than the meeting slides say" (the meme's rule 5, taken seriously).</li>
+<li>Build the <strong>orchestrator–worker pattern</strong>: a planner decomposing a task, specialist
+  workers with isolated contexts, and result synthesis.</li>
+<li>Explain <strong>information isolation</strong>: why workers get <em>scoped</em> context, and what
+  breaks (cost, confusion, leakage) when everyone sees everything.</li>
+<li>Implement an <strong>MCP-style protocol</strong>: standardized discovery + invocation of tools
+  across servers — and articulate what MCP is <em>for</em> (the M×N problem), so you never
+  "replace every REST API with MCP whether anyone asked or not."</li>
+<li>Recognize multi-agent-specific failure modes: duplicated work, contradictory
+  results, planning drift, and the coordination tax.</li>
+</ul>
+<hr>
+<h2 id="1-one-agent-or-many">1. One Agent or Many?</h2>
+<p>Adding agents adds coordination cost — plans, handoffs, synthesis, and N× model
+calls. The upgrade is earned only when the task has natural <em>parallel</em> or
+<em>specialist</em> structure:</p>
+<table>
+<thead>
+<tr>
+<th>Signal</th>
+<th>Architecture</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>One tool-loop solves it</td>
+<td><strong>Single agent.</strong> Stop here. Most tasks end here.</td>
+</tr>
+<tr>
+<td>Independent subtasks, parallelizable (research 5 competitors)</td>
+<td>Orchestrator + parallel workers</td>
+</tr>
+<tr>
+<td>Subtasks need different tools/instructions (SQL analyst vs writer)</td>
+<td>Specialist workers</td>
+</tr>
+<tr>
+<td>Context too big for one window; subtasks each fit</td>
+<td>Workers as context partitions</td>
+</tr>
+<tr>
+<td>Sequential refinement (draft → critique → revise)</td>
+<td>Pipeline of 2–3 roles</td>
+</tr>
+</tbody>
+</table>
+<p>"Call every AI agent a multi-agent system" fails engineering review because each
+extra agent multiplies cost and adds a <em>new</em> class of bug: disagreement between
+agents.</p>
+<h2 id="2-orchestratorworker">2. Orchestrator–Worker</h2>
+<pre><code class="language-mermaid">flowchart TD
+    U[task] --&gt; O[orchestrator: plan subtasks]
+    O --&gt; W1[worker: billing specialist]
+    O --&gt; W2[worker: infra specialist]
+    W1 --&gt; S[synthesize results]
+    W2 --&gt; S
+    S --&gt; A[answer]
+</code></pre>
+<p>The orchestrator does three jobs, each a model call in production:
+1. <strong>Plan</strong> — decompose the task into subtasks with an assigned specialist each.
+2. <strong>Route</strong> — give each worker <em>only</em> the context its subtask needs.
+3. <strong>Synthesize</strong> — merge worker reports, detect contradictions, produce the answer.</p>
+<blockquote>
+<p><strong>Pitfall:</strong> synthesis is where multi-agent systems quietly fail. Two workers
+return conflicting facts; a naive synthesizer picks one at random. <code>concepts.py</code>
+makes the conflict explicit and forces a resolution policy.</p>
+</blockquote>
+<h2 id="3-information-isolation">3. Information Isolation</h2>
+<p>Give every worker the full conversation and you get: token bills × N, workers
+confused by irrelevant instructions, and private context (the user's payment
+details) flowing to a worker (the public-web researcher) that must never see it.</p>
+<p>Scoping rule: <strong>a worker's context = its subtask + the minimum inputs to do it.</strong>
+Isolation is also a <em>security</em> boundary — in <code>concepts.py</code> the orchestrator redacts
+customer PII before briefing the infra worker, and the test proves the worker never
+saw it.</p>
+<h2 id="4-mcp-a-protocol-not-a-fashion-statement">4. MCP: A Protocol, Not a Fashion Statement</h2>
+<p>Without a standard, M applications × N tools = M×N bespoke integrations. <strong>MCP
+(Model Context Protocol)</strong> makes tools <em>discoverable and callable in one uniform
+shape</em>, so the cost is M+N:</p>
+<pre><code>client -&gt; server:  {&quot;method&quot;: &quot;tools/list&quot;}
+server -&gt; client:  {&quot;tools&quot;: [{&quot;name&quot;: ..., &quot;description&quot;: ..., &quot;inputSchema&quot;: ...}]}
+client -&gt; server:  {&quot;method&quot;: &quot;tools/call&quot;, &quot;params&quot;: {&quot;name&quot;: ..., &quot;arguments&quot;: {...}}}
+server -&gt; client:  {&quot;content&quot;: ...}   or   {&quot;error&quot;: ...}
+</code></pre>
+<p>The agent runtime speaks this shape once and gains every server's tools — your
+Module 5 registry becomes one server among many. When <em>not</em> to reach for it: a
+fixed pipeline calling one internal API it already knows. A REST endpoint that no
+model ever discovers dynamically gains nothing from an MCP wrapper — that's the
+meme's rule 2.</p>
+<h2 id="5-failure-modes-unique-to-multi-agent">5. Failure Modes Unique to Multi-Agent</h2>
+<table>
+<thead>
+<tr>
+<th>Failure</th>
+<th>Cause</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Duplicated work</td>
+<td>Overlapping subtask boundaries</td>
+<td>Planner emits disjoint scopes; workers declare coverage</td>
+</tr>
+<tr>
+<td>Contradictory results</td>
+<td>Workers with different context answer differently</td>
+<td>Synthesis must <em>detect</em> conflicts, not average them</td>
+</tr>
+<tr>
+<td>Planning drift</td>
+<td>Worker reinterprets its subtask</td>
+<td>Subtask = instruction + expected output schema</td>
+</tr>
+<tr>
+<td>Coordination tax</td>
+<td>N agents, N× calls, N× latency</td>
+<td>Measure against the single-agent baseline (Module 7 evals)</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="key-takeaways">Key Takeaways</h2>
+<ul>
+<li>Multi-agent is an optimization for parallel/specialist structure, not a maturity
+  level; single agent is the default.</li>
+<li>Orchestrator = plan, route scoped context, synthesize with conflict detection.</li>
+<li>Isolation cuts cost and confusion — and is a privacy boundary you can test.</li>
+<li>MCP standardizes tool discovery/invocation (M+N, not M×N); wrapping an API nobody
+  discovers dynamically is cargo cult.</li>
+<li>Every added agent multiplies cost and adds disagreement as a failure mode.</li>
+</ul>
+<p>Next: <a href="../module_07_context_memory_evals/README.md">Module 7 — Context, Memory &amp; Evals</a>.</p>
+<hr>
+<h2 id="files-in-this-module">Files in This Module</h2>
+<ul>
+<li><code>concepts.py</code> — orchestrator–worker with isolation + PII redaction, an MCP-style client/server pair</li>
+<li><code>exercise.py</code> — build the MCP server/client and the conflict-detecting synthesizer</li>
+<li><code>solution.py</code> — reference solution</li>
+</ul>
+</body>
+</html>

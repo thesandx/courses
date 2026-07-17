@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🏆 Capstone: DeskMate — A Support-Desk Agentic RAG Pipeline</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="capstone-deskmate-a-support-desk-agentic-rag-pipeline">🏆 Capstone: DeskMate — A Support-Desk Agentic RAG Pipeline</h1>
+<p>Build (or study, extend, and break) <strong>DeskMate</strong>: a support-desk assistant that
+answers customer questions from a knowledge base, using every module of this course
+in one system — and <em>proves</em> it works with an eval suite and traces, not vibes.</p>
+<pre><code class="language-mermaid">flowchart LR
+    Q[question] --&gt; C{semantic cache?}
+    C -- hit --&gt; A[answer + trace]
+    C -- miss --&gt; AG[agent: ReAct loop]
+    AG --&gt;|search_kb tool| VS[(vector store)]
+    AG --&gt; G[gateway: routed mock LLM]
+    G --&gt; GR{grounding check}
+    GR -- grounded --&gt; A
+    GR -- ungrounded --&gt; R[refuse + flag]
+    A --&gt; E[eval suite scores the whole thing]
+</code></pre>
+<h2 id="what-deskmate-must-do">What DeskMate Must Do</h2>
+<ol>
+<li><strong>Index</strong> the knowledge base: sentence-aware chunks → embeddings → vector store
+   with source metadata (Module 2).</li>
+<li><strong>Retrieve</strong> with top-k semantic search; the agent decides <em>when</em> to search and
+   with what query (Modules 4–5).</li>
+<li><strong>Answer through a gateway</strong> that routes to a mock model tier and meters cost
+   per request (Module 8).</li>
+<li><strong>Cache</strong> answers semantically with TTL; invalidate by source when a document
+   changes (Module 8).</li>
+<li><strong>Check grounding</strong> before answering: numbers not present in retrieved context
+   mean refuse-and-flag, never ship (Module 7).</li>
+<li><strong>Trace</strong> every request: spans for cache lookup, retrieval, model call, checks —
+   with token and cost attributes (Module 8).</li>
+<li><strong>Pass the eval suite</strong>: labeled Q→A cases scored on grounding, correctness
+   (rubric judge), latency, and cost — printed as one honest table (Modules 3 + 7).</li>
+</ol>
+<h2 id="the-reference-implementation">The Reference Implementation</h2>
+<p><code>deskmate/</code> is a complete working reference — run it:</p>
+<pre><code class="language-bash">python3 -m deskmate.main        # from this capstone/ directory
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Applies</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>deskmate/primitives.py</code></td>
+<td>Module 1 — tokens, embeddings, similarity</td>
+</tr>
+<tr>
+<td><code>deskmate/knowledge.py</code></td>
+<td>Module 2 — chunking + vector store</td>
+</tr>
+<tr>
+<td><code>deskmate/agent.py</code></td>
+<td>Modules 4–5 — tool registry + guarded ReAct loop</td>
+</tr>
+<tr>
+<td><code>deskmate/production.py</code></td>
+<td>Module 8 — gateway, semantic cache, tracer</td>
+</tr>
+<tr>
+<td><code>deskmate/evals.py</code></td>
+<td>Modules 3 + 7 — grounding, rubric judge, suite</td>
+</tr>
+<tr>
+<td><code>deskmate/main.py</code></td>
+<td>The wiring + the demo + the eval table</td>
+</tr>
+</tbody>
+</table>
+<h2 id="your-build-choose-an-order-do-them-all">Your Build (choose an order, do them all)</h2>
+<ol>
+<li><strong>Re-implement before reading.</strong> Delete a file, rebuild it from its module, diff.</li>
+<li><strong>Break it, watch the evals catch it.</strong> Change the mock model to fabricate an ETA;
+   the grounding gate must convert that case to a refusal, and the suite table must
+   show it. If nothing catches your sabotage, the sabotage is your next bug report.</li>
+<li><strong>Extend it.</strong> Pick two:
+   - Hybrid retrieval with RRF (Module 3) instead of vector-only, and show the
+     eval delta.
+   - A second specialist agent (billing vs. technical) behind an orchestrator with
+     PII-redacted briefings (Module 6).
+   - MCP-style tool discovery so the agent finds <code>search_kb</code> at runtime (Module 6).
+   - Conversation memory with pinned facts across multi-turn sessions (Module 7).</li>
+</ol>
+<h2 id="definition-of-done">Definition of Done</h2>
+<ul>
+<li><code>python3 -m deskmate.main</code> exits 0: demo answers correct, all suite checks pass.</li>
+<li>The eval table prints grounded-rate, judge score, cache hit rate, total cost —
+  and you can explain every number in it.</li>
+<li>One paragraph, written by you: which trade-off (cost/accuracy/latency) your
+  extension moved, with the before/after numbers. That paragraph — measured claims
+  about an AI system — is the skill this course exists to teach. Live demo it,
+  take the structured feedback, and <em>don't</em> title the retro "Lessons Learned"
+  unless you plan to apply them.</li>
+</ul>
+</body>
+</html>

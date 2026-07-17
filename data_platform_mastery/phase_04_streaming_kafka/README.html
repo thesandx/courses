@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 04 — Streaming Ingestion with Kafka ② (`v0.4.0`)</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="phase-04-streaming-ingestion-with-kafka-2-v040">Phase 04 — Streaming Ingestion with Kafka ② (<code>v0.4.0</code>)</h1>
+<blockquote>
+<p><strong>Mission:</strong> run Kafka for real. Produce NovaMart clickstream events with Avro +
+Schema Registry, consume them with a micro-batching consumer into RAW (and
+optionally straight to BigQuery), route poison messages to a DLQ, watch consumer
+lag, and build the Pub/Sub bridge so you can argue Kafka-vs-managed like someone
+who has operated both.</p>
+</blockquote>
+<h2 id="1-concepts">1. Concepts</h2>
+<p>Read notes <strong>§30 (Kafka deep dive)</strong>, <strong>§18 (dedup / delivery semantics)</strong>,
+<strong>§27 (micro-batch vs true streaming)</strong>; GCP <strong>M06 (Pub/Sub)</strong>.</p>
+<p>The five ideas this phase makes physical:</p>
+<ol>
+<li><strong>Kafka is a distributed commit log, not a queue</strong> — retention independent of
+   consumption; you will replay the same topic twice into different sinks to feel it.</li>
+<li><strong>Partition = unit of parallelism <em>and</em> ordering.</strong> You'll key events by
+   <code>session_id</code> (high cardinality, even spread — §30's good-key criteria) and
+   verify per-key ordering survives while global ordering doesn't.</li>
+<li><strong>Delivery semantics are a <em>sink</em> property as much as a broker property.</strong>
+   Your consumer is at-least-once (commit offsets AFTER the GCS write). Duplicates
+   are possible by design → downstream dedup (Phase 5) makes it <strong>effectively-once</strong>.
+   Say the §18 table from memory.</li>
+<li><strong>Micro-batch is a deliberate choice</strong> (§27): the SLA for clickstream analytics
+   is minutes, not milliseconds → a 60s-flush consumer meets it at a fraction of
+   Flink's operational cost. Know the number at which you'd graduate (&lt;30s SLA,
+   stateful event-at-a-time logic).</li>
+<li><strong>Contracts move to the wire</strong>: the Avro schema in the Schema Registry <em>is</em> the
+   Phase-2 contract, now enforced at produce time (§16's "blocked at the
+   producer's build, not your 2am failure").</li>
+</ol>
+<h2 id="2-build">2. Build</h2>
+<h3 id="21-kafka-locally-dockerdocker-composekafkayml">2.1 Kafka locally — <code>docker/docker-compose.kafka.yml</code></h3>
+<pre><code class="language-yaml">services:
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller        # KRaft — no ZooKeeper (say why in interviews: metadata quorum moved into Kafka itself)
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:29093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1     # RF=1 locally; say &quot;RF=3 + min.insync=2 + acks=all&quot; for prod (§30)
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: &quot;false&quot;      # explicit topics only — prod hygiene
+    ports: [&quot;9092:9092&quot;]
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.6.1
+    depends_on: [kafka]
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka:9092
+      SCHEMA_REGISTRY_SCHEMA_COMPATIBILITY_LEVEL: BACKWARD
+    ports: [&quot;8081:8081&quot;]
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    environment:
+      KAFKA_CLUSTERS_0_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
+    ports: [&quot;8080:8080&quot;]
+</code></pre>
+<p>Create topics deliberately (counts are a design decision, not a default — §11):</p>
+<pre><code class="language-bash">docker exec -it kafka kafka-topics --bootstrap-server localhost:9092 --create \
+  --topic novamart.clickstream.v1 --partitions 6 --replication-factor 1
+docker exec -it kafka kafka-topics --bootstrap-server localhost:9092 --create \
+  --topic novamart.clickstream.v1.dlq --partitions 1 --replication-factor 1
+</code></pre>
+<p>Why 6? Peak 1,500 ev/s ÷ ~10K per partition &lt; 1 — so 6 is pure headroom +
+consumer parallelism. Being able to say "the math says 1, I chose 6 for
+rebalancing granularity and growth" is the point.</p>
+<h3 id="22-avro-contract-producer-generatorsgen_clickstreampy">2.2 Avro contract + producer — <code>generators/gen_clickstream.py</code></h3>
+<p><code>contracts/clickstream.v1.avsc</code>:</p>
+<pre><code class="language-json">{&quot;type&quot;: &quot;record&quot;, &quot;name&quot;: &quot;ClickEvent&quot;, &quot;namespace&quot;: &quot;novamart&quot;,
+ &quot;fields&quot;: [
+   {&quot;name&quot;: &quot;event_id&quot;,   &quot;type&quot;: &quot;string&quot;},
+   {&quot;name&quot;: &quot;session_id&quot;, &quot;type&quot;: &quot;string&quot;},
+   {&quot;name&quot;: &quot;customer_id&quot;,&quot;type&quot;: [&quot;null&quot;, &quot;string&quot;], &quot;default&quot;: null},
+   {&quot;name&quot;: &quot;event_type&quot;, &quot;type&quot;: {&quot;type&quot;: &quot;enum&quot;, &quot;name&quot;: &quot;EventType&quot;,
+       &quot;symbols&quot;: [&quot;page_view&quot;,&quot;search&quot;,&quot;add_to_cart&quot;,&quot;checkout&quot;,&quot;purchase&quot;]}},
+   {&quot;name&quot;: &quot;url&quot;,        &quot;type&quot;: &quot;string&quot;},
+   {&quot;name&quot;: &quot;event_ts&quot;,   &quot;type&quot;: {&quot;type&quot;: &quot;long&quot;, &quot;logicalType&quot;: &quot;timestamp-millis&quot;}},
+   {&quot;name&quot;: &quot;user_agent&quot;, &quot;type&quot;: [&quot;null&quot;,&quot;string&quot;], &quot;default&quot;: null}
+ ]}
+</code></pre>
+<p>Producer essentials (<code>confluent-kafka[avro]</code>):</p>
+<pre><code class="language-python">producer = SerializingProducer({
+    &quot;bootstrap.servers&quot;: &quot;localhost:9092&quot;,
+    &quot;key.serializer&quot;: StringSerializer(),
+    &quot;value.serializer&quot;: AvroSerializer(schema_registry_client, schema_str),
+    &quot;enable.idempotence&quot;: True,     # dedup layer 1 of 4 (§18): broker drops retry-duplicates
+    &quot;acks&quot;: &quot;all&quot;,
+    &quot;linger.ms&quot;: 20, &quot;batch.size&quot;: 65536,   # batching = why Kafka is fast (§30)
+})
+producer.produce(topic, key=event[&quot;session_id&quot;], value=event, on_delivery=cb)
+</code></pre>
+<p>The generator simulates sessions (5–30 events each), configurable rate
+(<code>--eps 200</code>), a <code>--late-fraction</code> that emits events with old <code>event_ts</code>
+(event-time vs processing-time fodder), and <code>--poison-fraction</code> that sends
+schema-invalid bytes directly with a raw producer (DLQ fodder).</p>
+<h3 id="23-the-micro-batching-consumer-srcpipeforgeingestionkafka_consumerpy">2.3 The micro-batching consumer — <code>src/pipeforge/ingestion/kafka_consumer.py</code></h3>
+<p>The heart of the phase. Design (write this docstring first, code second):</p>
+<pre><code>Consumer group: pf-raw-lander
+Loop:
+  poll() up to FLUSH_MAX_EVENTS or FLUSH_INTERVAL_S (60s), buffering per topic-partition
+  deserialize Avro; failures → produce raw bytes + error header to .dlq topic
+  write buffer → gs://raw/source=kafka/dataset=clickstream/ingest_date=&lt;today&gt;/
+                 batch_id=&lt;uuid&gt;/part-&lt;partition&gt;-&lt;first_offset&gt;-&lt;last_offset&gt;.jsonl.gz
+  write _MANIFEST.json (counts, offset ranges per partition)
+  THEN commit offsets (manual, synchronous)          ← at-least-once boundary
+Crash between GCS write and commit ⇒ batch re-lands under a new batch_id
+  ⇒ duplicates in RAW ⇒ removed in ODP by (event_id) dedup. Effectively-once.
+</code></pre>
+<p>Implementation notes:
+- <code>enable.auto.commit: false</code>, <code>auto.offset.reset: earliest</code>.
+- Filenames carry offset ranges — your replay/debug breadcrumbs.
+- Emit a <code>pipeline_run</code> audit row per flush (layer=<code>raw</code>, execution_date=today).
+- Expose lag: <code>pipeforge kafka lag --group pf-raw-lander</code> (AdminClient: committed
+  vs high-watermark per partition). <strong>Lag per partition is THE ops metric</strong> (§30) —
+  aggregate lag hides a hot partition.</p>
+<h3 id="24-drills-do-all-four-theyre-the-actual-learning">2.4 Drills (do all four — they're the actual learning)</h3>
+<ol>
+<li><strong>Ordering:</strong> produce a session's events, consume with 2 consumers; confirm
+   per-session order intact (same key → same partition), global order not.</li>
+<li><strong>Replay (Kappa moment, §21):</strong> <code>kafka-consumer-groups --reset-offsets
+   --to-datetime</code> on a <em>new</em> group; re-land yesterday into a scratch prefix. You
+   just did a streaming backfill (§13).</li>
+<li><strong>Poison pills:</strong> run generator with <code>--poison-fraction 0.01</code>, watch DLQ fill,
+   confirm good events unaffected. Inspect DLQ headers (error, original offset).</li>
+<li><strong>Rebalance:</strong> start 3 consumers on 6 partitions, kill one mid-flush, watch
+   partitions reassign and offsets replay. Count the duplicates in RAW — then
+   <em>keep them</em>: Phase 5 dedup will prove the pipeline is effectively-once.</li>
+</ol>
+<h3 id="25-the-managed-alternative-pubsub-bridge-gcp-m06">2.5 The managed alternative: Pub/Sub bridge (GCP M06)</h3>
+<p>Terraform: <code>pubsub</code> module with topic <code>clickstream</code>, a <strong>BigQuery subscription</strong>
+writing into <code>raw_stream.clickstream</code> (schema-mapped), and a DLQ topic with
+max-delivery-attempts. Then a 30-line bridge (<code>pipeforge kafka bridge</code>) consuming
+Kafka → publishing to Pub/Sub.</p>
+<p>Now compare honestly (fill the table yourself in <code>docs/adr/0002-kafka-vs-pubsub.md</code>):
+ops burden, ordering (partitions vs ordering keys), replay (offsets vs
+seek/retention), ecosystem (Connect/Streams), cost model, exactly-once story.
+This ADR is a ready-made staff interview answer.</p>
+<h3 id="26-optional-cloud-drill-kafka-on-a-gce-vm">2.6 Optional cloud drill: Kafka on a GCE VM</h3>
+<p><code>kafka_vm</code> Terraform module: <code>e2-small</code>, container-optimized OS running the same
+compose file, firewall scoped to your IP. Point generator + consumer at it, feel
+the latency, <strong>then <code>terraform destroy -target=module.kafka_vm</code></strong>. (Managed Kafka
+exists on GCP too — mention Confluent Cloud / Google Managed Kafka in the ADR.)</p>
+<h3 id="27-ship-it">2.7 Ship it</h3>
+<p>Tests: consumer flush logic with a fake consumer (inject poll batches), DLQ
+routing on deserialization error, manifest offset-range correctness. Tag <code>v0.4.0</code>.</p>
+<h2 id="3-prove-it">3. Prove it</h2>
+<ul>
+<li>[ ] 100k+ events produced; RAW has gzipped JSONL with offset-stamped filenames</li>
+<li>[ ] DLQ contains exactly the poison messages, with error headers</li>
+<li>[ ] Kill-and-restart consumer: no gaps (offset math: sum of manifest ranges == high watermark), duplicates present and <em>counted</em></li>
+<li>[ ] <code>pipeforge kafka lag</code> shows per-partition lag draining to ~0</li>
+<li>[ ] Pub/Sub BigQuery subscription shows rows in <code>raw_stream.clickstream</code></li>
+<li>[ ] Schema Registry rejects a backward-incompatible v2 (delete a required field, try to produce)</li>
+</ul>
+<h2 id="4-break-it">4. Break it</h2>
+<p>Stop the consumer for 2 hours while the generator runs (or set retention to
+30 min and watch messages <em>expire unconsumed</em> — data loss you caused). Write
+<code>docs/incidents/004-consumer-lag.md</code>: detection (lag alert, not consumer health —
+the §23 lesson), recovery (scale consumers? reset offsets? backfill from where?),
+prevention (retention sized to max tolerable outage; lag alert at 50% of retention).</p>
+<h2 id="5-interview-corner">5. Interview corner</h2>
+<ul>
+<li>Draw the consumer loop and mark the <strong>at-least-once boundary</strong> (commit after
+  write). Then say where exactly-once actually lives: "EOS covers Kafka-to-Kafka;
+  my sink is GCS, so I do at-least-once + idempotent downstream MERGE —
+  effectively-once" (§18, §30). This precise sentence separates seniors from juniors.</li>
+<li><em>"Kafka or Pub/Sub?"</em> — answer from your ADR, both directions, with the "on GCP
+  with no Kafka expertise in-house, Pub/Sub" honesty (§5 deviation table).</li>
+<li><em>"When Flink?"</em> — sub-30s SLA, event-at-a-time stateful logic (fraud, CEP);
+  otherwise micro-batch wins on ops cost (§27, Q13).</li>
+</ul>
+<h2 id="6-stretch-goals">6. Stretch goals</h2>
+<ul>
+<li>Kafka Connect GCS sink connector — compare with your hand-rolled consumer; argue build-vs-buy.</li>
+<li>Add Prometheus JMX exporter + Grafana for broker metrics.</li>
+<li>Implement a consumer <strong>backpressure</strong> test: cap GCS write speed, watch lag grow, reason about scaling (partitions vs consumers).</li>
+</ul>
+</body>
+</html>

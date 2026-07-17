@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 5: Choosing the Right Database</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-5-choosing-the-right-database">Module 5: Choosing the Right Database</h1>
+<h2 id="learning-objectives">Learning Objectives</h2>
+<ul>
+<li>Map a workload to the correct GCP data store using <strong>latency, consistency, scale, and
+  data shape</strong>.</li>
+<li>Contrast <strong>Cloud SQL, Spanner, Bigtable, Firestore, Memorystore, AlloyDB</strong>, and BigQuery.</li>
+<li>Explain the <strong>CAP/PACELC</strong> tradeoffs each service makes.</li>
+<li>Recognize the exam's favorite "which database?" trigger phrases.</li>
+<li>Provision each with Terraform and know the cost/scaling knobs.</li>
+</ul>
+<hr>
+<h2 id="1-the-decision-tree">1. The Decision Tree</h2>
+<pre><code class="language-mermaid">flowchart TD
+    A[What's the workload?] --&gt; B{Analytical&lt;br/&gt;big scans / aggregations?}
+    B --&gt;|yes| BQ[BigQuery]
+    B --&gt;|no, transactional| C{Relational?}
+    C --&gt;|no, key-value/wide-column| D{Latency + scale?}
+    D --&gt;|&quot;ms, huge write throughput, TB-PB&quot;| BT[Bigtable]
+    D --&gt;|&quot;mobile/web docs, offline sync&quot;| FS[Firestore]
+    D --&gt;|&quot;sub-ms cache&quot;| MS[Memorystore]
+    C --&gt;|yes, relational OLTP| E{Global + horizontal scale + strong consistency?}
+    E --&gt;|yes| SP[Cloud Spanner]
+    E --&gt;|no, single-region, standard| SQL[Cloud SQL / AlloyDB]
+</code></pre>
+<h2 id="2-the-services-at-a-glance">2. The Services at a Glance</h2>
+<table>
+<thead>
+<tr>
+<th>Service</th>
+<th>Model</th>
+<th>Consistency</th>
+<th>Scale</th>
+<th>Latency</th>
+<th>Sweet spot</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Cloud SQL</strong></td>
+<td>Relational (MySQL/PG/SQL Server)</td>
+<td>Strong, single-region</td>
+<td>Vertical (+read replicas)</td>
+<td>ms</td>
+<td>Classic OLTP apps, &lt;~64 TB</td>
+</tr>
+<tr>
+<td><strong>AlloyDB</strong></td>
+<td>PostgreSQL-compatible</td>
+<td>Strong</td>
+<td>Vertical + read pools; columnar accel</td>
+<td>ms</td>
+<td>High-perf PG, HTAP</td>
+</tr>
+<tr>
+<td><strong>Spanner</strong></td>
+<td>Relational, distributed</td>
+<td><strong>Strong, global</strong> (TrueTime)</td>
+<td><strong>Horizontal, unlimited</strong></td>
+<td>ms</td>
+<td>Global OLTP, 99.999% SLA, no sharding</td>
+</tr>
+<tr>
+<td><strong>Bigtable</strong></td>
+<td>Wide-column NoSQL (HBase API)</td>
+<td>Strong per-row, eventual across clusters</td>
+<td><strong>Horizontal, PB, millions ops/s</strong></td>
+<td>single-digit ms</td>
+<td>Time-series, IoT, adtech, high-throughput KV</td>
+</tr>
+<tr>
+<td><strong>Firestore</strong></td>
+<td>Document NoSQL</td>
+<td>Strong</td>
+<td>Auto, horizontal</td>
+<td>ms</td>
+<td>Mobile/web apps, offline sync, realtime</td>
+</tr>
+<tr>
+<td><strong>Memorystore</strong></td>
+<td>Redis/Memcached</td>
+<td>— (cache)</td>
+<td>Vertical/cluster</td>
+<td><strong>sub-ms</strong></td>
+<td>Caching, leaderboards, sessions</td>
+</tr>
+<tr>
+<td><strong>BigQuery</strong></td>
+<td>Columnar analytical</td>
+<td>Strong</td>
+<td>Serverless, PB</td>
+<td>seconds</td>
+<td>Analytics, DW, not OLTP</td>
+</tr>
+</tbody>
+</table>
+<h2 id="3-bigtable-deep-dive-a-favorite-exam-topic">3. Bigtable Deep-Dive (a favorite exam topic)</h2>
+<ul>
+<li><strong>Wide-column</strong>, single <strong>row key</strong> — design it for your access pattern; <strong>no secondary
+  indexes</strong>, no joins, no SQL (uses the HBase-style API / limited GoogleSQL).</li>
+<li>Scales linearly with <strong>nodes</strong>; throughput ≈ nodes. Storage is SSD or HDD.</li>
+<li><strong>Row-key design is everything.</strong> Avoid <strong>hotspotting</strong>: don't use monotonically
+  increasing keys (timestamps, sequential IDs) as the prefix — they funnel writes to one
+  node. <strong>Field-promote / salt / reverse</strong> the key.</li>
+</ul>
+<pre><code>BAD row key:  20260707#sensor42        &lt;- time prefix -&gt; write hotspot
+GOOD row key: sensor42#20260707        &lt;- field-promote id first -&gt; spreads writes
+</code></pre>
+<blockquote>
+<p><strong>Pitfall:</strong> Bigtable has <strong>no ACID multi-row transactions</strong> and no ad-hoc analytics.
+If you need SQL joins → Spanner/Cloud SQL/BigQuery.</p>
+</blockquote>
+<h2 id="4-spanner-vs-cloud-sql">4. Spanner vs Cloud SQL</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Cloud SQL</th>
+<th>Spanner</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Scale</td>
+<td>Vertical (one primary)</td>
+<td>Horizontal, add nodes, no re-shard</td>
+</tr>
+<tr>
+<td>Global writes</td>
+<td>No (single region primary)</td>
+<td><strong>Yes</strong>, strongly consistent</td>
+</tr>
+<tr>
+<td>Consistency tech</td>
+<td>Standard MySQL/PG</td>
+<td><strong>TrueTime</strong> atomic clocks</td>
+</tr>
+<tr>
+<td>SLA</td>
+<td>99.95%</td>
+<td>up to <strong>99.999%</strong></td>
+</tr>
+<tr>
+<td>Cost</td>
+<td>Low</td>
+<td>High (pay for the guarantee)</td>
+</tr>
+<tr>
+<td>Use</td>
+<td>Most apps</td>
+<td>Global scale + strong consistency needed</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Exam trap:</strong> don't pick Spanner just because it's "Google-scale." If the data fits on
+one region and a single primary, <strong>Cloud SQL is cheaper and sufficient.</strong></p>
+</blockquote>
+<h2 id="5-firestore-vs-bigtable">5. Firestore vs Bigtable</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Firestore</th>
+<th>Bigtable</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Shape</td>
+<td>Documents/collections</td>
+<td>Wide-column KV</td>
+</tr>
+<tr>
+<td>Indexes</td>
+<td>Automatic + composite</td>
+<td>Row key only</td>
+</tr>
+<tr>
+<td>Client</td>
+<td>Mobile/web SDKs, <strong>offline sync, realtime listeners</strong></td>
+<td>Server-side, high throughput</td>
+</tr>
+<tr>
+<td>Scale</td>
+<td>Millions of concurrent users</td>
+<td>PB, millions ops/s</td>
+</tr>
+<tr>
+<td>Use</td>
+<td>App backends</td>
+<td>Analytics ingest, time-series, IoT</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="exam-focus">🎯 Exam Focus</h2>
+<table>
+<thead>
+<tr>
+<th>Trigger phrase</th>
+<th>Answer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>"global, strongly consistent, horizontally scalable relational"</td>
+<td><strong>Spanner</strong></td>
+</tr>
+<tr>
+<td>"IoT/time-series, millions of writes/sec, low latency"</td>
+<td><strong>Bigtable</strong></td>
+</tr>
+<tr>
+<td>"mobile app, offline sync, realtime updates"</td>
+<td><strong>Firestore</strong></td>
+</tr>
+<tr>
+<td>"existing MySQL/PostgreSQL app, lift-and-shift"</td>
+<td><strong>Cloud SQL</strong> (or AlloyDB for perf)</td>
+</tr>
+<tr>
+<td>"sub-millisecond cache / session store / leaderboard"</td>
+<td><strong>Memorystore</strong></td>
+</tr>
+<tr>
+<td>"petabyte analytics, SQL, no ops"</td>
+<td><strong>BigQuery</strong></td>
+</tr>
+<tr>
+<td>"monotonic row key causing hot node"</td>
+<td>Redesign key: <strong>field-promote / salt / reverse timestamp</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="practice-questions">Practice Questions</h3>
+<ol>
+<li><strong>A ride-share app needs a globally consistent, horizontally scalable relational store
+   for trips and payments.</strong> → <strong>Spanner</strong> (global strong consistency + horizontal scale).</li>
+<li><strong>Millions of sensor readings/sec, queried by device + time range, single-digit-ms
+   latency.</strong> → <strong>Bigtable</strong>, row key <code>deviceId#reverse_timestamp</code> to avoid hotspotting.</li>
+<li><strong>A consumer mobile app needs offline-capable sync and realtime updates.</strong> →
+   <strong>Firestore.</strong></li>
+<li><strong>You're migrating a 200 GB PostgreSQL OLTP DB with no global requirement.</strong> → <strong>Cloud
+   SQL for PostgreSQL</strong> (or <strong>AlloyDB</strong> if it needs more performance/HTAP).</li>
+<li><strong>Your Bigtable writes all hit one node.</strong> → Monotonic key prefix; <strong>field-promote or
+   salt</strong> the row key to distribute writes.</li>
+<li><strong>You need sub-ms reads for a session cache fronting Cloud SQL.</strong> → <strong>Memorystore
+   (Redis).</strong></li>
+</ol>
+<hr>
+<h2 id="key-takeaways">Key Takeaways</h2>
+<ul>
+<li>Filter by <strong>latency → consistency → scale → data shape</strong>; don't default to the biggest
+  service.</li>
+<li><strong>Bigtable</strong> = high-throughput wide-column; <strong>row-key design prevents hotspotting</strong>.</li>
+<li><strong>Spanner</strong> = global relational + strong consistency (expensive); <strong>Cloud SQL</strong> for
+  ordinary OLTP.</li>
+<li><strong>Firestore</strong> for app backends/offline; <strong>Memorystore</strong> for caching; <strong>BigQuery</strong> for
+  analytics — never OLTP.</li>
+</ul>
+<p>Next: <a href="../module_06_pubsub_streaming_ingestion/README.md">Module 6 — Streaming Ingestion with Pub/Sub</a>.</p>
+<hr>
+<h2 id="files-in-this-module">Files in This Module</h2>
+<ul>
+<li><code>concepts.tf</code> — a Cloud SQL (PostgreSQL) instance, a Bigtable instance/table with a
+  well-designed column family, and a Firestore database</li>
+<li><code>exercise.md</code> — pick + provision the right store for three scenarios</li>
+<li><code>solution.tf</code> — reference solution</li>
+</ul>
+</body>
+</html>

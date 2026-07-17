@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 3: Descriptors — How Attributes Really Work</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-3-descriptors-how-attributes-really-work">Module 3: Descriptors — How Attributes Really Work</h1>
+<h2 id="learning-objectives">Learning Objectives</h2>
+<ul>
+<li>State the <strong>descriptor protocol</strong> (<code>__get__</code>, <code>__set__</code>, <code>__delete__</code>,
+  <code>__set_name__</code>) and where descriptor objects must live to take effect.</li>
+<li>Distinguish <strong>data</strong> from <strong>non-data</strong> descriptors and predict which wins against
+  <code>instance.__dict__</code>.</li>
+<li>Explain <code>property</code>, methods, <code>classmethod</code>, and <code>staticmethod</code> as descriptors —
+  they are not magic, they are this protocol.</li>
+<li>Build reusable <strong>validated fields</strong> with <code>__set_name__</code>, eliminating property
+  boilerplate.</li>
+<li>Use <code>__slots__</code> and know its trade-offs; know when <code>__getattr__</code> /
+  <code>__getattribute__</code> fire.</li>
+</ul>
+<hr>
+<h2 id="1-the-protocol">1. The Protocol</h2>
+<p>A <strong>descriptor</strong> is any object whose <em>class</em> defines at least one of:</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Called on</th>
+<th>Makes it a</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>__get__(self, obj, objtype)</code></td>
+<td><code>instance.attr</code> (read)</td>
+<td>non-data descriptor</td>
+</tr>
+<tr>
+<td><code>__set__(self, obj, value)</code></td>
+<td><code>instance.attr = v</code> (write)</td>
+<td><strong>data</strong> descriptor</td>
+</tr>
+<tr>
+<td><code>__delete__(self, obj)</code></td>
+<td><code>del instance.attr</code></td>
+<td><strong>data</strong> descriptor</td>
+</tr>
+<tr>
+<td><code>__set_name__(self, owner, name)</code></td>
+<td>class creation</td>
+<td>(helper — learns its own name)</td>
+</tr>
+</tbody>
+</table>
+<p>Two conditions must hold or nothing happens: the descriptor must be a <strong>class
+attribute</strong> (not instance), and the protocol methods must be on the descriptor's
+<em>type</em> (not attached to the instance).</p>
+<h2 id="2-the-lookup-algorithm-the-heart-of-python-oop">2. The Lookup Algorithm (the heart of Python OOP)</h2>
+<p><code>obj.attr</code> runs <code>type(obj).__getattribute__</code>, which resolves in this priority order:</p>
+<pre><code class="language-mermaid">flowchart TD
+    A[obj.attr] --&gt; B{data descriptor&lt;br/&gt;on type's MRO?}
+    B --&gt;|yes| C[&quot;descriptor.__get__(obj, type)&quot;]
+    B --&gt;|no| D{&quot;'attr' in obj.__dict__?&quot;}
+    D --&gt;|yes| E[return instance value]
+    D --&gt;|no| F{non-data descriptor&lt;br/&gt;or plain class attr?}
+    F --&gt;|non-data| G[&quot;descriptor.__get__(obj, type)&quot;]
+    F --&gt;|plain| H[return class value]
+    F --&gt;|not found| I[&quot;__getattr__ fallback, else AttributeError&quot;]
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>Defines</th>
+<th>vs <code>instance.__dict__</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Data descriptor</td>
+<td><code>__set__</code> and/or <code>__delete__</code></td>
+<td><strong>Wins</strong> (checked first)</td>
+</tr>
+<tr>
+<td>Non-data descriptor</td>
+<td>only <code>__get__</code></td>
+<td><strong>Loses</strong> (instance dict shadows it)</td>
+</tr>
+</tbody>
+</table>
+<p>This single table explains two everyday facts: you can't shadow a <code>property</code> by
+writing to the instance (data descriptor wins), and you <em>can</em> shadow a method by
+assigning <code>obj.method = ...</code> (functions are non-data descriptors).</p>
+<h2 id="3-everything-you-already-use-is-a-descriptor">3. Everything You Already Use Is a Descriptor</h2>
+<table>
+<thead>
+<tr>
+<th>Built-in</th>
+<th><code>__get__</code> returns</th>
+<th>Data?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>plain function</td>
+<td>a <strong>bound method</strong> (self pre-filled)</td>
+<td>No</td>
+</tr>
+<tr>
+<td><code>property</code></td>
+<td>result of your getter</td>
+<td><strong>Yes</strong> (even without a setter!)</td>
+</tr>
+<tr>
+<td><code>classmethod</code></td>
+<td>function bound to the class</td>
+<td>No</td>
+</tr>
+<tr>
+<td><code>staticmethod</code></td>
+<td>the raw function</td>
+<td>No</td>
+</tr>
+</tbody>
+</table>
+<p>A read-only <code>property</code> still defines <code>__set__</code> (it raises <code>AttributeError</code>) — that's
+<em>why</em> it's read-only: the data descriptor intercepts the write before the instance
+dict can absorb it.</p>
+<h2 id="4-reusable-validated-fields-with-__set_name__">4. Reusable Validated Fields with <code>__set_name__</code></h2>
+<p>Properties don't scale: five validated fields = five getter/setter pairs. A
+descriptor is written <strong>once</strong> and reused everywhere. <code>__set_name__</code> (Python 3.6+)
+hands the descriptor its attribute name so it can pick a per-instance storage slot.</p>
+<pre><code class="language-python">class Positive:
+    def __set_name__(self, owner, name):
+        self._name = name                       # e.g. &quot;price&quot;
+
+    def __get__(self, obj, objtype=None):
+        if obj is None:                          # class access: Product.price
+            return self
+        return obj.__dict__[self._name]
+
+    def __set__(self, obj, value):
+        if value &lt;= 0:
+            raise ValueError(f&quot;{self._name} must be positive&quot;)
+        obj.__dict__[self._name] = value         # per-INSTANCE storage
+
+
+class Product:
+    price = Positive()
+    stock = Positive()
+
+    def __init__(self, price, stock):
+        self.price, self.stock = price, stock    # both validated
+</code></pre>
+<blockquote>
+<p><strong>Pitfall:</strong> storing the value on the <em>descriptor</em> (<code>self._value = value</code>) shares
+one value across <strong>all instances</strong> — the descriptor is a class attribute. Store in
+<code>obj.__dict__[self._name]</code> (safe here: as a <em>data</em> descriptor it still wins the
+lookup race against that same dict entry).</p>
+</blockquote>
+<h2 id="5-__slots__">5. <code>__slots__</code></h2>
+<p>Declaring <code>__slots__ = ("x", "y")</code> replaces <code>__dict__</code> with fixed C-level slots —
+implemented, fittingly, as data descriptors auto-created on the class.</p>
+<table>
+<thead>
+<tr>
+<th>Benefit</th>
+<th>Cost</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>~40-50% less memory per instance</td>
+<td>No dynamic attributes</td>
+</tr>
+<tr>
+<td>Slightly faster attribute access</td>
+<td>No <code>__dict__</code> (breaks some tooling)</td>
+</tr>
+<tr>
+<td>Typo'd assignments raise immediately</td>
+<td>Every class in the hierarchy must cooperate</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Pitfall:</strong> if any base class lacks <code>__slots__</code> (e.g. plain <code>object</code> subclass in
+between), instances get a <code>__dict__</code> anyway and the memory win evaporates.</p>
+</blockquote>
+<h2 id="6-the-fallback-hooks">6. The Fallback Hooks</h2>
+<table>
+<thead>
+<tr>
+<th>Hook</th>
+<th>Fires when</th>
+<th>Typical use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>__getattribute__</code></td>
+<td><strong>every</strong> attribute read</td>
+<td>Almost never override (easy infinite recursion)</td>
+</tr>
+<tr>
+<td><code>__getattr__</code></td>
+<td>only when normal lookup <strong>fails</strong></td>
+<td>Proxies, lazy loading, delegation</td>
+</tr>
+<tr>
+<td><code>__setattr__</code></td>
+<td>every attribute write</td>
+<td>Freezing objects, write logging</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Pitfall:</strong> inside <code>__setattr__</code>, writing <code>self.x = v</code> recurses forever. Use
+<code>super().__setattr__(name, value)</code> or <code>object.__setattr__</code>.</p>
+</blockquote>
+<hr>
+<h2 id="key-takeaways">Key Takeaways</h2>
+<ul>
+<li>Descriptors are class attributes whose type implements <code>__get__</code>/<code>__set__</code>.</li>
+<li>Data descriptors beat the instance dict; non-data descriptors lose to it.</li>
+<li><code>property</code>, methods, <code>classmethod</code>, <code>staticmethod</code> — all just descriptors.</li>
+<li><code>__set_name__</code> + <code>obj.__dict__</code> storage = reusable validated fields, zero boilerplate.</li>
+<li><code>__slots__</code> trades flexibility for memory; <code>__getattr__</code> fires only on failure.</li>
+</ul>
+<p>Next: <a href="../module_04_protocols/README.md">Module 4 — Protocols &amp; ABCs</a>.</p>
+<hr>
+<h2 id="files-in-this-module">Files in This Module</h2>
+<ul>
+<li><code>concepts.py</code> — the protocol, lookup priority, validators, slots, fallbacks</li>
+<li><code>exercise.py</code> — build <code>Typed</code>, <code>Bounded</code>, and <code>LazyProperty</code> descriptors</li>
+<li><code>solution.py</code> — reference solution</li>
+</ul>
+</body>
+</html>

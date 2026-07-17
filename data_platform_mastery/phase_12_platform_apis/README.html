@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 12 — Platform APIs, Secrets &amp; Multi-Tenancy (`v0.12.0`)</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="phase-12-platform-apis-secrets-multi-tenancy-v0120">Phase 12 — Platform APIs, Secrets &amp; Multi-Tenancy (<code>v0.12.0</code>)</h1>
+<blockquote>
+<p><strong>Mission:</strong> promote PipeForge from "my tool" to "a platform other teams could
+use". A FastAPI control plane (the Registration / Transformation / Workflow
+APIs from the reference architecture's second diagram), secrets done right
+(Secret Manager, the Vault stand-in), machine auth, and a real multi-tenancy
+model with quotas and isolation. This phase is where Q15 (multi-tenant SaaS
+platform) and Q19 (data mesh platform) stop being theory.</p>
+</blockquote>
+<h2 id="1-concepts">1. Concepts</h2>
+<ul>
+<li><strong>The reference architecture's control plane</strong> (image 2): Registration UX/API,
+  Transformation API, Workflow service, Vault, tenant namespaces on GKE. You'll
+  build the same shape with cheaper primitives: Cloud Run instead of GKE+Istio,
+  Secret Manager instead of Vault, IAM instead of mTLS meshes. Being able to say
+  "same architecture, right-sized runtime — here's what GKE would buy me and when
+  I'd move (sidecars, network policy, long-running consumers, per-tenant node
+  pools)" is precisely the staff-level judgment interviews probe.</li>
+<li><strong>Multi-tenancy is an isolation spectrum</strong> (Q15 — memorize the ladder):
+  1. <strong>Row-level</strong> (tenant column + row-access policies) — cheapest, weakest blast-radius story;
+  2. <strong>Schema/dataset-level</strong> (per-tenant BQ datasets, buckets prefixes, pools) — the pragmatic middle <strong>← PipeForge's choice</strong>;
+  3. <strong>Project-level</strong> (per-tenant GCP project) — hard isolation, hard ops;
+  4. <strong>Deployment-level</strong> (per-tenant everything) — enterprise/regulated.
+  Defend the choice by failure domain, noisy neighbors, compliance, and cost —
+  not by fashion.</li>
+<li><strong>Secrets:</strong> connection secrets were <code>connection_ref</code> strings since Phase 2 —
+  that indirection now pays off: refs resolve to Secret Manager at runtime,
+  per-tenant access via IAM conditions, rotation without touching metadata.</li>
+<li><strong>AuthN/Z for machines:</strong> service-to-service on GCP = OIDC ID tokens, verified
+  audience, caller identity mapped to tenant + role. No API keys in headers.</li>
+</ul>
+<h2 id="2-build">2. Build</h2>
+<h3 id="21-fastapi-control-plane-api">2.1 FastAPI control plane — <code>api/</code></h3>
+<pre><code>api/
+├── main.py            # FastAPI app, OIDC verification middleware
+├── routers/
+│   ├── registration.py    # POST /sources, /datasets, /contracts (compat-checked)
+│   ├── transformation.py  # POST /models  (register a CDP model), GET /models/{id}
+│   ├── workflow.py        # POST /runs {dataset, execution_date}, POST /backfills, GET /runs/{id}
+│   ├── quality.py         # GET /datasets/{id}/dq, POST /datasets/{id}/rules
+│   └── catalog.py         # GET /datasets?q=..., GET /datasets/{id}/lineage
+└── schemas.py         # Pydantic request/response models — the API's own contract
+</code></pre>
+<p>Design rules (each is an interview line):
+- <strong>The API is the only writer to the registry from now on.</strong> CLI and UI become
+  API clients. One write path = one place for validation, authz, and audit
+  (<code>api_audit_log</code>: caller, tenant, action, payload hash, timestamp).
+- Contracts in, contracts out: request models are versioned Pydantic schemas;
+  breaking the API contract follows the same §16 protocol as data contracts.
+  Platforms eat their own dogfood.
+- Idempotency keys on POST /runs and /backfills (client retries must not
+  double-trigger — the §7 idempotency principle applied to control planes).
+- 202 + status polling for long operations (a backfill is a job, not a request).</p>
+<h3 id="22-secret-manager-migration">2.2 Secret Manager migration</h3>
+<ul>
+<li>Terraform: secrets for MySQL source creds, metadata DB, Kafka SASL (if VM),
+  webhook URLs; IAM bindings per accessor SA with <strong>conditions on secret name
+  prefix</strong> (<code>tenant-a-*</code> readable only by tenant-a runners).</li>
+<li><code>connection_ref: sm://novamart-mysql</code> now resolves via a <code>SecretResolver</code> in
+  <code>core/</code> (cached, TTL, audit-logged access). Delete every password from <code>.env</code>
+  and Terraform state where possible — do the sweep, it's always embarrassing.</li>
+<li>Rotation drill: rotate the MySQL password via Terraform, confirm pipelines pick
+  it up with zero metadata changes. Rotation-without-redeploy is the whole point
+  of the indirection.</li>
+</ul>
+<h3 id="23-multi-tenancy-tenant-becomes-real">2.3 Multi-tenancy: <code>tenant</code> becomes real</h3>
+<p><code>tenant</code> has been a column since Phase 2. Now enforce it end to end:
+1. <strong>Onboard a second tenant</strong> ("acmecorp") with one dataset (any public CSV).
+2. <strong>Storage isolation:</strong> per-tenant BQ datasets (<code>cdp_novamart</code>, <code>cdp_acmecorp</code>)
+   and GCS prefixes; Terraform generates them from a <code>tenants.yaml</code> (<code>for_each</code> —
+   adding a tenant is a PR with one YAML line — say that sentence in interviews).
+3. <strong>Compute fairness:</strong> per-tenant Airflow pools (P07 groundwork) + per-tenant
+   Dataproc batch quotas (max concurrent batches in dataset config).
+4. <strong>Access:</strong> per-tenant reader groups; API resolves caller→tenant and scopes
+   every query (<code>WHERE tenant = :caller_tenant</code> enforced in the repo layer, not
+   ad hoc in routes — one chokepoint).
+5. <strong>Cost attribution:</strong> <code>tenant</code> label on every GCP resource your Terraform
+   creates + every Dataproc batch → the Phase-10 FinOps model now reports
+   <strong>cost per tenant</strong>. Chargeback-ready is a phrase platform interviewers love.</p>
+<h3 id="24-deploy-cicd-completion">2.4 Deploy + CI/CD completion</h3>
+<ul>
+<li><code>cloudrun_service</code> for the API (min 0, <code>--no-allow-unauthenticated</code>); UI calls
+  it with an ID token.</li>
+<li>GitHub Actions: build+push images on tag, <code>terraform plan</code> on PR via
+  <strong>Workload Identity Federation</strong> (no SA keys in GitHub — keyless CI is current
+  best practice and a strong interview aside), apply on merge with manual approval
+  environment.</li>
+</ul>
+<h3 id="25-ship-it">2.5 Ship it</h3>
+<p>Tests: authz (tenant A token cannot read tenant B dataset — write the test that
+proves it), idempotency-key replay, secret resolver caching, contract-versioned
+API schemas. Tag <code>v0.12.0</code>.</p>
+<h2 id="3-prove-it">3. Prove it</h2>
+<ul>
+<li>[ ] <code>curl</code> with tenant-A ID token: sees only tenant-A datasets; tenant-B's return 404 (not 403 — don't leak existence; small detail, real security habit)</li>
+<li>[ ] Wizard (P11) now writes through the API; <code>api_audit_log</code> shows the human's action chain</li>
+<li>[ ] Both tenants' DAGs run concurrently; pools prevent starvation when tenant A backfills 30 days</li>
+<li>[ ] FinOps dashboard shows cost split by tenant</li>
+<li>[ ] Password rotation with zero pipeline edits</li>
+<li>[ ] <code>git grep -iE 'password|secret_key'</code> finds nothing but Secret Manager refs</li>
+</ul>
+<h2 id="4-break-it">4. Break it</h2>
+<p>Noisy-neighbor drill: give tenant B a pathological dataset (10x volume, a
+cross-join-ish model) and run both tenants' schedules. Where does contention
+actually appear first — Airflow pool? Dataproc quota? BQ slots? Cloud SQL
+connections? Measure, fix the weakest fence, write
+<code>docs/incidents/013-noisy-neighbor.md</code>. (Interviewers ask "how do you isolate
+tenants?" — you'll answer with where isolation <em>actually broke first</em>.)</p>
+<h2 id="5-interview-corner">5. Interview corner</h2>
+<ul>
+<li><strong>Q15 (multi-tenant SaaS data platform)</strong> — full 45-min run. Your isolation
+  ladder + the noisy-neighbor incident + per-tenant cost attribution is a
+  staff-grade answer; most candidates have never operated tenancy at all.</li>
+<li><strong>Q19 (data mesh)</strong> — you now hold all four pillars concretely: domain
+  ownership (owner per dataset), data-as-product (catalog cards + SLAs),
+  self-serve platform (wizard/API), federated governance (contracts + policy tags</li>
+<li>central DQ minimums). Argue <em>when mesh is premature</em> (§25's &lt;50-engineer rule)
+  — restraint impresses more than enthusiasm.</li>
+<li><em>"How do services authenticate to each other on GCP?"</em> — SA identity + OIDC ID
+  tokens + audience verification; secrets only for third-party systems.</li>
+</ul>
+<h2 id="6-stretch-goals">6. Stretch goals</h2>
+<ul>
+<li>Reverse ETL (§28): <code>POST /syncs</code> pushing a CDP segment to a mock CRM webhook, idempotent upserts on business key, rate-limited.</li>
+<li>Per-tenant CMEK (tenant-supplied keys) — the enterprise ask; design doc even if you don't build it.</li>
+<li>Migrate the API+UI to GKE Autopilot with the Terraform module — experience the reference architecture's actual runtime, then destroy it.</li>
+</ul>
+</body>
+</html>

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 10 Exercise: Secure a Customer Dataset</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-10-exercise-secure-a-customer-dataset">Module 10 Exercise: Secure a Customer Dataset</h1>
+<h2 id="goal">Goal</h2>
+<p>Protect a <code>customers</code> table end-to-end: encrypt the dataset with a <strong>CMEK</strong> key, and lock
+down the <code>ssn</code> and <code>email</code> columns with <strong>column-level security</strong> (policy tags) so only a
+compliance group can read them. Then verify an unauthorized query is blocked.</p>
+<h2 id="tasks">Tasks</h2>
+<p>Create <code>main.tf</code> and <code>policy.sql</code>. Reference the <code>solution.*</code> files after attempting.</p>
+<h3 id="todo-1-kms-key">TODO 1 — KMS key</h3>
+<p>Create a key ring + crypto key (90-day rotation) and grant the <strong>BigQuery service agent</strong>
+<code>cryptoKeyEncrypterDecrypter</code> on it.</p>
+<h3 id="todo-2-cmek-dataset-table">TODO 2 — CMEK dataset + table</h3>
+<p>Create dataset <code>pii</code> with <code>default_encryption_configuration</code> using your key. Add a
+<code>customers</code> table: <code>id STRING, email STRING, ssn STRING, country STRING</code>.</p>
+<h3 id="todo-3-policy-tag-taxonomy">TODO 3 — Policy tag taxonomy</h3>
+<p>Create a taxonomy with <code>FINE_GRAINED_ACCESS_CONTROL</code> and a <code>pii</code> policy tag.</p>
+<h3 id="todo-4-tag-the-sensitive-columns">TODO 4 — Tag the sensitive columns</h3>
+<p>Attach the policy tag to <code>email</code> and <code>ssn</code> in the table schema (<code>policyTags</code>).</p>
+<h3 id="todo-5-grant-fine-grained-reader">TODO 5 — Grant fine-grained reader</h3>
+<p>Grant <code>roles/datacatalog.categoryFineGrainedReader</code> on the tag to a compliance group
+(use your own email as a stand-in).</p>
+<h2 id="self-verification">Self-Verification</h2>
+<pre><code class="language-bash">terraform init &amp;&amp; terraform apply -var project_id=&quot;$PROJECT_ID&quot;
+
+# Dataset is CMEK-encrypted:
+bq show --format=prettyjson $PROJECT_ID:pii | grep -A2 defaultEncryptionConfiguration
+#   → shows your kmsKeyName
+
+# A query selecting ssn WITHOUT the reader role is DENIED:
+bq query --use_legacy_sql=false 'SELECT ssn FROM pii.customers LIMIT 1'
+#   → Access Denied on the policy tag (expected, unless you granted yourself)
+
+# Selecting a non-tagged column still works:
+bq query --use_legacy_sql=false 'SELECT country FROM pii.customers LIMIT 1'
+#   → succeeds
+</code></pre>
+<h2 id="stretch-goals">Stretch Goals</h2>
+<ol>
+<li>Add a <strong>row access policy</strong> so each analyst sees only their <code>country</code>.</li>
+<li>Configure a <strong>DLP inspection job</strong> that scans the table for <code>US_SOCIAL_SECURITY_NUMBER</code>
+   and reports findings.</li>
+<li>Add <strong>dynamic data masking</strong> (hash) on <code>email</code> instead of full column block.</li>
+</ol>
+<h2 id="cleanup">Cleanup</h2>
+<pre><code class="language-bash">terraform destroy -var project_id=&quot;$PROJECT_ID&quot;
+</code></pre>
+</body>
+</html>

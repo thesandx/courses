@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 08 — Data Quality &amp; Reconciliation Frameworks ④⑦ (`v0.8.0`)</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="phase-08-data-quality-reconciliation-frameworks-47-v080">Phase 08 — Data Quality &amp; Reconciliation Frameworks ④⑦ (<code>v0.8.0</code>)</h1>
+<blockquote>
+<p><strong>Mission:</strong> the platform learns to distrust itself. A declarative DQ engine
+evaluates rules across the <strong>6 dimensions of data quality</strong> at every layer
+boundary, with calibrated severity actions (warn / quarantine / block). A
+reconciliation framework proves source↔RAW↔ODP↔FDP↔CDP agreement every day —
+and catches the hard-delete drift you've been quietly accumulating since Phase 3.</p>
+</blockquote>
+<h2 id="1-concepts">1. Concepts</h2>
+<p>Read notes <strong>§8 (quality deep dive)</strong>, <strong>§9 (three pillars)</strong>, <strong>Q9 (DQ monitoring
+framework)</strong>; GCP <strong>M10</strong> (Dataplex data quality — the managed comparison).</p>
+<p><strong>The 6 dimensions ④</strong> (the reference architecture names them explicitly; know
+them cold, with one NovaMart example each):</p>
+<table>
+<thead>
+<tr>
+<th>Dimension</th>
+<th>Question</th>
+<th>NovaMart rule example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Completeness</strong></td>
+<td>Is everything there?</td>
+<td>orders row count within ±2σ of trailing 30-day mean; null-rate(customer_id) &lt; 0.1%</td>
+</tr>
+<tr>
+<td><strong>Accuracy</strong></td>
+<td>Does it match reality?</td>
+<td><code>SUM(line_amount_usd)</code> reconciles to source manifest ±0.1%</td>
+</tr>
+<tr>
+<td><strong>Consistency</strong></td>
+<td>Does it agree with itself/other data?</td>
+<td>every <code>fct_order_lines.customer_sk</code> exists in <code>dim_customers</code> (referential); ODP count == FDP count</td>
+</tr>
+<tr>
+<td><strong>Timeliness</strong></td>
+<td>Is it fresh?</td>
+<td><code>MAX(order_ts)</code> within SLA window; partition for D exists by 06:00</td>
+</tr>
+<tr>
+<td><strong>Validity</strong></td>
+<td>Does it conform to rules/formats?</td>
+<td><code>status ∈ enum</code>, <code>quantity ≥ 1</code>, <code>order_ts</code> not in future</td>
+</tr>
+<tr>
+<td><strong>Uniqueness</strong></td>
+<td>No duplicates?</td>
+<td>zero duplicate <code>order_line_id</code> per partition</td>
+</tr>
+</tbody>
+</table>
+<p><strong>The golden rule (§8):</strong> every check either passes-and-proceeds,
+fails-and-alerts, or fails-and-quarantines-the-bad-rows. <strong>Never block silently.</strong>
+Severity is calibrated to impact: 0.01% null PKs → quarantine+alert; 50% row-count
+drop → block+page. Your engine encodes this as <code>severity: warn|quarantine|block</code>.</p>
+<p><strong>Reconciliation ⑦ is a different discipline than DQ</strong> — DQ asks "is this dataset
+internally healthy?"; recon asks "did anything get lost or invented <strong>between</strong>
+systems?" Banks run recon as a dedicated framework because at-least-once pipelines
++ incremental extracts <em>will</em> drift (§12: watermarks miss hard deletes — today you
+finally catch the ones Phase 3's churn generator has been deleting).</p>
+<p><strong>Recon check types</strong> (cheapest first — run cheap ones always, expensive ones sampled/weekly):
+1. <strong>Count</strong>: rows per execution_date across layer pairs.
+2. <strong>Aggregate</strong>: SUM/MIN/MAX of key measures (revenue!) across layers.
+3. <strong>Hash/checksum</strong>: <code>BIT_XOR(FARM_FINGERPRINT(CONCAT(cols)))</code> per partition — near-free row-level comparison without moving data.
+4. <strong>Full outer diff</strong> (forensic, on demand): which keys differ — the drill-down tool once 1–3 flag a delta.</p>
+<h2 id="2-build">2. Build</h2>
+<h3 id="21-dq-engine-srcpipeforgequality">2.1 DQ engine — <code>src/pipeforge/quality/</code></h3>
+<p>Rules already live in the registry (Phase 2 <code>dq_rule</code> table + model YAML <code>tests:</code>
+blocks — unify them now: the builder registers model tests as dq_rules).
+Implement <code>rule_types</code> as small classes that compile to SQL:</p>
+<pre><code class="language-python">class NotNull(Rule):
+    dimension = &quot;completeness&quot;
+    def to_sql(self, target: Table) -&gt; str:
+        return f&quot;&quot;&quot;SELECT COUNTIF({self.column} IS NULL) AS bad, COUNT(*) AS total
+                   FROM `{target.fqn}` WHERE {target.partition_filter}&quot;&quot;&quot;
+
+class VolumeAnomaly(Rule):
+    dimension = &quot;completeness&quot;
+    # observed vs trailing N-day mean/stddev from pipeline_run history — the audit
+    # model ⑧ feeding the DQ framework ④: platform components compound.
+
+class Freshness(Rule):
+    dimension = &quot;timeliness&quot;   # MAX(business_ts) vs now, threshold from dataset.sla_freshness_minutes
+
+class AcceptedValues(Rule): dimension = &quot;validity&quot;
+class Unique(Rule):         dimension = &quot;uniqueness&quot;
+class ForeignKeyExists(Rule): dimension = &quot;consistency&quot;
+class ReconcilesTo(Rule):   dimension = &quot;accuracy&quot;
+</code></pre>
+<p><code>engine.py</code> — evaluate all active rules for (dataset, layer, execution_date),
+write <code>dq_result</code> rows (observed value, threshold, pass/fail, sample bad rows as
+JSON ≤ 20), then <strong>apply the action ladder</strong>:</p>
+<pre><code class="language-python">def enforce(results: list[DqResult]) -&gt; None:
+    blockers = [r for r in results if r.failed and r.severity == &quot;block&quot;]
+    quarantines = [r for r in results if r.failed and r.severity == &quot;quarantine&quot;]
+    for r in quarantines:
+        move_bad_rows(r)        # DELETE ... to quarantine table with rule_id + run_id attached
+        alert(r, level=&quot;P2&quot;)
+    if blockers:
+        alert(blockers, level=&quot;P1&quot;)
+        raise DqGateFailed(blockers)      # Airflow task fails -&gt; downstream never runs on bad data
+</code></pre>
+<p>Flip on the Phase-7 stub tasks: <code>dq_raw</code> (baseline five: rowcount, null PKs,
+freshness, volume anomaly, dup PKs — §8 says these catch ~80%) and <code>dq_fdp</code>
+(referential integrity, accuracy recons, business rules).</p>
+<h3 id="22-scorecard-data">2.2 Scorecard data</h3>
+<p>A nightly job aggregates <code>dq_result</code> into <code>cdp.dq_scorecard</code>
+(dataset × dimension × day → pass rate, worst offenders, trend). This table <em>is</em>
+the Phase 11 DQ dashboard's backend — and mirrors the "DQ Scorecard" panel in the
+reference architecture's UI block.</p>
+<h3 id="23-reconciliation-framework-srcpipeforgerecon">2.3 Reconciliation framework — <code>src/pipeforge/recon/</code></h3>
+<pre><code class="language-python">CHECKS = [
+    ReconCheck(&quot;orders&quot;, &quot;count&quot;,  left=(&quot;raw&quot;, &quot;manifest_rows&quot;), right=(&quot;odp&quot;, &quot;count(*)&quot;)),
+    ReconCheck(&quot;orders&quot;, &quot;count&quot;,  left=(&quot;odp&quot;,), right=(&quot;fdp&quot;,)),
+    ReconCheck(&quot;orders&quot;, &quot;sum&quot;,    left=(&quot;fdp&quot;, &quot;SUM(quantity*unit_price_usd)&quot;),
+                                   right=(&quot;cdp.fct_order_lines&quot;, &quot;SUM(line_amount_usd)&quot;), tol_pct=0.1),
+    ReconCheck(&quot;customers&quot;, &quot;count&quot;, left=(&quot;source_mysql&quot;, &quot;SELECT COUNT(*) ...&quot;),
+                                     right=(&quot;fdp.dim_customers&quot;, &quot;COUNTIF(is_current)&quot;)),  # ← the delete-catcher
+    ReconCheck(&quot;clickstream&quot;, &quot;hash&quot;, left=(&quot;odp&quot;,), right=(&quot;fdp.fct_sessions&quot;, &quot;events_sum&quot;)),
+]
+</code></pre>
+<p>Results → <code>recon_result</code> table; failures alert with <strong>both values and delta_pct</strong>
+(an alert that says "left=1,000,000 right=999,400 (-0.06%)" is debuggable; "recon
+failed" is not — §9 alert anatomy). Add <code>pipeforge recon run --dataset X --date D</code>
+and wire the Phase-7 <code>reconcile</code> task to it.</p>
+<p><strong>The payoff moment of the course:</strong> the <code>customers</code> source-vs-FDP count check
+FAILS — the churn generator has been hard-deleting customers since Phase 3 and
+your watermark loader never saw them (§12's exact warning). Handle it properly:
+quantify drift, add a weekly full-extract reconciliation-and-repair job (or the
+Debezium stretch from Phase 5), document in
+<code>docs/incidents/008-hard-delete-drift.md</code>. This incident is <em>the</em> CDC interview
+story (Q5) — you lived it.</p>
+<h3 id="24-calibration-pass">2.4 Calibration pass</h3>
+<p>Run everything for 7 generated days, then <strong>tune</strong>: which rules flapped? Loosen
+thresholds where noise, tighten where real. Delete one useless rule. Alert
+fatigue is the #1 reason incidents go undetected (§9) — practicing calibration is
+practicing the job.</p>
+<h3 id="25-ship-it">2.5 Ship it</h3>
+<p>Tests: each rule type compiles + evaluates against fixtures; action ladder
+(block raises, quarantine moves exactly the bad rows and preserves conservation
+<code>good + quarantined == input</code>); recon math incl. tolerance edges. Tag <code>v0.8.0</code>.</p>
+<h2 id="3-prove-it">3. Prove it</h2>
+<ul>
+<li>[ ] All NovaMart datasets have the baseline-5 auto-attached (registered datasets get defaults — config, not code)</li>
+<li>[ ] Inject 5% null customer_ids in the generator → quarantine fills, pipeline proceeds, P2 logged</li>
+<li>[ ] Drop the day's file volume to 10% → <strong>block</strong> fires, downstream tasks never ran, P1 alert has observed/threshold/history</li>
+<li>[ ] <code>dq_scorecard</code> shows 7 days of per-dimension pass rates</li>
+<li>[ ] Hard-delete recon failure detected, root-caused, repaired; counts converge after the repair job</li>
+<li>[ ] Re-run a blocked date after fixing data → gate passes, everything downstream heals with no manual cleanup</li>
+</ul>
+<h2 id="4-break-it">4. Break it</h2>
+<p>The subtle one: make the generator produce <em>valid but wrong</em> data — every
+<code>unit_price_usd</code> divided by 100 (the cents/dollars semantic bug, §16). Schema
+passes, nulls pass, uniqueness passes… only the <strong>accuracy</strong> recon
+(sum-vs-manifest) and <strong>distribution</strong> check (avg order value 85→0.85) catch it.
+Write <code>docs/incidents/009-silent-semantic-corruption.md</code>. Lesson: schema
+validation is necessary, never sufficient — the reason the 6 dimensions exist.</p>
+<h2 id="5-interview-corner">5. Interview corner</h2>
+<ul>
+<li><strong>Q9 (DQ framework) is now a lived answer</strong>: rules as metadata → compiled to SQL
+  → evaluated at layer boundaries → severity ladder → scorecard → calibration.
+  Deliver it in 45 minutes with your architecture as the diagram.</li>
+<li><em>"How do you know your numbers are right?"</em> (staff favorite, usually asked
+  casually) → three-part answer: DQ dimensions at boundaries, cross-layer
+  reconciliation with tolerances, and the audit model making every row count
+  traceable end-to-end.</li>
+<li>Recite: "every check passes-and-proceeds, fails-and-alerts, or
+  fails-and-quarantines — never block silently" and give your 10%-volume story.</li>
+<li>Compare build-vs-buy honestly: your engine vs dbt tests vs Great Expectations vs
+  Dataplex auto-DQ vs Monte Carlo (§8 tools + M10) — you now know exactly what
+  the paid tools are selling.</li>
+</ul>
+<h2 id="6-stretch-goals">6. Stretch goals</h2>
+<ul>
+<li>Anomaly detection v2: seasonality-aware bands (day-of-week means) instead of flat ±2σ.</li>
+<li>Recon "forensic mode": key-level FULL OUTER diff materialized to a debug table.</li>
+<li>Publish DQ results as OpenLineage facets (feeds Phase 9 lineage).</li>
+</ul>
+</body>
+</html>

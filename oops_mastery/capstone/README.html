@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Capstone: PluginPay — An Extensible Payment-Processing Service</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="capstone-pluginpay-an-extensible-payment-processing-service">Capstone: PluginPay — An Extensible Payment-Processing Service</h1>
+<h2 id="overview">Overview</h2>
+<p>You will study, run, and then extend <strong>PluginPay</strong>: a payment service where new
+payment providers plug in without touching core code, domain invariants make invalid
+payments unrepresentable, failures are retried and audited by decorators, and the
+whole graph is wired in one composition root. Every module of this course is load-
+bearing somewhere in this tree — the mapping table below is the proof.</p>
+<p>Your mastery test: complete the three extensions at the bottom <strong>without reading any
+module solutions</strong>.</p>
+<h2 id="architecture">Architecture</h2>
+<pre><code class="language-mermaid">flowchart TD
+    subgraph API layer
+        R[api.Router] --&gt; H[handlers + DTOs]
+    end
+    subgraph Service layer
+        H --&gt; S[service.PaymentService]
+        S --&gt; MW[middleware: @retry, @audited]
+        S --&gt; EV[events.EventEmitter]
+        S --&gt; FA[fraud.FraudAdapter]
+    end
+    subgraph Domain
+        S --&gt; P[payment.Payment entity]
+        P --&gt; M[money.Money value object]
+        P --&gt; E[errors hierarchy]
+    end
+    subgraph Plugins
+        S --&gt; REG{{provider registry&lt;br/&gt;ProviderMeta}}
+        C[card.CardProvider] -.registers.-&gt; REG
+        W[wallet.WalletProvider] -.registers.-&gt; REG
+    end
+    subgraph Persistence
+        S --&gt; RP{{repos.PaymentRepo Protocol}}
+        IM[(InMemoryPaymentRepo)] -.conforms.-&gt; RP
+    end
+    CR[main.py — composition root] --&gt;|wires everything| S
+</code></pre>
+<pre><code>capstone/
+├── README.md
+└── pluginpay/
+    ├── __init__.py
+    ├── domain/
+    │   ├── __init__.py
+    │   ├── errors.py        # domain exception hierarchy
+    │   ├── money.py         # Money value object (frozen, operators)
+    │   └── payment.py       # Payment entity + validating descriptors
+    ├── providers/
+    │   ├── __init__.py      # ProviderMeta: registry + interface enforcement
+    │   ├── card.py          # CardProvider plugin
+    │   └── wallet.py        # WalletProvider plugin (flaky on purpose)
+    ├── fraud.py             # legacy scorer + adapter
+    ├── repos.py             # PaymentRepo protocol + in-memory impl
+    ├── events.py            # observer/event emitter
+    ├── middleware.py        # @retry and @audited decorators
+    ├── service.py           # PaymentService use cases
+    ├── api.py               # Router, Response, exception→status mapping
+    └── main.py              # composition root + end-to-end demo
+</code></pre>
+<h2 id="concepts-applied-per-module">Concepts Applied Per Module</h2>
+<table>
+<thead>
+<tr>
+<th>Module</th>
+<th>Concept</th>
+<th>Where in the Capstone</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>01 Core</td>
+<td>classmethod factory, properties, encapsulation</td>
+<td><code>Payment.create</code>, <code>Payment.status</code> property, <code>_history</code></td>
+</tr>
+<tr>
+<td>02 Dunders</td>
+<td><code>__add__</code>/<code>__eq__</code>/<code>__hash__</code>/<code>__repr__</code></td>
+<td><code>domain/money.py</code> operators; <code>Payment.__eq__</code> by id</td>
+</tr>
+<tr>
+<td>03 Descriptors</td>
+<td>validated fields via <code>__set_name__</code></td>
+<td><code>NonEmptyStr</code> descriptor on <code>Payment.customer</code></td>
+</tr>
+<tr>
+<td>04 Protocols</td>
+<td>structural seams</td>
+<td><code>repos.PaymentRepo</code>, <code>fraud.FraudChecker</code></td>
+</tr>
+<tr>
+<td>05 SOLID</td>
+<td>SRP layers, OCP plugins, DIP injection</td>
+<td>the whole tree; providers extend without edits</td>
+</tr>
+<tr>
+<td>06 Metaclasses</td>
+<td>registry + definition-time enforcement</td>
+<td><code>providers/__init__.py</code> <code>ProviderMeta</code></td>
+</tr>
+<tr>
+<td>07 Decorators</td>
+<td>parameterized + stateful wrappers</td>
+<td><code>middleware.retry</code>, <code>middleware.audited</code></td>
+</tr>
+<tr>
+<td>08 Patterns</td>
+<td>strategy, factory, observer, adapter</td>
+<td>providers (strategy), <code>get_provider</code> (factory), <code>events.py</code>, <code>fraud.FraudAdapter</code></td>
+</tr>
+<tr>
+<td>09 DI</td>
+<td>constructor injection, composition root</td>
+<td><code>PaymentService.__init__</code>, <code>main.build_app</code></td>
+</tr>
+<tr>
+<td>10 Microservice</td>
+<td>layered architecture, DTOs, status mapping</td>
+<td><code>api.py</code> + package layout</td>
+</tr>
+</tbody>
+</table>
+<h2 id="how-to-run">How to Run</h2>
+<pre><code class="language-bash">cd oops_mastery/capstone
+python3 -m pluginpay.main          # runs the wired demo + built-in assertions
+</code></pre>
+<h2 id="how-to-verify">How to Verify</h2>
+<pre><code class="language-bash">python3 -m pluginpay.main
+#   → prints each API call and response, ends with:
+#   All capstone assertions passed ✔
+</code></pre>
+<p>The demo proves, end to end: a successful card charge (201), the plugin registry
+serving both providers, a flaky wallet charge that succeeds via <code>@retry</code>, fraud
+rejection (402), domain-invariant rejection (400), unknown payment (404), a refund
+flow, the observer audit trail, and a provider added at runtime with zero core edits.</p>
+<h2 id="readiness-mastery-checklist">Readiness / Mastery Checklist</h2>
+<p>Work through PluginPay and check yourself:
+- [ ] I can explain why <code>Money</code> is frozen and <code>Payment</code> is not.
+- [ ] I can trace what happens at import time when <code>card.py</code> defines <code>CardProvider</code>
+      (metaclass pipeline) and why a provider missing <code>charge()</code> fails to even define.
+- [ ] I can add a validated field to <code>Payment</code> with the existing descriptor in one line.
+- [ ] I can explain why <code>service.py</code> imports no concrete repo, provider, or scorer.
+- [ ] I can swap <code>InMemoryPaymentRepo</code> for a file-backed one by editing only <code>main.py</code>.
+- [ ] I can say where a new HTTP status code would be introduced, and why nowhere else.</p>
+<h2 id="extend-it-the-actual-mastery-test">Extend It (the actual mastery test)</h2>
+<ol>
+<li><strong>New plugin:</strong> add <code>providers/bank_transfer.py</code> — succeeds only for amounts
+   ≥ $1.00, refundable. Requirement: <code>main.py</code> must need only the import line.</li>
+<li><strong>Idempotency keys:</strong> clients pass <code>idempotency_key</code>; repeating a key returns the
+   original payment instead of double-charging. (Descriptor or repo index? Decide and
+   justify.)</li>
+<li><strong>Webhooks:</strong> subscribe an observer that collects <code>payment.captured</code> events into a
+   <code>webhooks_sent</code> list, with one failing subscriber that must not break the flow.</li>
+</ol>
+<h2 id="cleanup">Cleanup</h2>
+<pre><code class="language-bash"># nothing persisted — pure in-memory. Remove build artifacts if any:
+find . -name __pycache__ -type d -exec rm -rf {} +
+</code></pre>
+</body>
+</html>

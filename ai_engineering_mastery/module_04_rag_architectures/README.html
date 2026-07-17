@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 4: RAG Architectures — GraphRAG, Agentic RAG, Multimodal, and Choosing</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-4-rag-architectures-graphrag-agentic-rag-multimodal-and-choosing">Module 4: RAG Architectures — GraphRAG, Agentic RAG, Multimodal, and Choosing</h1>
+<h2 id="learning-objectives">Learning Objectives</h2>
+<ul>
+<li>Recognize the <strong>pitfalls of flat vector RAG</strong> that no amount of Module 3 tuning
+  fixes: multi-hop questions, aggregations, and relationship queries.</li>
+<li>Build a <strong>GraphRAG</strong> core: extract entities and relations into a knowledge graph,
+  answer multi-hop questions by traversal.</li>
+<li>Build <strong>Agentic RAG</strong>: a retrieval loop where the model <em>decides</em> whether to
+  retrieve, with what query, and whether the evidence is sufficient.</li>
+<li>Understand where <strong>multimodal RAG</strong> changes the pipeline (embedding space and
+  chunking) and where it doesn't (everything else).</li>
+<li>Apply a <strong>decision framework</strong>: match the architecture to the question shape, not
+  to the conference talk.</li>
+</ul>
+<hr>
+<h2 id="1-where-flat-vector-rag-fails-structurally">1. Where Flat Vector RAG Fails Structurally</h2>
+<p>Similarity search retrieves chunks that <em>look like the question</em>. Some questions are
+not answered by any single chunk:</p>
+<table>
+<thead>
+<tr>
+<th>Question shape</th>
+<th>Example</th>
+<th>Why top-k fails</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Multi-hop</td>
+<td>"Who manages the engineer who fixed E-1234?"</td>
+<td>The answer spans two facts in two chunks; neither resembles the question</td>
+</tr>
+<tr>
+<td>Aggregation</td>
+<td>"How many services depend on the gateway?"</td>
+<td>Counting requires <em>all</em> matching chunks, not the k nearest</td>
+</tr>
+<tr>
+<td>Relationship</td>
+<td>"What connects team Atlas to the billing outage?"</td>
+<td>The <em>edge</em> is the answer; chunks store nodes</td>
+</tr>
+</tbody>
+</table>
+<p>These are Module 3-proof: better fusion or reranking still retrieves <em>similar text</em>,
+and similarity was the wrong tool.</p>
+<h2 id="2-graphrag-retrieval-over-structure">2. GraphRAG: Retrieval over Structure</h2>
+<p>GraphRAG runs extraction at indexing time — an LLM (here: scripted) pulls
+<code>(subject, relation, object)</code> triples from text into a <strong>knowledge graph</strong>. At query
+time you resolve entities in the question, then <strong>traverse edges</strong> instead of
+comparing vectors:</p>
+<pre><code class="language-mermaid">flowchart LR
+    subgraph Indexing
+        T[text] --&gt; X[triple extraction] --&gt; G[(knowledge graph)]
+    end
+    subgraph Query
+        Q[question] --&gt; E[entity linking] --&gt; W[graph walk / subgraph]
+        G --&gt; W --&gt; P[serialize subgraph -&gt; context] --&gt; LLM
+    end
+</code></pre>
+<p>Multi-hop becomes a two-edge walk; aggregation becomes counting edges. The cost:
+extraction is expensive, entity resolution is fragile ("MegaBank" vs "Mega Bank"),
+and the graph is only as good as the extractor. KAG (Knowledge-Augmented Generation)
+pushes further in the same direction: schema-constrained graphs + logic-guided
+reasoning over them, for domains (medicine, law) where hops must be <em>provably</em> right.</p>
+<h2 id="3-agentic-rag-retrieval-as-a-decision">3. Agentic RAG: Retrieval as a Decision</h2>
+<p>Classic RAG retrieves once, unconditionally, with the raw question. Agentic RAG puts
+retrieval inside a loop the model controls:</p>
+<pre><code>loop (bounded):
+    the model inspects the question + evidence so far, then CHOOSES:
+      - retrieve(new query)   &lt;- it may rewrite the query itself
+      - answer(text)          &lt;- only when evidence is sufficient
+      - refuse                &lt;- when evidence can't be found
+</code></pre>
+<p>This buys: on-demand retrieval (skip it for "hello"), iterative refinement (the
+second query is informed by what the first found), and self-checking sufficiency.
+It costs: an LLM call <em>per step</em> and a new failure mode — loops (Module 5 builds the
+guards). Agentic RAG is a preview of agents, scoped to one tool.</p>
+<h2 id="4-multimodal-rag">4. Multimodal RAG</h2>
+<p>Images, tables, and audio enter the same architecture at exactly two points:
+1. <strong>Chunking</strong> — a figure or table is its own chunk (never OCR-mangled into prose).
+2. <strong>Embedding</strong> — a shared text↔image embedding space (CLIP-style) so "the chart
+   with the revenue spike" lands near the actual chart.</p>
+<p>Retrieval, fusion, reranking, evals: unchanged. If your documents are slide decks
+and dashboards, this is not optional — text-only indexing silently drops the answers.</p>
+<h2 id="5-choosing-a-decision-framework">5. Choosing: A Decision Framework</h2>
+<table>
+<thead>
+<tr>
+<th>If your questions are mostly…</th>
+<th>Reach for</th>
+<th>Because</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>"Find the passage about X"</td>
+<td>Flat RAG + Module 3</td>
+<td>Similarity is the right tool</td>
+</tr>
+<tr>
+<td>Multi-hop / relational / counting</td>
+<td>GraphRAG (or KAG if hops must be provable)</td>
+<td>Structure answers structure</td>
+</tr>
+<tr>
+<td>Unpredictable, mixed, needing follow-ups</td>
+<td>Agentic RAG</td>
+<td>The model picks the strategy per question</td>
+</tr>
+<tr>
+<td>About figures/tables/screens</td>
+<td>Multimodal RAG</td>
+<td>The answers aren't text</td>
+</tr>
+</tbody>
+</table>
+<p>Start flat. Add structure when your <strong>eval failures</strong> (Module 3) show multi-hop or
+aggregation misses — the architecture is earned by measured failure, never by fashion.
+(That's the meme's rule 3 fixed: not everything is RAG, and not every RAG is flat.)</p>
+<hr>
+<h2 id="key-takeaways">Key Takeaways</h2>
+<ul>
+<li>Flat RAG fails structurally on multi-hop, aggregation, and relationship questions.</li>
+<li>GraphRAG trades expensive extraction for cheap, correct traversal at query time.</li>
+<li>Agentic RAG makes retrieval conditional, iterative, and self-checked — at loop cost.</li>
+<li>Multimodal RAG changes chunking and the embedding space; the rest of the pipeline
+  survives intact.</li>
+<li>Choose by question shape and eval evidence; upgrade architectures only on measured
+  failure.</li>
+</ul>
+<p>Next: <a href="../module_05_single_agent/README.md">Module 5 — Single-Agent Systems</a>.</p>
+<hr>
+<h2 id="files-in-this-module">Files in This Module</h2>
+<ul>
+<li><code>concepts.py</code> — triple extraction, graph traversal beating flat RAG, an agentic retrieval loop</li>
+<li><code>exercise.py</code> — build the knowledge graph and the agentic loop yourself</li>
+<li><code>solution.py</code> — reference solution</li>
+</ul>
+</body>
+</html>

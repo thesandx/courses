@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 3: Advanced RAG — Hybrid Search, Query Rewriting, Reranking, Evals</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-3-advanced-rag-hybrid-search-query-rewriting-reranking-evals">Module 3: Advanced RAG — Hybrid Search, Query Rewriting, Reranking, Evals</h1>
+<h2 id="learning-objectives">Learning Objectives</h2>
+<ul>
+<li>Explain <strong>why naive RAG plateaus</strong>: vocabulary mismatch, exact-identifier misses,
+  and the bi-encoder's blind spot.</li>
+<li>Build <strong>hybrid search</strong>: BM25-style keyword scoring fused with vector search via
+  <strong>Reciprocal Rank Fusion (RRF)</strong>.</li>
+<li>Apply <strong>query rewriting</strong> — multi-query expansion and <strong>HyDE</strong> (Hypothetical
+  Document Embeddings) — to close the question↔document vocabulary gap.</li>
+<li>Add a <strong>cross-encoder-style reranker</strong> as a second, more precise scoring stage.</li>
+<li>Measure retrieval with <strong>recall@k, precision@k, and MRR</strong> — the evals that tell you
+  whether any of the above actually helped.</li>
+</ul>
+<hr>
+<h2 id="1-why-naive-rag-hits-a-ceiling">1. Why Naive RAG Hits a Ceiling</h2>
+<p>Module 2's pipeline (embed query → top-k) fails in three systematic ways:</p>
+<table>
+<thead>
+<tr>
+<th>Failure</th>
+<th>Example</th>
+<th>Cause</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Exact-identifier miss</td>
+<td>"error E-1234" retrieves nothing useful</td>
+<td>Embeddings blur rare literal strings</td>
+</tr>
+<tr>
+<td>Vocabulary gap</td>
+<td>"get my money back" vs "refund policy"</td>
+<td>Questions and documents use different words</td>
+</tr>
+<tr>
+<td>Bi-encoder blindness</td>
+<td>Top-1 is topically close but doesn't answer</td>
+<td>Query and doc embedded <em>separately</em> — no interaction between their words</td>
+</tr>
+</tbody>
+</table>
+<p>Each fix below targets one failure. Advanced RAG is not a pile of tricks; it is a
+diagnosis-driven checklist.</p>
+<h2 id="2-hybrid-search-keywords-vectors-rrf">2. Hybrid Search: Keywords + Vectors + RRF</h2>
+<p>Keyword scoring (BM25 family) is unbeatable on identifiers, names, and codes; vectors
+are unbeatable on paraphrase. Run <strong>both</strong>, then fuse rankings with RRF:</p>
+<pre><code>RRF(doc) = Σ over rankers  1 / (k + rank_of_doc_in_ranker)      # k ≈ 60
+</code></pre>
+<p>RRF fuses <em>ranks</em>, not scores — so you never have to normalize a cosine similarity
+against a BM25 score (they live on incomparable scales; averaging them is a classic
+bug).</p>
+<pre><code class="language-mermaid">flowchart LR
+    Q[query] --&gt; KW[keyword ranker] --&gt; F[RRF fusion]
+    Q --&gt; VS[vector ranker] --&gt; F
+    F --&gt; R[fused top-k]
+</code></pre>
+<h2 id="3-query-rewriting">3. Query Rewriting</h2>
+<p>The user's question is often the <em>worst</em> query for finding the answer.</p>
+<table>
+<thead>
+<tr>
+<th>Technique</th>
+<th>Idea</th>
+<th>Fixes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Multi-query</strong></td>
+<td>LLM generates 3–5 paraphrases; retrieve with all; union results</td>
+<td>One phrasing missing the target chunk</td>
+</tr>
+<tr>
+<td><strong>HyDE</strong></td>
+<td>LLM writes a <em>hypothetical answer</em>, embed THAT as the query</td>
+<td>Questions and answers live in different embedding regions — a fake answer lands nearer the real one</td>
+</tr>
+<tr>
+<td>Decomposition</td>
+<td>Split multi-part questions into sub-queries</td>
+<td>Compound questions diluting one embedding</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Pitfall:</strong> every rewrite is an extra LLM call — latency and cost. Rewrite when
+retrieval evals say recall is the bottleneck, not by default.</p>
+</blockquote>
+<h2 id="4-reranking-retrieve-cheap-rank-expensive">4. Reranking: Retrieve Cheap, Rank Expensive</h2>
+<p>A <strong>bi-encoder</strong> (Module 2) embeds query and document independently — fast, cacheable,
+but it can't notice that the doc answers <em>this</em> query. A <strong>cross-encoder</strong> reads the
+query and document <em>together</em> and scores their interaction — far more accurate, far
+too slow to run against the whole corpus. So: two stages.</p>
+<pre><code>stage 1 (bi-encoder):    corpus (thousands)  → top-20 candidates      cheap
+stage 2 (cross-encoder): 20 candidates       → top-3, reordered       expensive but tiny N
+</code></pre>
+<p>This retrieve-then-rerank shape appears everywhere in production RAG.</p>
+<h2 id="5-retrieval-evals-recallk-precisionk-mrr">5. Retrieval Evals: recall@k, precision@k, MRR</h2>
+<p>You cannot claim any of the above helped without a labeled set: <code>{question →
+relevant chunk ids}</code>. Then:</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Question it answers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>recall@k</strong></td>
+<td>Of the relevant chunks, what fraction made the top-k? (Can the generator even see the answer?)</td>
+</tr>
+<tr>
+<td><strong>precision@k</strong></td>
+<td>Of the top-k, what fraction is relevant? (How much junk dilutes the context?)</td>
+</tr>
+<tr>
+<td><strong>MRR</strong></td>
+<td>How high does the <em>first</em> relevant chunk rank? (1/rank, averaged)</td>
+</tr>
+</tbody>
+</table>
+<p>Recall@k is the metric to watch first: if the answer isn't retrieved, nothing
+downstream can save you. And per the meme's rule 14 — report the whole table, not the
+one metric you win.</p>
+<hr>
+<h2 id="key-takeaways">Key Takeaways</h2>
+<ul>
+<li>Naive RAG's failures are systematic: identifiers, vocabulary gaps, bi-encoder blindness.</li>
+<li>Hybrid = keyword + vector rankers fused by RRF over <em>ranks</em>, never raw scores.</li>
+<li>Multi-query and HyDE reshape the query to land nearer the answer's embedding.</li>
+<li>Rerank a small candidate set with an expensive scorer; never cross-encode the corpus.</li>
+<li>recall@k / precision@k / MRR on a labeled set decide what actually helped.</li>
+</ul>
+<p>Next: <a href="../module_04_rag_architectures/README.md">Module 4 — RAG Architectures</a>.</p>
+<hr>
+<h2 id="files-in-this-module">Files in This Module</h2>
+<ul>
+<li><code>concepts.py</code> — BM25-lite, RRF fusion, multi-query + HyDE simulation, reranking, eval metrics</li>
+<li><code>exercise.py</code> — implement RRF, rerank, and recall@k/MRR yourself</li>
+<li><code>solution.py</code> — reference solution</li>
+</ul>
+</body>
+</html>

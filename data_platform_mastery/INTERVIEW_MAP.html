@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Interview Map — Every Concept → Where You Built It</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="interview-map-every-concept-where-you-built-it">Interview Map — Every Concept → Where You Built It</h1>
+<p>Use this two ways:
+1. <strong>While building:</strong> after each phase, find its rows here and rehearse the claim out loud.
+2. <strong>Before interviews:</strong> this is your evidence index — for any topic, you have a
+   story, a commit, and a demo.</p>
+<p>Notation: <strong>§n</strong> = section in <code>system_design_notes.md</code>; <strong>Mnn</strong> = GCP course module; <strong>Pnn</strong> = PipeForge phase.</p>
+<h2 id="part-a-the-framework-itself">Part A — The framework itself</h2>
+<table>
+<thead>
+<tr>
+<th>Interview skill</th>
+<th>Where you practice it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>7-step delivery framework (§2)</td>
+<td>The PROJECT_CHARTER is written in it; every phase's Interview Corner ends with a timed 45-min run</td>
+</tr>
+<tr>
+<td>Requirements gathering, 7 NFR dimensions (§3)</td>
+<td>Charter §1; re-derived for each new NovaMart source in P02/P03</td>
+</tr>
+<tr>
+<td>Volume estimation (§4, §19)</td>
+<td>P00 exercise; P04 Kafka sizing (partitions ≈ peak ÷ 10K); P13 10x load test</td>
+</tr>
+<tr>
+<td>High-level architecture, 6 layers (§5)</td>
+<td>The platform <em>is</em> the 6-layer diagram; you redraw it from memory in P00, P07, P14</td>
+</tr>
+<tr>
+<td>Data model &amp; grain (§6)</td>
+<td>P06: you declare grain for <code>fct_order_lines</code> before writing DDL</td>
+</tr>
+<tr>
+<td>Pipeline design &amp; idempotency (§7)</td>
+<td>P03 (overwrite), P05 (MERGE), P07 (DAG factory, backfill)</td>
+</tr>
+<tr>
+<td>Deep dives: scaling/failures/quality (§8)</td>
+<td>Every phase's <strong>Break it</strong> drill; consolidated in P13</td>
+</tr>
+<tr>
+<td>Monitoring, alerting, SLAs (§9)</td>
+<td>P10 end-to-end; the 90-second monitoring pitch uses <em>your</em> dashboards</td>
+</tr>
+</tbody>
+</table>
+<h2 id="part-bc-core-concepts-patterns">Part B/C — Core concepts &amp; patterns</h2>
+<table>
+<thead>
+<tr>
+<th>Concept</th>
+<th>Built in</th>
+<th>Your one-line evidence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Partitioning strategies (§11)</td>
+<td>P03, P05, P06</td>
+<td>"RAW by ingestion date, FDP by business date + clustering — and I've measured the pruning difference in bytes billed"</td>
+</tr>
+<tr>
+<td>Ingestion patterns (§12)</td>
+<td>P03 (full/incr/API), P04 (streaming), P05 (CDC/SCD2)</td>
+<td>"One engine, five patterns, chosen per dataset in metadata"</td>
+</tr>
+<tr>
+<td>Backfill &amp; reprocessing (§13)</td>
+<td>P07</td>
+<td>"<code>pipeforge backfill</code> — 14 days, one command, zero duplicates"</td>
+</tr>
+<tr>
+<td>Lineage &amp; impact analysis (§14)</td>
+<td>P09, P11</td>
+<td>"OpenLineage events per task; the catalog shows blast radius before a schema change"</td>
+</tr>
+<tr>
+<td>Cost optimization (§15)</td>
+<td>P06, P10</td>
+<td>"Billing export → BQ → my own FinOps page; rollups cut dashboard scans ~90%"</td>
+</tr>
+<tr>
+<td>Data contracts &amp; schema validation (§16)</td>
+<td>P02, P04</td>
+<td>"Contracts versioned in the registry; Kafka Schema Registry blocks breaking changes at the producer"</td>
+</tr>
+<tr>
+<td>Late-arriving data (§17)</td>
+<td>P05</td>
+<td>"Event-time partitions + 2-day lookback MERGE; dashboards show 'complete through X'"</td>
+</tr>
+<tr>
+<td>Deduplication at scale (§18)</td>
+<td>P04, P05</td>
+<td>"Four layers: idempotent producer, ROW_NUMBER, MERGE, dedup-safe rollups"</td>
+</tr>
+<tr>
+<td>Numbers to know (§19)</td>
+<td>P00, P13</td>
+<td>You re-derive them from your own runs (rows/s, $/TB scanned, Parquet ratio)</td>
+</tr>
+<tr>
+<td>Lambda vs Kappa (§20–21)</td>
+<td>P04+P05</td>
+<td>"Streaming hot path + lake replay = the lakehouse hybrid; I reconcile the two daily"</td>
+</tr>
+<tr>
+<td>Medallion (§22)</td>
+<td>P03–P06</td>
+<td>"RAW/ODP/FDP/CDP — enterprise names for bronze/silver/gold, plus a landing zone"</td>
+</tr>
+<tr>
+<td>CDC patterns (§23)</td>
+<td>P05</td>
+<td>"Watermark incremental misses hard deletes — my recon caught it; that's why CDC exists"</td>
+</tr>
+<tr>
+<td>Micro-batch vs streaming (§27)</td>
+<td>P04</td>
+<td>"5-min micro-batch met the SLA at 1/3 the ops cost of Flink — chosen deliberately"</td>
+</tr>
+<tr>
+<td>Reverse ETL (§28)</td>
+<td>P12 stretch</td>
+<td>Segments from CDP pushed to a mock CRM endpoint</td>
+</tr>
+</tbody>
+</table>
+<h2 id="part-d-technology-deep-dives">Part D — Technology deep dives</h2>
+<table>
+<thead>
+<tr>
+<th>Tech</th>
+<th>Built in</th>
+<th>Depth you gain</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Spark internals (§29)</td>
+<td>P05, P13</td>
+<td>Shuffle boundaries in <em>your</em> SCD2 job's plan; AQE + salting on skewed clickstream</td>
+</tr>
+<tr>
+<td>Kafka (§30)</td>
+<td>P04</td>
+<td>Partitions/keys/consumer groups/lag/EOS boundary — on a broker you run</td>
+</tr>
+<tr>
+<td>Airflow (§31)</td>
+<td>P07</td>
+<td>DAG factory, TaskFlow, datasets, backfills, executor limits</td>
+</tr>
+<tr>
+<td>dbt (§32)</td>
+<td>P06 note</td>
+<td>You build the same incremental+merge patterns in raw SQL, then map them to dbt vocabulary</td>
+</tr>
+<tr>
+<td>Warehouse internals (§33 Snowflake / M04 BigQuery)</td>
+<td>P06</td>
+<td>Micro-partitions↔BQ partitions, clustering, slots vs on-demand</td>
+</tr>
+<tr>
+<td>Delta/Iceberg (§34–35)</td>
+<td>P05</td>
+<td>ODP as Parquet vs Iceberg-on-BigLake; time travel for rollback</td>
+</tr>
+<tr>
+<td>Flink (§36)</td>
+<td>P04 Interview Corner</td>
+<td>When you'd graduate from micro-batch (state, event-at-a-time)</td>
+</tr>
+<tr>
+<td>Debezium/CDC tooling (§37)</td>
+<td>P05 concepts + stretch</td>
+<td>Datastream/Debezium tradeoffs vs your watermark loader</td>
+</tr>
+<tr>
+<td>Orchestrators (§38)</td>
+<td>P07</td>
+<td>Airflow vs Dagster/Prefect — argued from DAG-factory experience</td>
+</tr>
+</tbody>
+</table>
+<h2 id="part-e-the-20-question-bank-your-platform">Part E — The 20-question bank → your platform</h2>
+<table>
+<thead>
+<tr>
+<th>Q</th>
+<th>Question</th>
+<th>Your PipeForge answer anchor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Q1</td>
+<td>Log aggregation &amp; search</td>
+<td>Clickstream pipeline (P04) + partitioned RAW + BQ search patterns</td>
+</tr>
+<tr>
+<td>Q2</td>
+<td>URL shortener analytics</td>
+<td>Mini-version of clickstream → rollups (P06)</td>
+</tr>
+<tr>
+<td>Q3</td>
+<td>E-commerce warehouse (most asked)</td>
+<td><strong>Literally NovaMart</strong> — P03→P06 end-to-end</td>
+</tr>
+<tr>
+<td>Q4</td>
+<td>Real-time metrics dashboard</td>
+<td>Kafka → micro-batch → CDP rollups → Streamlit (P04/P06/P11)</td>
+</tr>
+<tr>
+<td>Q5</td>
+<td>CDC replication</td>
+<td>P05 SCD2 + watermark-vs-CDC tradeoff + recon safety net</td>
+</tr>
+<tr>
+<td>Q6</td>
+<td>Medallion data lake</td>
+<td>P03–P06 layer design, promotion rules, access tiers</td>
+</tr>
+<tr>
+<td>Q7</td>
+<td><strong>ETL framework for 100 sources</strong></td>
+<td><strong>The whole platform</strong> — registration + DAG factory (P02/P07)</td>
+</tr>
+<tr>
+<td>Q8</td>
+<td>Feature store</td>
+<td>P06 CDP feature tables + P12 low-latency serving discussion</td>
+</tr>
+<tr>
+<td>Q9</td>
+<td>DQ monitoring framework</td>
+<td>P08 — 6 dimensions, severity actions, scorecard</td>
+</tr>
+<tr>
+<td>Q10</td>
+<td>Uber surge pricing</td>
+<td>Gauntlet drill: hot path via Kafka + your late-data/reconciliation patterns</td>
+</tr>
+<tr>
+<td>Q11</td>
+<td>Spotify royalties</td>
+<td>Exactness discussion: effectively-once + recon + audit (P05/P08)</td>
+</tr>
+<tr>
+<td>Q12</td>
+<td>Netflix recommendations</td>
+<td>Lakehouse + training data from RAW replay (P05)</td>
+</tr>
+<tr>
+<td>Q13</td>
+<td>Real-time fraud</td>
+<td>Where micro-batch is NOT enough — argue the Flink graduation (P04)</td>
+</tr>
+<tr>
+<td>Q14</td>
+<td>Twitter timeline analytics</td>
+<td>Sessionization job + skew handling (P05/P13)</td>
+</tr>
+<tr>
+<td>Q15</td>
+<td>Multi-tenant SaaS platform</td>
+<td>P12 tenancy model (row vs schema vs project isolation)</td>
+</tr>
+<tr>
+<td>Q16</td>
+<td>Real-time recommendation engine</td>
+<td>Two-phase: batch features (CDP) + online lookup (P12 discussion)</td>
+</tr>
+<tr>
+<td>Q17</td>
+<td>LinkedIn activity feed</td>
+<td>Fan-out math + partitioning (gauntlet)</td>
+</tr>
+<tr>
+<td>Q18</td>
+<td>Ad click stream</td>
+<td>Dedup + late attribution windows — your P05 lookback MERGE</td>
+</tr>
+<tr>
+<td>Q19</td>
+<td>Data mesh platform</td>
+<td>P12 tenants + P09 catalog = "self-serve platform" pillar, argued honestly (§25)</td>
+</tr>
+<tr>
+<td>Q20</td>
+<td>IoT pipeline</td>
+<td>Volume math + device skew + DLQ patterns from P04</td>
+</tr>
+</tbody>
+</table>
+<h2 id="staff-level-signals-checklist-rehearse-until-reflexive">Staff-level signals checklist (rehearse until reflexive)</h2>
+<ul>
+<li>[ ] I state the freshness SLA as a number before choosing batch vs streaming (§3, §27)</li>
+<li>[ ] I justify every technology with "capability ← requirement" (§5)</li>
+<li>[ ] I declare table grain before listing columns (§6)</li>
+<li>[ ] "How do you handle failures?" → idempotency mechanics, not "we retry" (§7)</li>
+<li>[ ] I proactively offer deep dives at minute 25 (§8)</li>
+<li>[ ] I quantify: partitions, $/TB, events/s, % saved (§19)</li>
+<li>[ ] I know what I would NOT build (Composer vs local Airflow; Flink vs micro-batch; mesh vs monolith)</li>
+<li>[ ] I can tell 5 first-person war stories (one per Break-it drill) in what-broke → impact → detection → fix → prevention shape (§8)</li>
+</ul>
+</body>
+</html>

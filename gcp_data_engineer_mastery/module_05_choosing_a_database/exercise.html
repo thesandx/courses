@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 5 Exercise: Pick &amp; Provision the Right Store</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-5-exercise-pick-provision-the-right-store">Module 5 Exercise: Pick &amp; Provision the Right Store</h1>
+<h2 id="goal">Goal</h2>
+<p>Three product teams describe their needs. For <strong>each</strong>, name the correct GCP database,
+justify it in one sentence, and provision it with Terraform. This is exactly the reasoning
+the exam tests.</p>
+<h2 id="scenarios">Scenarios</h2>
+<ol>
+<li><strong>Fleet telemetry</strong> — 2 million vehicle sensor writes/second, queried by
+   <code>vehicle_id</code> + time window, single-digit-ms reads, petabyte retention.</li>
+<li><strong>Global wallet</strong> — user balances and transfers that must be <strong>strongly consistent
+   worldwide</strong> and scale horizontally without sharding.</li>
+<li><strong>Loyalty mobile app</strong> — user profiles and point history, needs <strong>offline sync</strong> and
+   realtime updates on phones.</li>
+</ol>
+<h2 id="tasks">Tasks</h2>
+<p>Create <code>main.tf</code>. Reference <code>solution.tf</code> after attempting.</p>
+<h3 id="todo-1-decide-write-it-in-a-comment">TODO 1 — Decide (write it in a comment)</h3>
+<p>For each scenario, put a comment: <code># Scenario N -&gt; &lt;service&gt; because &lt;reason&gt;</code>.</p>
+<h3 id="todo-2-provision-scenario-1">TODO 2 — Provision scenario 1</h3>
+<p>Provision the chosen store for telemetry with an <strong>autoscaling</strong> cluster and a column
+family. In a comment, state the <strong>row-key design</strong> you'd use and why it avoids hotspotting.</p>
+<h3 id="todo-3-provision-scenario-2">TODO 3 — Provision scenario 2</h3>
+<p>Provision the chosen global relational store with a small node count and one database +
+one table (DDL).</p>
+<h3 id="todo-4-provision-scenario-3">TODO 4 — Provision scenario 3</h3>
+<p>Provision the chosen document store.</p>
+<h2 id="self-verification">Self-Verification</h2>
+<pre><code class="language-bash">terraform init &amp;&amp; terraform apply -var project_id=&quot;$PROJECT_ID&quot;
+
+# Scenario 1 store exists and autoscales:
+gcloud bigtable instances list
+gcloud bigtable clusters list --instances=&lt;your-instance&gt;
+#   → shows min/max autoscaling nodes
+
+# Scenario 2 (Spanner) instance + db exist:
+gcloud spanner instances list
+gcloud spanner databases list --instance=&lt;your-instance&gt;
+
+# Scenario 3 (Firestore) database exists:
+gcloud firestore databases list
+</code></pre>
+<p>Correct answers: <strong>1 → Bigtable</strong>, <strong>2 → Spanner</strong>, <strong>3 → Firestore</strong>.</p>
+<h2 id="stretch-goals">Stretch Goals</h2>
+<ol>
+<li>Add a <strong>Memorystore (Redis)</strong> cache for scenario 2's hot balances (sub-ms reads).</li>
+<li>For scenario 1, justify SSD vs HDD storage and pick based on latency needs.</li>
+<li>Explain why <strong>BigQuery</strong> is wrong for all three (it's analytical, seconds-latency, not
+   OLTP).</li>
+</ol>
+<h2 id="cleanup">Cleanup</h2>
+<pre><code class="language-bash"># These stores bill hourly — destroy right away.
+terraform destroy -var project_id=&quot;$PROJECT_ID&quot;
+</code></pre>
+</body>
+</html>

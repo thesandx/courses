@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 7 Exercise: Sessionize a Click Stream</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-7-exercise-sessionize-a-click-stream">Module 7 Exercise: Sessionize a Click Stream</h1>
+<h2 id="goal">Goal</h2>
+<p>Write a Beam pipeline that reads click events from Pub/Sub and groups them into <strong>user
+sessions</strong> (activity separated by 5 minutes of inactivity), emitting one summary row per
+session to BigQuery. This exercises session windows, event time, and keyed aggregation —
+prime exam material.</p>
+<h2 id="tasks">Tasks</h2>
+<p>Create <code>pipeline.py</code>. Reference <code>solution.py</code> after attempting.</p>
+<h3 id="todo-1-read-parse">TODO 1 — Read + parse</h3>
+<p>Read from a Pub/Sub subscription; parse JSON <code>{user_id, url, ts}</code>; key by <code>user_id</code>.
+Drop malformed records to a tagged (dead-letter) output.</p>
+<h3 id="todo-2-session-windows">TODO 2 — Session windows</h3>
+<p>Apply <code>beam.WindowInto(Sessions(5 * 60))</code> so each user's clicks group by 5-min gaps.</p>
+<h3 id="todo-3-aggregate-per-session">TODO 3 — Aggregate per session</h3>
+<p>For each session, compute <code>user_id</code>, <code>click_count</code>, and <code>session_start</code> (min ts).</p>
+<h3 id="todo-4-write-to-bigquery">TODO 4 — Write to BigQuery</h3>
+<p>Append rows to <code>sessions.summary</code> with schema
+<code>user_id:STRING, click_count:INTEGER, session_start:TIMESTAMP</code>, creating the table if
+needed.</p>
+<h3 id="todo-5-event-time">TODO 5 — Event time</h3>
+<p>Attach event timestamps from the record's <code>ts</code> (use
+<code>beam.window.TimestampedValue</code>) so windowing uses <strong>event time</strong>, not arrival time.</p>
+<h2 id="self-verification">Self-Verification</h2>
+<pre><code class="language-bash">pip install 'apache-beam[gcp]'
+
+# Local smoke test on a subscription you publish a few messages to:
+python pipeline.py --runner=DirectRunner --project=$PROJECT_ID \
+  --subscription=projects/$PROJECT_ID/subscriptions/clicks-sub \
+  --output_table=$PROJECT_ID:sessions.summary
+
+# Publish clustered clicks for one user, wait &gt; 5 min, publish more,
+# then confirm TWO session rows appear:
+bq query --use_legacy_sql=false \
+  'SELECT user_id, click_count FROM sessions.summary ORDER BY session_start'
+#   → two rows for the same user (two sessions)
+</code></pre>
+<h2 id="stretch-goals">Stretch Goals</h2>
+<ol>
+<li>Add <code>allowed_lateness</code> and an accumulating trigger so late clicks update the session.</li>
+<li>Deploy on Dataflow with <code>--enable_streaming_engine</code> and observe autoscaling.</li>
+<li>Route dead-lettered messages to a Pub/Sub DLQ topic instead of logging.</li>
+</ol>
+<h2 id="cleanup">Cleanup</h2>
+<pre><code class="language-bash"># Cancel/drain the Dataflow job if you launched one:
+gcloud dataflow jobs list --region=us-central1 --status=active
+gcloud dataflow jobs drain &lt;JOB_ID&gt; --region=us-central1
+bq rm -f -t $PROJECT_ID:sessions.summary
+</code></pre>
+</body>
+</html>

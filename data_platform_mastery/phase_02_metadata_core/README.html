@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 02 — The Metadata Core: Registration Framework ①⑧ (`v0.2.0`)</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="phase-02-the-metadata-core-registration-framework-18-v020">Phase 02 — The Metadata Core: Registration Framework ①⑧ (<code>v0.2.0</code>)</h1>
+<blockquote>
+<p><strong>Mission:</strong> build the brain. A Cloud SQL Postgres registry holds every source,
+dataset, schema contract, and (soon) DQ rule and run record. A <code>pipeforge</code>
+CLI registers the four NovaMart sources. From this phase on, <strong>no component is
+allowed to know anything that isn't in this database.</strong></p>
+</blockquote>
+<h2 id="1-concepts">1. Concepts</h2>
+<ul>
+<li>Notes <strong>§16 (Data contracts &amp; schema validation)</strong> — you implement versioned
+  contracts with compatibility checking today.</li>
+<li>Notes <strong>Q7 (ETL framework for 100 sources)</strong> — reread the breakdown; the registry
+  you're building is its core answer.</li>
+<li>GCP course <strong>M05 (choosing a database)</strong> — <em>why Postgres here?</em> The registry is a
+  low-volume, relational, transactional workload with joins and constraints:
+  classic Cloud SQL. Not BigQuery (OLAP, no OLTP semantics), not Firestore (you
+  want FK integrity + SQL reporting on audit data). Being able to defend this
+  choice <strong>is</strong> the M05 exam skill.</li>
+<li>The <strong>audit model ⑧</strong> starts here: <code>pipeline_run</code> is an append-only table every
+  future component writes to. Operational metadata capture is what turns "a bunch
+  of jobs" into "a platform" — it feeds the recon framework (P08), observability
+  (P10), and the ops console (P11).</li>
+</ul>
+<p><strong>Registration = a data contract ceremony.</strong> Onboarding isn't "give me creds";
+it's: declare schema, keys, business date, PII columns, freshness SLA, retention.
+Forcing this at registration time is what makes every downstream framework
+(quality, tokenization, archival, SLA monitoring) automatic.</p>
+<h2 id="2-build">2. Build</h2>
+<h3 id="21-terraform-cloud-sql-smallest-possible">2.1 Terraform: Cloud SQL (smallest possible)</h3>
+<p><code>terraform/modules/cloudsql_metadata/main.tf</code>:</p>
+<pre><code class="language-hcl">variable &quot;project_id&quot; { type = string }
+variable &quot;region&quot;     { type = string }
+variable &quot;env&quot;        { type = string }
+
+resource &quot;google_sql_database_instance&quot; &quot;metadata&quot; {
+  name             = &quot;pf-${var.env}-metadata&quot;
+  database_version = &quot;POSTGRES_15&quot;
+  region           = var.region
+  settings {
+    tier    = &quot;db-f1-micro&quot;          # ~$9/mo — and you'll stop it when idle
+    edition = &quot;ENTERPRISE&quot;
+    ip_configuration {
+      ipv4_enabled = true            # dev convenience; Phase 12 moves this private
+      authorized_networks {
+        name  = &quot;dev-machine&quot;
+        value = var.dev_ip_cidr      # your IP/32 — never 0.0.0.0/0
+      }
+    }
+    backup_configuration { enabled = true }
+  }
+  deletion_protection = false        # this is a course; prod would be true
+}
+
+variable &quot;dev_ip_cidr&quot; { type = string }
+
+resource &quot;google_sql_database&quot; &quot;pipeforge&quot; {
+  name     = &quot;pipeforge&quot;
+  instance = google_sql_database_instance.metadata.name
+}
+
+resource &quot;google_sql_user&quot; &quot;app&quot; {
+  name     = &quot;pipeforge_app&quot;
+  instance = google_sql_database_instance.metadata.name
+  password = var.db_password         # dev only; Phase 12 swaps to Secret Manager + IAM auth
+}
+
+variable &quot;db_password&quot; { type = string, sensitive = true }
+
+output &quot;connection_ip&quot; { value = google_sql_database_instance.metadata.public_ip_address }
+output &quot;instance_name&quot; { value = google_sql_database_instance.metadata.name }
+</code></pre>
+<p>Wire it into <code>envs/dev/main.tf</code>, apply, then:</p>
+<pre><code class="language-bash">echo &quot;PF_METADATA_DB_URL=postgresql+psycopg://pipeforge_app:&lt;pw&gt;@&lt;ip&gt;/pipeforge&quot; &gt;&gt; .env
+# Idle cost control (memorize these two):
+gcloud sql instances patch pf-dev-metadata --activation-policy=NEVER    # stop
+gcloud sql instances patch pf-dev-metadata --activation-policy=ALWAYS   # start
+</code></pre>
+<h3 id="22-sqlalchemy-models-srcpipeforgemetadatamodelspy">2.2 SQLAlchemy models — <code>src/pipeforge/metadata/models.py</code></h3>
+<pre><code class="language-python">import enum
+import uuid
+from datetime import datetime
+
+from sqlalchemy import ForeignKey, JSON, String, Text, UniqueConstraint, func
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+def _uuid() -&gt; str:
+    return str(uuid.uuid4())
+
+
+class SourceKind(str, enum.Enum):
+    db = &quot;db&quot;; file = &quot;file&quot;; api = &quot;api&quot;; stream = &quot;stream&quot;
+
+
+class LoadPattern(str, enum.Enum):
+    full = &quot;full&quot;; incremental = &quot;incremental&quot;; cdc = &quot;cdc&quot;; stream = &quot;stream&quot;; api = &quot;api&quot;
+
+
+class SourceSystem(Base):
+    __tablename__ = &quot;source_system&quot;
+    source_id: Mapped[str] = mapped_column(primary_key=True, default=_uuid)
+    name: Mapped[str] = mapped_column(String(100), unique=True)
+    kind: Mapped[SourceKind]
+    connection_ref: Mapped[str] = mapped_column(
+        String(200), doc=&quot;Secret Manager key or docker alias — NEVER credentials&quot;)
+    owner_email: Mapped[str] = mapped_column(String(200))
+    tenant: Mapped[str] = mapped_column(String(50), default=&quot;novamart&quot;)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class Dataset(Base):
+    __tablename__ = &quot;dataset&quot;
+    __table_args__ = (UniqueConstraint(&quot;source_id&quot;, &quot;name&quot;),)
+    dataset_id: Mapped[str] = mapped_column(primary_key=True, default=_uuid)
+    source_id: Mapped[str] = mapped_column(ForeignKey(&quot;source_system.source_id&quot;))
+    name: Mapped[str] = mapped_column(String(100))
+    load_pattern: Mapped[LoadPattern]
+    schedule_cron: Mapped[str | None] = mapped_column(String(50))
+    watermark_column: Mapped[str | None] = mapped_column(String(100))
+    primary_keys: Mapped[list] = mapped_column(JSON, default=list)
+    business_date_column: Mapped[str | None] = mapped_column(String(100))
+    scd_type: Mapped[int] = mapped_column(default=1)
+    pii_columns: Mapped[list] = mapped_column(JSON, default=list)
+    sla_freshness_minutes: Mapped[int] = mapped_column(default=1440)
+    retention_days: Mapped[int] = mapped_column(default=365)
+    active: Mapped[bool] = mapped_column(default=True)
+
+
+class SchemaContract(Base):
+    __tablename__ = &quot;schema_contract&quot;
+    __table_args__ = (UniqueConstraint(&quot;dataset_id&quot;, &quot;version&quot;),)
+    contract_id: Mapped[str] = mapped_column(primary_key=True, default=_uuid)
+    dataset_id: Mapped[str] = mapped_column(ForeignKey(&quot;dataset.dataset_id&quot;))
+    version: Mapped[int]
+    format: Mapped[str] = mapped_column(String(20), default=&quot;jsonschema&quot;)
+    definition: Mapped[dict] = mapped_column(JSON)
+    compatibility: Mapped[str] = mapped_column(String(20), default=&quot;backward&quot;)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class PipelineRun(Base):
+    &quot;&quot;&quot;⑧ Audit model — APPEND ONLY. No UPDATEs except closing the row you opened.&quot;&quot;&quot;
+    __tablename__ = &quot;pipeline_run&quot;
+    run_id: Mapped[str] = mapped_column(primary_key=True, default=_uuid)
+    dataset_id: Mapped[str] = mapped_column(ForeignKey(&quot;dataset.dataset_id&quot;))
+    execution_date: Mapped[str] = mapped_column(String(10))     # YYYY-MM-DD, the idempotency key
+    layer: Mapped[str] = mapped_column(String(10))              # raw|odp|fdp|cdp
+    status: Mapped[str] = mapped_column(String(20), default=&quot;running&quot;)
+    started_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    finished_at: Mapped[datetime | None]
+    rows_read: Mapped[int | None]
+    rows_written: Mapped[int | None]
+    rows_quarantined: Mapped[int | None]
+    bytes_written: Mapped[int | None]
+    error: Mapped[str | None] = mapped_column(Text)
+    airflow_dag_id: Mapped[str | None] = mapped_column(String(200))
+    airflow_run_id: Mapped[str | None] = mapped_column(String(200))
+</code></pre>
+<p>Set up <strong>Alembic</strong> (<code>alembic init src/pipeforge/metadata/alembic</code>, point it at
+<code>Base.metadata</code>, autogenerate the first migration, <code>alembic upgrade head</code>).
+Migrations-from-day-one is the professional habit: your schema will change 8 more
+times this course, and <code>alembic upgrade head</code> is how every env keeps up.</p>
+<h3 id="23-repository-layer-run-context-srcpipeforgemetadatarepopy">2.3 Repository layer + run-context — <code>src/pipeforge/metadata/repo.py</code></h3>
+<pre><code class="language-python">from contextlib import contextmanager
+from datetime import datetime, timezone
+
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import Session
+
+from pipeforge.core.settings import settings
+from pipeforge.metadata.models import Dataset, PipelineRun, SchemaContract, SourceSystem
+
+_engine = None
+
+def engine():
+    global _engine
+    if _engine is None:
+        _engine = create_engine(settings.metadata_db_url, pool_pre_ping=True)
+    return _engine
+
+
+@contextmanager
+def session():
+    with Session(engine()) as s, s.begin():
+        yield s
+
+
+def get_dataset(name: str) -&gt; Dataset:
+    with session() as s:
+        ds = s.execute(select(Dataset).where(Dataset.name == name)).scalar_one()
+        s.expunge(ds)
+        return ds
+
+
+@contextmanager
+def run_context(dataset_id: str, execution_date: str, layer: str):
+    &quot;&quot;&quot;Audit wrapper: every unit of work in PipeForge runs inside one of these.&quot;&quot;&quot;
+    with session() as s:
+        run = PipelineRun(dataset_id=dataset_id, execution_date=execution_date, layer=layer)
+        s.add(run); s.flush()
+        run_id = run.run_id
+    metrics: dict = {}
+    try:
+        yield run_id, metrics
+        status, error = &quot;success&quot;, None
+    except Exception as exc:
+        status, error = &quot;failed&quot;, str(exc)[:2000]
+        raise
+    finally:
+        with session() as s:
+            run = s.get(PipelineRun, run_id)
+            run.status, run.error = status, error
+            run.finished_at = datetime.now(timezone.utc)
+            for k in (&quot;rows_read&quot;, &quot;rows_written&quot;, &quot;rows_quarantined&quot;, &quot;bytes_written&quot;):
+                setattr(run, k, metrics.get(k))
+</code></pre>
+<h3 id="24-contract-compatibility-srcpipeforgecontractscompatpy">2.4 Contract compatibility — <code>src/pipeforge/contracts/compat.py</code></h3>
+<p>Implement the §16 rules as code (this is a fantastic unit-test target):</p>
+<pre><code class="language-python">def check_backward_compatible(old: dict, new: dict) -&gt; list[str]:
+    &quot;&quot;&quot;JSON-Schema flavored: new readers must read old data.
+    Violations: removing a field that was required, changing a type,
+    adding a NEW required field without default. A RENAME = remove + add = breaking.
+    Returns list of violations (empty = compatible).&quot;&quot;&quot;
+    violations = []
+    old_props, new_props = old.get(&quot;properties&quot;, {}), new.get(&quot;properties&quot;, {})
+    for field, spec in old_props.items():
+        if field not in new_props:
+            if field in old.get(&quot;required&quot;, []):
+                violations.append(f&quot;removed required field '{field}'&quot;)
+        elif new_props[field].get(&quot;type&quot;) != spec.get(&quot;type&quot;):
+            violations.append(f&quot;type change on '{field}': {spec.get('type')} -&gt; {new_props[field].get('type')}&quot;)
+    for field in new.get(&quot;required&quot;, []):
+        if field not in old.get(&quot;required&quot;, []) and &quot;default&quot; not in new_props.get(field, {}):
+            violations.append(f&quot;new required field '{field}' without default&quot;)
+    return violations
+</code></pre>
+<p>Registration of contract v2 <strong>refuses</strong> to save if violations exist (unless
+<code>--force-breaking</code>, which requires a deprecation note — the §16 change protocol).</p>
+<h3 id="25-cli-registration-commands">2.5 CLI — registration commands</h3>
+<p>Add to <code>cli.py</code> a <code>register</code> sub-app:</p>
+<pre><code class="language-python"># pipeforge register source --name novamart_oltp --kind db --connection-ref sm://novamart-mysql --owner you@x.com
+# pipeforge register dataset --source novamart_oltp --name customers --pattern incremental \
+#     --watermark-column updated_at --pk customer_id --scd-type 2 \
+#     --pii email,phone --business-date-column updated_at --schedule &quot;0 2 * * *&quot;
+# pipeforge register contract --dataset customers --file contracts/customers.v1.json
+# pipeforge registry show --dataset customers        # pretty-print everything known
+</code></pre>
+<h3 id="26-register-the-four-novamart-sources">2.6 Register the four NovaMart sources</h3>
+<p>Create <code>contracts/</code> JSON-Schema files for <code>orders</code>, <code>customers</code>, <code>products</code>,
+<code>clickstream</code>, <code>fx_rates</code> (write them yourself — deciding required fields, types,
+and PII flags <em>is</em> the exercise), then register all sources/datasets. Example
+<code>contracts/orders.v1.json</code>:</p>
+<pre><code class="language-json">{
+  &quot;$id&quot;: &quot;novamart.orders.v1&quot;,
+  &quot;type&quot;: &quot;object&quot;,
+  &quot;required&quot;: [&quot;order_id&quot;, &quot;order_line_id&quot;, &quot;customer_id&quot;, &quot;product_id&quot;,
+               &quot;order_ts&quot;, &quot;quantity&quot;, &quot;unit_price_usd&quot;, &quot;status&quot;],
+  &quot;properties&quot;: {
+    &quot;order_id&quot;:        {&quot;type&quot;: &quot;string&quot;},
+    &quot;order_line_id&quot;:   {&quot;type&quot;: &quot;string&quot;},
+    &quot;customer_id&quot;:     {&quot;type&quot;: &quot;string&quot;},
+    &quot;product_id&quot;:      {&quot;type&quot;: &quot;string&quot;},
+    &quot;order_ts&quot;:        {&quot;type&quot;: &quot;string&quot;, &quot;format&quot;: &quot;date-time&quot;},
+    &quot;quantity&quot;:        {&quot;type&quot;: &quot;integer&quot;, &quot;minimum&quot;: 1},
+    &quot;unit_price_usd&quot;:  {&quot;type&quot;: &quot;number&quot;, &quot;minimum&quot;: 0},
+    &quot;currency&quot;:        {&quot;type&quot;: &quot;string&quot;, &quot;default&quot;: &quot;USD&quot;},
+    &quot;status&quot;:          {&quot;type&quot;: &quot;string&quot;, &quot;enum&quot;: [&quot;placed&quot;,&quot;paid&quot;,&quot;shipped&quot;,&quot;cancelled&quot;,&quot;returned&quot;]}
+  }
+}
+</code></pre>
+<h3 id="27-ship-it">2.7 Ship it</h3>
+<p>Tests to write before tagging: models round-trip, <code>run_context</code> writes
+success/failed rows correctly, compatibility checker (≥6 cases: add optional ✅,
+remove optional ✅, remove required ❌, type change ❌, rename ❌, new required
+without default ❌). Tag <code>v0.2.0</code>.</p>
+<h2 id="3-prove-it">3. Prove it</h2>
+<ul>
+<li>[ ] <code>alembic upgrade head</code> from scratch creates all tables</li>
+<li>[ ] <code>pipeforge registry show --dataset customers</code> prints source, pattern, keys, PII, SLA, contract v1</li>
+<li>[ ] Registering an incompatible contract v2 is rejected with the exact violation listed</li>
+<li>[ ] <code>pytest</code> ≥ 12 tests green in CI</li>
+<li>[ ] Cloud SQL stopped when you walk away (<code>activation-policy=NEVER</code>)</li>
+</ul>
+<h2 id="4-break-it">4. Break it</h2>
+<p>Simulate the classic Friday-4pm incident (§16): change <code>customers.v2</code> to rename
+<code>email → email_address</code> and register with <code>--force-breaking</code>. Note what <em>will</em>
+break downstream (nothing exists yet — but write the prediction in
+<code>docs/incidents/002-contract-rename.md</code>). Revisit this file in Phase 8 when the DQ
+gate actually catches it. Predict-then-verify is how you build systems intuition.</p>
+<h2 id="5-interview-corner">5. Interview corner</h2>
+<ul>
+<li><em>"How would you onboard 100 sources?"</em> — you now answer with a schema diagram you
+  designed: "registration writes to a registry; every engine is parameter-driven
+  off it; onboarding = INSERT, not code." (Q7)</li>
+<li><em>"What's in a data contract?"</em> — schema <strong>+ semantics + quality guarantees +
+  change protocol + ownership</strong> (§16). You built the enforcement, so mention the
+  compatibility matrix (backward/forward/full) and that <strong>a rename is a breaking change</strong>.</li>
+<li><em>"Why Postgres and not BigQuery for metadata?"</em> — transactional integrity, FKs,
+  point lookups, tiny volume. Match the store to the access pattern (M05).</li>
+</ul>
+<h2 id="6-stretch-goals">6. Stretch goals</h2>
+<ul>
+<li><code>pipeforge registry export --format json</code> → the seed of the Phase 11 catalog page.</li>
+<li>Add a <code>tags</code> JSONB column (domain, criticality) — Data-Mesh-ish product metadata (§25).</li>
+<li>Property-based tests (hypothesis) for the compatibility checker.</li>
+</ul>
+</body>
+</html>

@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 7: Dataflow &amp; Apache Beam</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-7-dataflow-apache-beam">Module 7: Dataflow &amp; Apache Beam</h1>
+<h2 id="learning-objectives">Learning Objectives</h2>
+<ul>
+<li>Understand Beam's <strong>unified batch + streaming</strong> model: <code>PCollection</code>, <code>PTransform</code>,
+  <code>ParDo</code>, <code>GroupByKey</code>.</li>
+<li>Apply <strong>windowing</strong> (fixed, sliding, session), <strong>watermarks</strong>, <strong>triggers</strong>, and
+  <strong>late-data</strong> handling.</li>
+<li>Run pipelines on <strong>Dataflow</strong> with autoscaling, and know when to use <strong>Dataflow vs
+  Dataproc vs BigQuery</strong>.</li>
+<li>Achieve <strong>exactly-once</strong> processing and use <strong>Dataflow templates</strong> for reuse.</li>
+<li>Tune for cost/throughput (Streaming Engine, Dataflow Prime, shuffle).</li>
+</ul>
+<hr>
+<h2 id="1-the-beam-model">1. The Beam Model</h2>
+<p>Beam is a portable API; <strong>Dataflow</strong> is Google's managed runner. One pipeline runs on
+bounded (batch) <em>or</em> unbounded (streaming) data.</p>
+<pre><code class="language-mermaid">flowchart LR
+    R[Read source] --&gt; T1[ParDo: parse]
+    T1 --&gt; W[Window]
+    W --&gt; G[GroupByKey / Combine]
+    G --&gt; T2[ParDo: enrich]
+    T2 --&gt; Wr[Write sink]
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Primitive</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>PCollection</code></td>
+<td>Distributed, immutable dataset (bounded or unbounded)</td>
+</tr>
+<tr>
+<td><code>PTransform</code></td>
+<td>An operation producing a new <code>PCollection</code></td>
+</tr>
+<tr>
+<td><code>ParDo</code> / <code>DoFn</code></td>
+<td>Per-element processing (like map/flatMap)</td>
+</tr>
+<tr>
+<td><code>GroupByKey</code> / <code>Combine</code></td>
+<td>Shuffle + aggregate by key</td>
+</tr>
+<tr>
+<td><code>Window</code></td>
+<td>Slice unbounded data by event time</td>
+</tr>
+</tbody>
+</table>
+<h2 id="2-windowing-time">2. Windowing &amp; Time</h2>
+<p>Streaming aggregates need <strong>windows</strong> because the data never ends.</p>
+<table>
+<thead>
+<tr>
+<th>Window</th>
+<th>Shape</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Fixed (tumbling)</strong></td>
+<td>Non-overlapping N-min buckets</td>
+<td>Per-minute counts</td>
+</tr>
+<tr>
+<td><strong>Sliding</strong></td>
+<td>Overlapping (size + period)</td>
+<td>Moving averages</td>
+</tr>
+<tr>
+<td><strong>Session</strong></td>
+<td>Gap-based, per key</td>
+<td>User activity sessions</td>
+</tr>
+<tr>
+<td><strong>Global</strong></td>
+<td>One window (+ triggers)</td>
+<td>Custom triggering</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>Event time</strong> (when it happened) vs <strong>processing time</strong> (when observed). Beam
+  aggregates on <strong>event time</strong>.</li>
+<li><strong>Watermark:</strong> the system's estimate of "event time completeness." When it passes a
+  window's end, the window fires.</li>
+<li><strong>Triggers:</strong> when to emit results (at watermark, early/speculative, on late data).</li>
+<li><strong>Late data:</strong> allowed via <code>allowed_lateness</code>; handle with accumulation mode.</li>
+</ul>
+<blockquote>
+<p><strong>Pitfall:</strong> using <strong>processing-time</strong> windows for late-arriving data produces wrong
+aggregates. Aggregate on <strong>event time</strong> + watermarks + allowed lateness.</p>
+</blockquote>
+<h2 id="3-dataflow-vs-dataproc-vs-bigquery">3. Dataflow vs Dataproc vs BigQuery</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Dataflow</th>
+<th>Dataproc</th>
+<th>BigQuery</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Paradigm</td>
+<td>Beam (unified batch/stream)</td>
+<td>Spark/Hadoop</td>
+<td>SQL</td>
+</tr>
+<tr>
+<td>Ops</td>
+<td>Fully managed, autoscaling</td>
+<td>You manage clusters (or Serverless)</td>
+<td>Serverless</td>
+</tr>
+<tr>
+<td>Best for</td>
+<td>Streaming ETL, complex transforms</td>
+<td>Existing Spark/Hadoop, ML libs</td>
+<td>Set-based SQL transforms (ELT)</td>
+</tr>
+<tr>
+<td>Migrate to it when</td>
+<td>New streaming/portable pipelines</td>
+<td>Lift-and-shift Spark jobs</td>
+<td>Transform stays in SQL</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Exam tip:</strong> "existing <strong>Spark/Hadoop</strong> jobs" → Dataproc. "New <strong>streaming</strong> pipeline,
+no cluster management" → Dataflow. "Transformation expressible in <strong>SQL</strong>" → BigQuery.</p>
+</blockquote>
+<h2 id="4-running-on-dataflow">4. Running on Dataflow</h2>
+<ul>
+<li><strong>Autoscaling</strong> + <strong>Streaming Engine</strong> (moves state/shuffle off workers → cheaper,
+  faster scaling).</li>
+<li><strong>Dataflow Prime</strong>: vertical autoscaling + right-fitting.</li>
+<li><strong>Templates</strong>: package a pipeline (classic or <strong>Flex</strong>) so others run it with params —
+  great for Terraform/Composer-triggered jobs.</li>
+<li><strong>Exactly-once</strong>: Dataflow dedupes with Pub/Sub message IDs + checkpointing.</li>
+</ul>
+<pre><code class="language-python">with beam.Pipeline(options=opts) as p:
+  (p | beam.io.ReadFromPubSub(subscription=sub)
+     | beam.WindowInto(FixedWindows(60))
+     | beam.Map(parse)
+     | beam.CombinePerKey(sum)
+     | beam.io.WriteToBigQuery(table))
+</code></pre>
+<h2 id="5-cost-performance-knobs">5. Cost &amp; Performance Knobs</h2>
+<table>
+<thead>
+<tr>
+<th>Knob</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--enableStreamingEngine</code></td>
+<td>Offload shuffle/state → cheaper, faster autoscale</td>
+</tr>
+<tr>
+<td><code>--maxNumWorkers</code> / autoscaling</td>
+<td>Cap cost / control scale</td>
+</tr>
+<tr>
+<td><code>--numWorkers</code> (batch)</td>
+<td>Starting parallelism</td>
+</tr>
+<tr>
+<td>FlexRS (batch)</td>
+<td>Discounted, delay-tolerant batch</td>
+</tr>
+<tr>
+<td>Fusion / <code>Reshuffle</code></td>
+<td>Break fusion to rebalance skew</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="exam-focus">🎯 Exam Focus</h2>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Answer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>"Streaming ETL from Pub/Sub to BigQuery, no clusters"</td>
+<td><strong>Dataflow</strong> (Beam)</td>
+</tr>
+<tr>
+<td>"Migrate existing Spark jobs with minimal change"</td>
+<td><strong>Dataproc</strong></td>
+</tr>
+<tr>
+<td>"Per-user activity grouped by inactivity gaps"</td>
+<td><strong>Session windows</strong></td>
+</tr>
+<tr>
+<td>"Late events must still be counted correctly"</td>
+<td>Event-time windows + <strong>watermarks</strong> + <code>allowed_lateness</code></td>
+</tr>
+<tr>
+<td>"Reuse a pipeline with different params via CI/Composer"</td>
+<td><strong>Flex template</strong></td>
+</tr>
+<tr>
+<td>"Cut streaming cost &amp; speed autoscaling"</td>
+<td><strong>Streaming Engine</strong></td>
+</tr>
+<tr>
+<td>"Exactly-once from Pub/Sub"</td>
+<td>Dataflow's built-in dedupe (message IDs)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="practice-questions">Practice Questions</h3>
+<ol>
+<li><strong>Stream events from Pub/Sub, aggregate per minute, write to BigQuery, no cluster
+   ops.</strong> → <strong>Dataflow</strong> with <code>FixedWindows(60)</code> reading a Pub/Sub subscription.</li>
+<li><strong>You must compute per-user sessions separated by 30 min of inactivity.</strong> → <strong>Session
+   windows</strong> with a 30-min gap, keyed by user.</li>
+<li><strong>Events arrive up to 10 minutes late; counts must be correct.</strong> → Event-time windows +
+   watermark + <code>allowed_lateness=10min</code>, accumulating trigger.</li>
+<li><strong>A large fleet of on-prem Spark jobs must move to GCP with little rewrite.</strong> →
+   <strong>Dataproc</strong> (Spark), not Dataflow.</li>
+<li><strong>Your streaming job's autoscaling is slow and workers hold huge state.</strong> → Enable
+   <strong>Streaming Engine</strong> (offloads state/shuffle).</li>
+<li><strong>Analysts want to run the same pipeline with a different date param from Composer.</strong> →
+   Publish a <strong>Flex template</strong>; trigger it with parameters.</li>
+</ol>
+<hr>
+<h2 id="key-takeaways">Key Takeaways</h2>
+<ul>
+<li>Beam unifies batch + streaming; <strong>Dataflow</strong> runs it fully managed with autoscaling.</li>
+<li>Aggregate streams on <strong>event time</strong> with <strong>windows + watermarks + triggers</strong>; allow
+  lateness.</li>
+<li><strong>Dataflow</strong> for new/streaming/portable, <strong>Dataproc</strong> for existing Spark/Hadoop,
+  <strong>BigQuery</strong> for SQL transforms.</li>
+<li>Use <strong>Flex templates</strong> for reuse and <strong>Streaming Engine</strong> for cost/scale.</li>
+</ul>
+<p>Next: <a href="../module_08_dataproc_spark/README.md">Module 8 — Dataproc &amp; Spark</a>.</p>
+<hr>
+<h2 id="files-in-this-module">Files in This Module</h2>
+<ul>
+<li><code>concepts.py</code> — a Beam pipeline: Pub/Sub → fixed windows → per-key sum → BigQuery</li>
+<li><code>concepts.tf</code> — deploy it as a Dataflow Flex template job with autoscaling</li>
+<li><code>exercise.md</code> — build a sessionizing streaming pipeline</li>
+<li><code>solution.py</code> — reference solution</li>
+</ul>
+</body>
+</html>

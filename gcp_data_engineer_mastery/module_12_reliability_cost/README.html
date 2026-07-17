@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 12: Reliability, Monitoring &amp; Cost</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-12-reliability-monitoring-cost">Module 12: Reliability, Monitoring &amp; Cost</h1>
+<h2 id="learning-objectives">Learning Objectives</h2>
+<ul>
+<li>Instrument pipelines with <strong>Cloud Monitoring, Logging</strong>, log-based metrics, and alerts.</li>
+<li>Define <strong>SLIs/SLOs</strong> and error budgets for data freshness and pipeline success.</li>
+<li>Control spend with <strong>budgets/alerts, quotas, slot reservations, and lifecycle/partition
+  expiration</strong>.</li>
+<li>Build <strong>CI/CD</strong> for data pipelines (Terraform + tests + templated jobs).</li>
+<li>Ensure <strong>DR/HA</strong>: backups, multi-region, and recovery objectives.</li>
+</ul>
+<hr>
+<h2 id="1-observability-stack">1. Observability Stack</h2>
+<table>
+<thead>
+<tr>
+<th>Signal</th>
+<th>Where</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Metrics</strong></td>
+<td>Cloud Monitoring</td>
+<td>Dataflow lag, BQ slot util, Pub/Sub backlog</td>
+</tr>
+<tr>
+<td><strong>Logs</strong></td>
+<td>Cloud Logging</td>
+<td>Job errors, audit, DLP findings</td>
+</tr>
+<tr>
+<td><strong>Log-based metrics</strong></td>
+<td>Logging → Monitoring</td>
+<td>Count error log lines → alert</td>
+</tr>
+<tr>
+<td><strong>Traces / Error Reporting</strong></td>
+<td>Cloud Trace / ER</td>
+<td>Latency, exceptions</td>
+</tr>
+<tr>
+<td><strong>Dashboards</strong></td>
+<td>Monitoring</td>
+<td>One pane per pipeline</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-mermaid">flowchart LR
+    P[Pipelines] --&gt; M[Cloud Monitoring&lt;br/&gt;metrics]
+    P --&gt; L[Cloud Logging]
+    L --&gt; LBM[Log-based metric]
+    M --&gt; A[Alert policy]
+    LBM --&gt; A
+    A --&gt; N[Notification channel&lt;br/&gt;email / PagerDuty / Pub/Sub]
+</code></pre>
+<h2 id="2-key-signals-to-watch">2. Key Signals to Watch</h2>
+<table>
+<thead>
+<tr>
+<th>Service</th>
+<th>Watch</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Pub/Sub</strong></td>
+<td><code>subscription/num_undelivered_messages</code> (backlog), oldest unacked age</td>
+</tr>
+<tr>
+<td><strong>Dataflow</strong></td>
+<td><code>system_lag</code>, <code>data_watermark_age</code>, failed elements</td>
+</tr>
+<tr>
+<td><strong>BigQuery</strong></td>
+<td>slot utilization, bytes scanned, job failures, MV staleness</td>
+</tr>
+<tr>
+<td><strong>Composer</strong></td>
+<td>DAG failure rate, task duration, scheduler heartbeats</td>
+</tr>
+<tr>
+<td><strong>Bigtable</strong></td>
+<td>CPU, storage utilization, error rate</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Pitfall:</strong> a healthy-looking job with a <strong>growing watermark lag / Pub/Sub backlog</strong> is
+silently falling behind. Alert on <strong>lag/backlog</strong>, not just crashes.</p>
+</blockquote>
+<h2 id="3-slis-slos-error-budgets">3. SLIs, SLOs &amp; Error Budgets</h2>
+<ul>
+<li><strong>SLI</strong> (indicator): e.g. "% of daily loads completing by 06:00", "data freshness &lt; 15
+  min".</li>
+<li><strong>SLO</strong> (objective): e.g. "99% of days meet the freshness SLI."</li>
+<li><strong>Error budget:</strong> the allowed miss (1%). Burn it → freeze risky changes, invest in
+  reliability.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Data-eng SLI</th>
+<th>Example SLO</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Freshness</td>
+<td>95% of hours, data lag &lt; 15 min</td>
+</tr>
+<tr>
+<td>Completeness</td>
+<td>99.9% of expected rows land</td>
+</tr>
+<tr>
+<td>Success</td>
+<td>99% of pipeline runs succeed</td>
+</tr>
+</tbody>
+</table>
+<h2 id="4-cost-control-toolbox">4. Cost Control Toolbox</h2>
+<table>
+<thead>
+<tr>
+<th>Lever</th>
+<th>Applies to</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Budgets + alerts</strong></td>
+<td>Whole project/billing account</td>
+</tr>
+<tr>
+<td><strong>BigQuery <code>maximum_bytes_billed</code>, reservations</strong></td>
+<td>Query spend</td>
+</tr>
+<tr>
+<td><strong>Partition/lifecycle expiration</strong></td>
+<td>BQ &amp; GCS storage</td>
+</tr>
+<tr>
+<td><strong>Autoscaling caps</strong> (<code>maxWorkers</code>, <code>max_nodes</code>)</td>
+<td>Dataflow/Dataproc/Bigtable</td>
+</tr>
+<tr>
+<td><strong>Quotas</strong></td>
+<td>Prevent runaway usage</td>
+</tr>
+<tr>
+<td><strong>Committed use / Spot / FlexRS</strong></td>
+<td>Discounts</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Exam tip:</strong> budgets <strong>alert</strong>, they don't automatically cap spend. To <em>stop</em> usage you
+wire the budget's Pub/Sub notification to a function that disables billing/quota.</p>
+</blockquote>
+<h2 id="5-cicd-dr-for-data">5. CI/CD &amp; DR for Data</h2>
+<ul>
+<li><strong>CI/CD:</strong> Terraform in a repo → <code>plan</code> on PR, <code>apply</code> on merge (Cloud Build/GitHub
+  Actions); test SQL/DAGs; publish Dataflow templates; deploy DAGs to the Composer bucket.</li>
+<li><strong>HA/DR:</strong> Cloud SQL <strong>regional</strong> + PITR; BigQuery <strong>cross-region dataset replication</strong>;
+  GCS <strong>dual/multi-region</strong>; Bigtable <strong>replicated clusters</strong>; define <strong>RPO/RTO</strong>.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Objective</th>
+<th>Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>RPO</strong></td>
+<td>Max acceptable data loss (how far back you can lose)</td>
+</tr>
+<tr>
+<td><strong>RTO</strong></td>
+<td>Max acceptable downtime (how fast you recover)</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="exam-focus">🎯 Exam Focus</h2>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Answer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>"Alert when a streaming pipeline falls behind"</td>
+<td>Alert on <strong>Pub/Sub backlog</strong> / Dataflow <strong>watermark lag</strong></td>
+</tr>
+<tr>
+<td>"Get notified at 50/90/100% of budget"</td>
+<td><strong>Billing budget</strong> with threshold alerts</td>
+</tr>
+<tr>
+<td>"Actually stop spend at the cap"</td>
+<td>Budget → <strong>Pub/Sub</strong> → function that disables billing</td>
+</tr>
+<tr>
+<td>"Guarantee data freshness objective"</td>
+<td>Define an <strong>SLO</strong> on a freshness <strong>SLI</strong> + alert on burn</td>
+</tr>
+<tr>
+<td>"Recover Cloud SQL to a point in time"</td>
+<td><strong>PITR</strong> + automated backups (regional HA)</td>
+</tr>
+<tr>
+<td>"Deploy infra changes safely &amp; repeatably"</td>
+<td><strong>Terraform CI/CD</strong> (plan on PR, apply on merge)</td>
+</tr>
+<tr>
+<td>"Count error log lines and alert"</td>
+<td><strong>Log-based metric</strong> → alert policy</td>
+</tr>
+</tbody>
+</table>
+<h3 id="practice-questions">Practice Questions</h3>
+<ol>
+<li><strong>A streaming job runs but data is 2 hours stale; no crash.</strong> → Alert on <strong>Dataflow
+   watermark lag</strong> / <strong>Pub/Sub undelivered backlog</strong>, not just job failure.</li>
+<li><strong>Finance wants email at 50%, 90%, 100% of the monthly budget.</strong> → <strong>Billing budget</strong>
+   with those threshold rules + a notification channel.</li>
+<li><strong>They also want spend to actually stop at 100%.</strong> → Route the budget alert to
+   <strong>Pub/Sub</strong> → a Cloud Function that <strong>disables billing</strong> (budgets only notify).</li>
+<li><strong>Define reliability targets for a nightly load.</strong> → An <strong>SLO</strong> like "99% of nights load
+   completes by 06:00," tracked against an <strong>SLI</strong>, with an <strong>error budget</strong>.</li>
+<li><strong>Requirement: lose at most 5 min of OLTP data, recover in 30 min.</strong> → <strong>RPO=5min,
+   RTO=30min</strong> → Cloud SQL <strong>regional HA + PITR</strong> (or Spanner).</li>
+<li><strong>Roll out dataset/table changes through review, reproducibly.</strong> → <strong>Terraform in
+   CI/CD</strong>: <code>plan</code> on PR, <code>apply</code> on merge.</li>
+</ol>
+<hr>
+<h2 id="key-takeaways">Key Takeaways</h2>
+<ul>
+<li>Alert on <strong>lag/backlog/freshness</strong>, not only failures; use <strong>log-based metrics</strong> +
+  alert policies + notification channels.</li>
+<li>Express reliability as <strong>SLIs/SLOs with error budgets</strong>.</li>
+<li><strong>Budgets alert; they don't cap</strong> — automate a hard stop via Pub/Sub if required.</li>
+<li><strong>Terraform CI/CD</strong> + <strong>backups/PITR/replication (RPO/RTO)</strong> make pipelines
+  production-grade.</li>
+</ul>
+<p>Next: <a href="../capstone/README.md">🏆 Capstone — RideShare Analytics Platform</a>.</p>
+<hr>
+<h2 id="files-in-this-module">Files in This Module</h2>
+<ul>
+<li><code>concepts.tf</code> — a log-based metric, alert policy, notification channel, and a billing
+  budget</li>
+<li><code>cicd.yaml</code> — a Cloud Build pipeline (terraform plan/apply + validation)</li>
+<li><code>exercise.md</code> — instrument a pipeline with an SLO alert and a budget</li>
+<li><code>solution.tf</code> — reference solution</li>
+</ul>
+</body>
+</html>

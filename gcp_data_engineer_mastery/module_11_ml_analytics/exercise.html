@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 11 Exercise: Forecast Demand with BigQuery ML</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-11-exercise-forecast-demand-with-bigquery-ml">Module 11 Exercise: Forecast Demand with BigQuery ML</h1>
+<h2 id="goal">Goal</h2>
+<p>Build a <strong>time-series forecast</strong> of daily sales entirely in SQL with BigQuery ML
+(<code>ARIMA_PLUS</code>), evaluate it, and produce a 30-day forecast — the exact pattern the exam
+uses for "forecast future demand."</p>
+<h2 id="tasks">Tasks</h2>
+<p>Run in BigQuery (or <code>bq query</code>). Reference <code>solution.sql</code> after attempting.</p>
+<h3 id="todo-1-training-data">TODO 1 — Training data</h3>
+<p>Create <code>ml.daily_sales(sale_date DATE, revenue FLOAT64)</code> and populate ~60+ days of data
+(generate with <code>GENERATE_DATE_ARRAY</code> + a seasonal formula, or use your own).</p>
+<h3 id="todo-2-train-an-arima_plus-model">TODO 2 — Train an ARIMA_PLUS model</h3>
+<p><code>CREATE MODEL ml.sales_forecast</code> with <code>model_type='ARIMA_PLUS'</code>,
+<code>time_series_timestamp_col='sale_date'</code>, <code>time_series_data_col='revenue'</code>. Let it
+auto-detect seasonality.</p>
+<h3 id="todo-3-inspect-the-fit">TODO 3 — Inspect the fit</h3>
+<p>Use <code>ML.ARIMA_EVALUATE</code> to see the chosen (p,d,q) + seasonal terms and AIC.</p>
+<h3 id="todo-4-forecast-30-days">TODO 4 — Forecast 30 days</h3>
+<p>Use <code>ML.FORECAST(MODEL ml.sales_forecast, STRUCT(30 AS horizon, 0.8 AS confidence_level))</code>.</p>
+<h3 id="todo-5-which-model-type">TODO 5 — Which model type?</h3>
+<p>In a comment, state why <code>ARIMA_PLUS</code> (not <code>LINEAR_REG</code> or <code>KMEANS</code>) is correct here.</p>
+<h2 id="self-verification">Self-Verification</h2>
+<pre><code class="language-bash">bq query --use_legacy_sql=false &lt; answers.sql
+
+# The model exists and is ARIMA_PLUS:
+bq query --use_legacy_sql=false \
+  &quot;SELECT model_type FROM ml.INFORMATION_SCHEMA.MODELS WHERE model_name='sales_forecast'&quot;
+#   → ARIMA_PLUS
+
+# The forecast returns 30 future rows with confidence bounds:
+bq query --use_legacy_sql=false \
+  &quot;SELECT COUNT(*) FROM ML.FORECAST(MODEL ml.sales_forecast, STRUCT(30 AS horizon, 0.8 AS confidence_level))&quot;
+#   → 30
+</code></pre>
+<h2 id="stretch-goals">Stretch Goals</h2>
+<ol>
+<li>Add holiday effects with the <code>holiday_region</code> option and compare accuracy.</li>
+<li>Build a <strong>Looker Studio</strong> dashboard on the forecast with a BI Engine reservation.</li>
+<li>Compare against a <code>BOOSTED_TREE_REGRESSOR</code> using lagged features and discuss tradeoffs.</li>
+</ol>
+<h2 id="cleanup">Cleanup</h2>
+<pre><code class="language-bash">bq rm -f -m $PROJECT_ID:ml.sales_forecast
+bq rm -f -t $PROJECT_ID:ml.daily_sales
+</code></pre>
+</body>
+</html>

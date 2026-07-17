@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 2: Dunder Methods — Speaking the Interpreter&#x27;s Language</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-2-dunder-methods-speaking-the-interpreters-language">Module 2: Dunder Methods — Speaking the Interpreter's Language</h1>
+<h2 id="learning-objectives">Learning Objectives</h2>
+<ul>
+<li>Implement the "identity trio" — <code>__repr__</code>, <code>__eq__</code>, <code>__hash__</code> — correctly,
+  including the hash/eq contract.</li>
+<li>Overload operators (<code>+</code>, <code>&lt;</code>, <code>*</code>) the right way: returning <code>NotImplemented</code>,
+  supporting reflected operands, and using <code>functools.total_ordering</code>.</li>
+<li>Make objects sized, indexable, and iterable with <code>__len__</code>, <code>__getitem__</code>,
+  <code>__contains__</code>.</li>
+<li>Build callables (<code>__call__</code>) and context managers (<code>__enter__</code>/<code>__exit__</code>).</li>
+<li>Explain the <code>__new__</code> vs <code>__init__</code> split and when you actually need <code>__new__</code>.</li>
+</ul>
+<hr>
+<h2 id="1-why-dunders-exist">1. Why Dunders Exist</h2>
+<p>Python never calls <code>x.__add__</code> because you asked nicely — the <em>interpreter</em> calls it
+when it sees <code>x + y</code>. Dunders are the hooks by which your objects plug into syntax,
+built-ins, and protocols. Rule: <strong>define them, never call them directly</strong>
+(<code>len(x)</code>, not <code>x.__len__()</code> — the built-in does extra correctness work).</p>
+<table>
+<thead>
+<tr>
+<th>You write</th>
+<th>Python calls</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>x + y</code></td>
+<td><code>x.__add__(y)</code>, falling back to <code>y.__radd__(x)</code></td>
+</tr>
+<tr>
+<td><code>x == y</code></td>
+<td><code>x.__eq__(y)</code> (fallback: identity)</td>
+</tr>
+<tr>
+<td><code>len(x)</code></td>
+<td><code>x.__len__()</code></td>
+</tr>
+<tr>
+<td><code>x in xs</code></td>
+<td><code>xs.__contains__(x)</code> (fallback: iterate)</td>
+</tr>
+<tr>
+<td><code>for i in xs</code></td>
+<td><code>xs.__iter__()</code> (fallback: <code>__getitem__</code> from 0)</td>
+</tr>
+<tr>
+<td><code>with x:</code></td>
+<td><code>x.__enter__()</code> / <code>x.__exit__(...)</code></td>
+</tr>
+<tr>
+<td><code>f(a)</code></td>
+<td><code>f.__call__(a)</code></td>
+</tr>
+<tr>
+<td><code>repr(x)</code>, <code>str(x)</code></td>
+<td><code>x.__repr__()</code>, <code>x.__str__()</code> (str falls back to repr)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="2-the-identity-trio-__repr__-__eq__-__hash__">2. The Identity Trio: <code>__repr__</code>, <code>__eq__</code>, <code>__hash__</code></h2>
+<p><code>__repr__</code> is for developers (debugger, logs); aim for <em>"could be pasted back into
+Python"</em>. <code>__str__</code> is for end users and <strong>falls back to <code>__repr__</code></strong> — so implement
+<code>__repr__</code> first, <code>__str__</code> only if they must differ.</p>
+<pre><code class="language-python">class Money:
+    def __init__(self, amount, currency):
+        self.amount, self.currency = amount, currency
+
+    def __repr__(self):
+        return f&quot;Money({self.amount!r}, {self.currency!r})&quot;
+
+    def __eq__(self, other):
+        if not isinstance(other, Money):
+            return NotImplemented          # let the OTHER side try
+        return (self.amount, self.currency) == (other.amount, other.currency)
+
+    def __hash__(self):
+        return hash((self.amount, self.currency))
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Contract rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>a == b</code> ⇒ <code>hash(a) == hash(b)</code></td>
+<td>Dicts/sets bucket by hash, then confirm with <code>==</code></td>
+</tr>
+<tr>
+<td>Defining <code>__eq__</code> sets <code>__hash__ = None</code></td>
+<td>Python assumes you forgot; unhashable by default</td>
+</tr>
+<tr>
+<td>Hash only immutable state</td>
+<td>Mutating a dict key strands it in the wrong bucket</td>
+</tr>
+<tr>
+<td>Return <code>NotImplemented</code>, don't raise</td>
+<td>Enables the reflected <code>other.__eq__(self)</code> retry</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Pitfall:</strong> <code>NotImplemented</code> (a value you <code>return</code>) is not <code>NotImplementedError</code>
+(an exception you <code>raise</code>). Returning the value lets Python try the mirrored
+operation; raising kills the comparison.</p>
+</blockquote>
+<h2 id="3-operator-overloading-and-reflected-methods">3. Operator Overloading and Reflected Methods</h2>
+<p>For <code>a + b</code>, Python tries <code>a.__add__(b)</code>; if that returns <code>NotImplemented</code>, it tries
+<code>b.__radd__(a)</code>. This is how <code>3 * vector</code> can work even though <code>int</code> knows nothing
+about your vector.</p>
+<pre><code class="language-python">from functools import total_ordering
+
+@total_ordering                      # derive &lt;=, &gt;, &gt;= from __eq__ + __lt__
+class Version:
+    def __init__(self, *parts): self.parts = parts
+    def __eq__(self, other): return self.parts == other.parts
+    def __lt__(self, other): return self.parts &lt; other.parts
+</code></pre>
+<blockquote>
+<p><strong>Pitfall:</strong> binary dunders should return a <strong>new object</strong>, not mutate <code>self</code> —
+mutation belongs in the in-place variants (<code>__iadd__</code> for <code>+=</code>).</p>
+</blockquote>
+<h2 id="4-containers-__len__-__getitem__-__iter__">4. Containers: <code>__len__</code>, <code>__getitem__</code>, <code>__iter__</code></h2>
+<p>Implementing <code>__getitem__</code> alone already gives you <code>for</code> loops, <code>in</code>, and slicing
+support (the legacy iteration protocol). Add <code>__len__</code> and your object works with
+<code>len()</code>, truthiness, and <code>reversed()</code>.</p>
+<pre><code class="language-python">class Playlist:
+    def __init__(self, songs): self._songs = list(songs)
+    def __len__(self): return len(self._songs)
+    def __getitem__(self, index): return self._songs[index]   # int OR slice
+</code></pre>
+<blockquote>
+<p><strong>Pitfall:</strong> <code>if obj:</code> calls <code>__bool__</code>, falling back to <code>__len__</code>. An empty custom
+container is falsy — guard with <code>if obj is not None:</code> when you mean "exists".</p>
+</blockquote>
+<h2 id="5-__call__-and-context-managers">5. <code>__call__</code> and Context Managers</h2>
+<p><code>__call__</code> turns instances into functions with memory — the OO alternative to
+closures, and the mechanism behind class-based decorators (Module 7).</p>
+<p><code>__enter__</code>/<code>__exit__</code> guarantee cleanup. <code>__exit__(exc_type, exc, tb)</code> receives the
+in-flight exception; <strong>return <code>True</code> to suppress it</strong>, anything falsy to propagate.</p>
+<pre><code class="language-mermaid">flowchart LR
+    A[&quot;with Timer() as t:&quot;] --&gt; B[__enter__ returns t]
+    B --&gt; C[body runs]
+    C --&gt; D[&quot;__exit__(exc_type, exc, tb)&quot;]
+    D --&gt;|&quot;returns True&quot;| E[exception suppressed]
+    D --&gt;|&quot;returns None/False&quot;| F[exception propagates]
+</code></pre>
+<h2 id="6-__new__-vs-__init__">6. <code>__new__</code> vs <code>__init__</code></h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><code>__new__</code></th>
+<th><code>__init__</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Job</td>
+<td><strong>Create</strong> and return the instance</td>
+<td><strong>Initialize</strong> the created instance</td>
+</tr>
+<tr>
+<td>First arg</td>
+<td><code>cls</code></td>
+<td><code>self</code></td>
+</tr>
+<tr>
+<td>Returns</td>
+<td>The new object</td>
+<td>Must return <code>None</code></td>
+</tr>
+<tr>
+<td>Need it when</td>
+<td>Subclassing immutables (<code>str</code>, <code>tuple</code>), interning/caching, singletons</td>
+<td>Almost always</td>
+</tr>
+</tbody>
+</table>
+<p>If <code>__new__</code> returns an object that isn't an instance of <code>cls</code>, <code>__init__</code> is
+<strong>skipped entirely</strong> — the escape hatch caching factories rely on.</p>
+<hr>
+<h2 id="key-takeaways">Key Takeaways</h2>
+<ul>
+<li>Dunders are called <em>by the interpreter</em>; you write them, built-ins invoke them.</li>
+<li><code>__eq__</code> without <code>__hash__</code> makes objects unhashable; hash only immutable state.</li>
+<li>Return <code>NotImplemented</code> from binary dunders so reflected operations get a chance.</li>
+<li><code>__getitem__</code> alone unlocks iteration, membership, and slicing.</li>
+<li><code>__new__</code> creates, <code>__init__</code> initializes — you rarely need the former.</li>
+</ul>
+<p>Next: <a href="../module_03_descriptors/README.md">Module 3 — Descriptors</a>.</p>
+<hr>
+<h2 id="files-in-this-module">Files in This Module</h2>
+<ul>
+<li><code>concepts.py</code> — all six sections, runnable with printed proof</li>
+<li><code>exercise.py</code> — build a full-featured <code>Vector</code> and a <code>Stopwatch</code> context manager</li>
+<li><code>solution.py</code> — reference solution</li>
+</ul>
+</body>
+</html>

@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 10: Governance, Security &amp; Quality</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-10-governance-security-quality">Module 10: Governance, Security &amp; Quality</h1>
+<h2 id="learning-objectives">Learning Objectives</h2>
+<ul>
+<li>Encrypt data with <strong>CMEK/Cloud KMS</strong> and understand default vs customer-managed keys.</li>
+<li>Protect sensitive data with <strong>Cloud DLP</strong> (Sensitive Data Protection): inspection,
+  de-identification, masking.</li>
+<li>Apply <strong>column-level</strong> and <strong>row-level</strong> security in BigQuery via <strong>policy tags</strong>.</li>
+<li>Govern the lake with <strong>Dataplex</strong> (zones, data quality, lineage, catalog).</li>
+<li>Isolate data exfiltration risk with <strong>VPC Service Controls</strong>.</li>
+</ul>
+<hr>
+<h2 id="1-encryption-cloud-kms">1. Encryption &amp; Cloud KMS</h2>
+<p>Everything on GCP is encrypted at rest by default (Google-managed keys). Upgrade to
+<strong>CMEK</strong> when you must control the key lifecycle/rotation, or <strong>CSEK/EKM</strong> for
+externally-held keys.</p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Who holds the key</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Google-managed (default)</td>
+<td>Google</td>
+<td>Baseline; no action needed</td>
+</tr>
+<tr>
+<td><strong>CMEK</strong> (Cloud KMS)</td>
+<td>You, in KMS</td>
+<td>Compliance, controlled rotation/revocation</td>
+</tr>
+<tr>
+<td><strong>EKM</strong> (External Key Manager)</td>
+<td>You, off-cloud</td>
+<td>Regulatory "key never on Google" needs</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-hcl">resource &quot;google_bigquery_dataset&quot; &quot;secure&quot; {
+  dataset_id = &quot;secure&quot;
+  default_encryption_configuration { kms_key_name = google_kms_crypto_key.bq.id }
+}
+</code></pre>
+<blockquote>
+<p><strong>Gotcha:</strong> each service's <strong>service agent</strong> needs
+<code>roles/cloudkms.cryptoKeyEncrypterDecrypter</code> on the key, or encrypted resource creation
+fails. And the <strong>key must be in the same region</strong> as the data.</p>
+</blockquote>
+<h2 id="2-cloud-dlp-sensitive-data-protection">2. Cloud DLP / Sensitive Data Protection</h2>
+<p>Discover and protect PII (emails, credit cards, national IDs) with <strong>infoType detectors</strong>.</p>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Inspection</strong></td>
+<td>Find &amp; classify sensitive data (scan GCS/BigQuery)</td>
+</tr>
+<tr>
+<td><strong>De-identification</strong></td>
+<td>Redact, mask, or replace with a token</td>
+</tr>
+<tr>
+<td><strong>Format-preserving / tokenization</strong></td>
+<td>Reversible pseudonymization (KMS-wrapped key)</td>
+</tr>
+<tr>
+<td><strong>Re-identification risk</strong></td>
+<td>k-anonymity / l-diversity analysis</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Exam tip:</strong> "mask credit-card numbers but keep the last 4" → DLP
+<strong>de-identification</strong> with a masking/crypto transformation.</p>
+</blockquote>
+<h2 id="3-bigquery-column-row-level-security">3. BigQuery Column- &amp; Row-Level Security</h2>
+<ul>
+<li><strong>Column-level:</strong> attach <strong>policy tags</strong> (from a Data Catalog taxonomy) to sensitive
+  columns; only principals with the tag's Fine-Grained Reader role see them.</li>
+<li><strong>Row-level:</strong> <code>CREATE ROW ACCESS POLICY</code> filters rows per principal (e.g. region reps
+  see only their region).</li>
+<li><strong>Dynamic data masking:</strong> policy-tag-based masking (hash/nullify) instead of full block.</li>
+</ul>
+<pre><code class="language-sql">CREATE ROW ACCESS POLICY emea_only ON sales.orders
+GRANT TO ('group:emea-team@example.com')
+FILTER USING (region = 'EMEA');
+</code></pre>
+<h2 id="4-dataplex-govern-the-lakehouse">4. Dataplex — Govern the Lakehouse</h2>
+<p>Dataplex unifies distributed data (GCS + BigQuery) into logical <strong>lakes → zones →
+assets</strong>, adding:
+- <strong>Data quality</strong> scans (rules → pass/fail metrics).
+- <strong>Data profiling</strong> and <strong>auto-discovery</strong> (creates BigLake/external tables).
+- <strong>Lineage</strong> and a <strong>catalog</strong> (searchable metadata, policy tags).</p>
+<table>
+<thead>
+<tr>
+<th>Zone type</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Raw zone</strong></td>
+<td>As-ingested, any format</td>
+</tr>
+<tr>
+<td><strong>Curated zone</strong></td>
+<td>Structured, quality-enforced (Parquet/BQ)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="5-vpc-service-controls-network">5. VPC Service Controls &amp; Network</h2>
+<ul>
+<li><strong>VPC Service Controls (VPC-SC):</strong> draw a <strong>service perimeter</strong> around BigQuery/GCS/etc.
+  so data can't be copied to projects outside it — mitigates <strong>exfiltration</strong> even by
+  credentialed insiders.</li>
+<li><strong>Private Google Access / Private Service Connect:</strong> reach GCP APIs without public IPs.</li>
+<li><strong>IAM Conditions:</strong> time-bound / resource-scoped grants.</li>
+</ul>
+<blockquote>
+<p><strong>Exam tip:</strong> "prevent data from being exfiltrated to another project even with valid
+credentials" → <strong>VPC Service Controls perimeter</strong> (not IAM alone).</p>
+</blockquote>
+<hr>
+<h2 id="exam-focus">🎯 Exam Focus</h2>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Answer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>"Control the encryption key, rotate/revoke it"</td>
+<td><strong>CMEK</strong> (Cloud KMS)</td>
+</tr>
+<tr>
+<td>"Key must never reside on Google"</td>
+<td><strong>EKM</strong></td>
+</tr>
+<tr>
+<td>"Find &amp; mask PII across BigQuery/GCS"</td>
+<td><strong>Cloud DLP</strong> inspect + de-identify</td>
+</tr>
+<tr>
+<td>"Hide salary column from most analysts"</td>
+<td><strong>Policy tags</strong> (column-level security)</td>
+</tr>
+<tr>
+<td>"Reps see only their region's rows"</td>
+<td><strong>Row access policy</strong></td>
+</tr>
+<tr>
+<td>"Stop data copy to outside projects"</td>
+<td><strong>VPC Service Controls</strong> perimeter</td>
+</tr>
+<tr>
+<td>"Enforce data-quality rules on the lake"</td>
+<td><strong>Dataplex</strong> data quality scan</td>
+</tr>
+</tbody>
+</table>
+<h3 id="practice-questions">Practice Questions</h3>
+<ol>
+<li><strong>Regulator requires you to control and rotate the encryption key for a dataset.</strong> →
+   <strong>CMEK</strong> with Cloud KMS; grant the BigQuery service agent encrypt/decrypt on the key.</li>
+<li><strong>Analysts must query a table but never see the <code>ssn</code> column.</strong> → Apply a <strong>policy
+   tag</strong> to <code>ssn</code> and grant Fine-Grained Reader only to authorized users (column-level
+   security).</li>
+<li><strong>Even with valid credentials, no one should copy BigQuery data to a personal
+   project.</strong> → <strong>VPC Service Controls</strong> perimeter around BigQuery.</li>
+<li><strong>Mask credit cards to last-4 in exports.</strong> → <strong>DLP de-identification</strong> (masking
+   transform).</li>
+<li><strong>Sales reps should only see rows for their own region.</strong> → <strong>Row access policy</strong>
+   filtering on region.</li>
+<li><strong>You need automated data-quality checks and a searchable catalog over the lake.</strong> →
+   <strong>Dataplex</strong> (quality scans + catalog/lineage).</li>
+</ol>
+<hr>
+<h2 id="key-takeaways">Key Takeaways</h2>
+<ul>
+<li><strong>CMEK/EKM</strong> give you key control; the service agent needs KMS encrypt/decrypt and
+  region match.</li>
+<li><strong>DLP</strong> discovers and de-identifies PII; <strong>policy tags</strong> and <strong>row access policies</strong>
+  enforce fine-grained BigQuery security.</li>
+<li><strong>Dataplex</strong> governs the lakehouse (zones, quality, lineage, catalog).</li>
+<li><strong>VPC Service Controls</strong> stop exfiltration that IAM alone can't.</li>
+</ul>
+<p>Next: <a href="../module_11_ml_analytics/README.md">Module 11 — ML &amp; Analytics Integration</a>.</p>
+<hr>
+<h2 id="files-in-this-module">Files in This Module</h2>
+<ul>
+<li><code>concepts.tf</code> — KMS key + CMEK dataset, a Data Catalog policy-tag taxonomy, and a
+  Dataplex lake/zone</li>
+<li><code>exercise.md</code> — secure a dataset with CMEK + column-level security</li>
+<li><code>solution.tf</code> — reference solution</li>
+</ul>
+</body>
+</html>

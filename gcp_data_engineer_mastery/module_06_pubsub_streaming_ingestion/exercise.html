@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 6 Exercise: Ordered, Dead-Lettered Ingestion</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-6-exercise-ordered-dead-lettered-ingestion">Module 6 Exercise: Ordered, Dead-Lettered Ingestion</h1>
+<h2 id="goal">Goal</h2>
+<p>Build a robust ingestion path for <strong>payment events</strong> that (a) preserves per-account
+order, (b) never silently drops poison messages, and (c) enforces a schema. Then publish
+test messages and watch a bad one land in the dead-letter queue.</p>
+<h2 id="tasks">Tasks</h2>
+<p>Create <code>main.tf</code>. Reference <code>solution.tf</code> after attempting.</p>
+<h3 id="todo-1-schema-topic">TODO 1 — Schema + topic</h3>
+<p>Define an Avro <code>payment</code> schema (<code>payment_id</code>, <code>account_id</code>, <code>amount_cents:long</code>,
+<code>ts:long</code>) and bind it to a <code>payments</code> topic.</p>
+<h3 id="todo-2-dead-letter-path">TODO 2 — Dead-letter path</h3>
+<p>Create a <code>payments-dlq</code> topic and a subscription on it.</p>
+<h3 id="todo-3-main-subscription">TODO 3 — Main subscription</h3>
+<p>A pull subscription <code>payments-worker</code> with:
+- <strong>message ordering enabled</strong>,
+- <strong>exactly-once enabled</strong>,
+- a <strong>dead-letter policy</strong> → <code>payments-dlq</code>, <code>max_delivery_attempts = 5</code>,
+- <code>ack_deadline_seconds = 30</code>.</p>
+<h3 id="todo-4-grant-the-pubsub-service-agent">TODO 4 — Grant the Pub/Sub service agent</h3>
+<p>Grant the Pub/Sub service account <code>roles/pubsub.publisher</code> on the DLQ topic (required for
+dead-lettering to work).</p>
+<h2 id="self-verification">Self-Verification</h2>
+<pre><code class="language-bash">terraform init &amp;&amp; terraform apply -var project_id=&quot;$PROJECT_ID&quot;
+
+# Publish an ORDERED valid message (note the ordering key):
+gcloud pubsub topics publish payments \
+  --message='{&quot;payment_id&quot;:&quot;p1&quot;,&quot;account_id&quot;:&quot;a1&quot;,&quot;amount_cents&quot;:500,&quot;ts&quot;:1}' \
+  --ordering-key=a1
+
+# Pull it (ordered subs must be pulled per key):
+gcloud pubsub subscriptions pull payments-worker --auto-ack --limit=1
+#   → shows the message
+
+# Confirm the DLQ subscription exists:
+gcloud pubsub subscriptions describe payments-dlq-sub --format=&quot;value(name)&quot;
+
+# Confirm exactly-once + ordering are set:
+gcloud pubsub subscriptions describe payments-worker \
+  --format=&quot;value(enableExactlyOnceDelivery, enableMessageOrdering)&quot;
+#   → True   True
+</code></pre>
+<h2 id="stretch-goals">Stretch Goals</h2>
+<ol>
+<li>Add a <strong>BigQuery subscription</strong> that writes valid payments straight to a table.</li>
+<li>Publish a message that violates the schema and confirm it is <strong>rejected at publish</strong>.</li>
+<li>Simulate repeated nack (don't ack) and observe delivery to the DLQ after 5 attempts.</li>
+</ol>
+<h2 id="cleanup">Cleanup</h2>
+<pre><code class="language-bash">terraform destroy -var project_id=&quot;$PROJECT_ID&quot;
+</code></pre>
+</body>
+</html>

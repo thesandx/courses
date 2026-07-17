@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 7: Context Engineering, Memory &amp; Evals</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-7-context-engineering-memory-evals">Module 7: Context Engineering, Memory &amp; Evals</h1>
+<h2 id="learning-objectives">Learning Objectives</h2>
+<ul>
+<li>Distinguish <strong>context engineering from prompt engineering</strong>: managing <em>everything</em>
+  in the window — instructions, history, retrievals, tool results — as a budget.</li>
+<li>Implement a <strong>token budgeter</strong> that packs the window by priority and degrades
+  gracefully instead of truncating blindly.</li>
+<li>Build <strong>short-term memory</strong> (a rolling conversation buffer with summarization) and
+  <strong>long-term memory</strong> (vector-store recall of durable facts).</li>
+<li>Understand memory in <strong>multi-agent</strong> settings: what is shared, what is private,
+  and why "everyone remembers everything" recreates the isolation bugs of Module 6.</li>
+<li>Build an <strong>eval harness</strong> for generated answers: exact checks, grounding checks,
+  and a rubric-scoring judge — then run it end-to-end over a pipeline.</li>
+</ul>
+<hr>
+<h2 id="1-context-engineering-vs-prompt-engineering">1. Context Engineering vs Prompt Engineering</h2>
+<p>Prompt engineering wordsmiths one message. Context engineering manages the whole
+window over time:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Prompt engineering</th>
+<th>Context engineering</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Object</td>
+<td>One string</td>
+<td>The full window: system + history + retrievals + tool results + memory</td>
+</tr>
+<tr>
+<td>Question</td>
+<td>"How do I phrase this?"</td>
+<td>"What earns its tokens <em>this</em> call?"</td>
+</tr>
+<tr>
+<td>Failure</td>
+<td>Awkward answer</td>
+<td>Truncated instructions, forgotten decisions, context rot</td>
+</tr>
+</tbody>
+</table>
+<p>Two facts drive everything: the window is <strong>finite</strong>, and (Module 1) everything in
+it <strong>competes for attention</strong> — irrelevant content actively degrades answers, it
+doesn't just cost money. So context is a <em>budget allocation problem</em>:</p>
+<pre><code>priority 1: system contract        (never dropped)
+priority 2: the current question   (never dropped)
+priority 3: retrieved evidence     (drop lowest-relevance first)
+priority 4: conversation history   (summarize, then drop oldest)
+</code></pre>
+<h2 id="2-short-term-memory-the-rolling-buffer">2. Short-Term Memory: The Rolling Buffer</h2>
+<p>Conversations outgrow windows. The standard shape: keep the last N turns verbatim,
+<strong>summarize</strong> the overflow into a compact digest, never silently drop.</p>
+<pre><code class="language-mermaid">flowchart LR
+    T[new turn] --&gt; B[buffer]
+    B -- over budget --&gt; S[summarize oldest turns] --&gt; D[digest]
+    D --&gt; C[context: digest + recent turns verbatim]
+    B -- within budget --&gt; C
+</code></pre>
+<blockquote>
+<p><strong>Pitfall:</strong> summarization is lossy in a <em>biased</em> way — decisions and numbers
+survive, hedges and reasoning die. Pin critical facts (order IDs, constraints the
+user stated) into structured memory instead of trusting the summary to keep them.</p>
+</blockquote>
+<h2 id="3-long-term-memory-retrieval-again">3. Long-Term Memory: Retrieval Again</h2>
+<p>Durable facts ("Ada prefers email", "staging DB is read-only") must survive across
+sessions. Long-term memory is RAG applied to your own past: store facts in a vector
+store at write time, retrieve the top-k <em>relevant to the current question</em> at read
+time. Everything from Modules 2–3 applies — including the evals.</p>
+<p>In <strong>multi-agent</strong> systems memory needs an owner: shared memory (the plan, user
+preferences) is written by the orchestrator; a worker's scratch memory stays private.
+Letting every agent write shared memory reintroduces contradiction (Module 6) as a
+<em>persistent</em> bug.</p>
+<h2 id="4-evals-for-generation">4. Evals for Generation</h2>
+<p>Module 3 evaluated retrieval. Generation needs three layers, cheapest first:</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Checks</th>
+<th>Catches</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Deterministic</td>
+<td>Exact/regex match, JSON parses, required fields</td>
+<td>Format drift, flat wrong answers</td>
+</tr>
+<tr>
+<td><strong>Grounding</strong></td>
+<td>Is every claimed fact supported by the retrieved context?</td>
+<td>Hallucination (the meme's "edge case")</td>
+</tr>
+<tr>
+<td>LLM-as-judge</td>
+<td>Rubric scoring: correct? complete? concise?</td>
+<td>Quality no regex can see</td>
+</tr>
+</tbody>
+</table>
+<p>Rules that keep evals honest:
+1. <strong>Judge with a rubric, not vibes</strong> — "score correctness 0–2 against this reference"
+   beats "is this good?".
+2. <strong>Calibrate the judge</strong> on a handful of hand-labeled cases before trusting it.
+3. <strong>Evals are regression tests.</strong> Run the suite on every prompt/retriever change;
+   a one-point drop caught pre-deploy is worth the whole harness.</p>
+<p><code>concepts.py</code> ends by running a full suite over the Module 2 pipeline — the
+"run a full eval suite on your pipeline" moment this module exists for.</p>
+<hr>
+<h2 id="key-takeaways">Key Takeaways</h2>
+<ul>
+<li>Context is a prioritized token budget; irrelevant content degrades, not just costs.</li>
+<li>Short-term memory = recent turns verbatim + summarized overflow; pin critical facts.</li>
+<li>Long-term memory is RAG over your own past; in multi-agent systems, memory needs
+  an owner.</li>
+<li>Eval generation in layers: deterministic → grounding → rubric judge, calibrated.</li>
+<li>Evals are regression tests for AI behavior — no change ships without the suite.</li>
+</ul>
+<p>Next: <a href="../module_08_production/README.md">Module 8 — Production AI Engineering</a>.</p>
+<hr>
+<h2 id="files-in-this-module">Files in This Module</h2>
+<ul>
+<li><code>concepts.py</code> — budget packer, rolling buffer + summarizer, vector-store memory, three-layer eval harness</li>
+<li><code>exercise.py</code> — build the budgeter, memory, and grounding check yourself</li>
+<li><code>solution.py</code> — reference solution</li>
+</ul>
+</body>
+</html>

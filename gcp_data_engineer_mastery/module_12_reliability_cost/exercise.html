@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 12 Exercise: Instrument for Reliability &amp; Cost</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-12-exercise-instrument-for-reliability-cost">Module 12 Exercise: Instrument for Reliability &amp; Cost</h1>
+<h2 id="goal">Goal</h2>
+<p>Make a streaming pipeline observable and cost-safe: alert when it falls behind (freshness
+SLO), alert on error log spikes, and put a budget on the project. This is the "maintain &amp;
+automate workloads" exam domain in miniature.</p>
+<h2 id="tasks">Tasks</h2>
+<p>Create <code>main.tf</code>. Reference <code>solution.tf</code> after attempting.</p>
+<h3 id="todo-1-notification-channel">TODO 1 — Notification channel</h3>
+<p>An email <code>google_monitoring_notification_channel</code> for on-call.</p>
+<h3 id="todo-2-freshness-slo-alert">TODO 2 — Freshness SLO alert</h3>
+<p>An alert policy on <strong>Dataflow data watermark age</strong> (metric
+<code>dataflow.googleapis.com/job/data_watermark_age</code>) firing when lag &gt; 900s (15 min) for
+5 minutes → this encodes a <strong>15-minute freshness SLO</strong>.</p>
+<h3 id="todo-3-error-rate-alert">TODO 3 — Error-rate alert</h3>
+<p>A <strong>log-based metric</strong> counting <code>severity&gt;=ERROR</code> logs, plus an alert policy that fires
+when the error count exceeds a threshold.</p>
+<h3 id="todo-4-budget">TODO 4 — Budget</h3>
+<p>A <code>google_billing_budget</code> of $100 with alerts at 50%, 90%, 100% scoped to the project.</p>
+<h3 id="todo-5-note-the-cap-caveat">TODO 5 — Note the cap caveat</h3>
+<p>In a comment, explain how you'd make spend actually <strong>stop</strong> at 100% (budget → Pub/Sub →
+function disabling billing).</p>
+<h2 id="self-verification">Self-Verification</h2>
+<pre><code class="language-bash">terraform init &amp;&amp; terraform apply \
+  -var project_id=&quot;$PROJECT_ID&quot; \
+  -var billing_account=&quot;$BILLING_ACCOUNT&quot; \
+  -var alert_email=&quot;you@example.com&quot;
+
+# Alert policies exist:
+gcloud alpha monitoring policies list --format=&quot;value(displayName)&quot;
+#   → freshness + error-rate policies
+
+# Log-based metric exists:
+gcloud logging metrics list --filter=&quot;name:pipeline_errors&quot; --format=&quot;value(name)&quot;
+
+# Budget exists:
+gcloud billing budgets list --billing-account=&quot;$BILLING_ACCOUNT&quot; \
+  --format=&quot;value(displayName,amount.specifiedAmount.units)&quot;
+#   → your budget, 100
+</code></pre>
+<h2 id="stretch-goals">Stretch Goals</h2>
+<ol>
+<li>Wire the 100% budget threshold to a <strong>Pub/Sub topic</strong> and sketch the billing-disable
+   function.</li>
+<li>Add a <strong>Monitoring dashboard</strong> tiling watermark lag, backlog, and error rate.</li>
+<li>Define the SLO formally with a <strong>service + SLO</strong> resource and track the error budget.</li>
+</ol>
+<h2 id="cleanup">Cleanup</h2>
+<pre><code class="language-bash">terraform destroy \
+  -var project_id=&quot;$PROJECT_ID&quot; \
+  -var billing_account=&quot;$BILLING_ACCOUNT&quot; \
+  -var alert_email=&quot;you@example.com&quot;
+</code></pre>
+</body>
+</html>

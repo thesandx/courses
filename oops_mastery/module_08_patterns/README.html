@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 8: Design Patterns — The Pythonic Versions</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-8-design-patterns-the-pythonic-versions">Module 8: Design Patterns — The Pythonic Versions</h1>
+<h2 id="learning-objectives">Learning Objectives</h2>
+<ul>
+<li>Implement six core patterns — Singleton, Factory, Strategy, Observer, Adapter,
+  Builder — in idiomatic Python.</li>
+<li>Recognize when a GoF pattern <strong>collapses into a language feature</strong> (first-class
+  functions, modules, kwargs) and ship the simpler version.</li>
+<li>Choose the right variant: module-level singleton vs metaclass; registry factory vs
+  <code>if</code> ladder; function strategy vs class strategy.</li>
+<li>Wire an event-driven <strong>Observer</strong> with proper unsubscribe and error isolation.</li>
+<li>Know each pattern's failure modes (singleton = global state, observer = hidden
+  control flow).</li>
+</ul>
+<hr>
+<h2 id="1-patterns-are-a-vocabulary-not-a-shopping-list">1. Patterns Are a Vocabulary, Not a Shopping List</h2>
+<p>The GoF book targeted C++/Java, languages without first-class functions or modules.
+Python absorbs several patterns outright:</p>
+<table>
+<thead>
+<tr>
+<th>GoF pattern</th>
+<th>Pythonic reality</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Strategy</td>
+<td>often just <strong>pass a function</strong> (<code>sorted(key=...)</code>)</td>
+</tr>
+<tr>
+<td>Command</td>
+<td>a callable / <code>functools.partial</code></td>
+</tr>
+<tr>
+<td>Iterator</td>
+<td>built into the language (<code>__iter__</code>, generators)</td>
+</tr>
+<tr>
+<td>Template Method</td>
+<td>ABC with concrete method calling abstract ones (Module 4)</td>
+</tr>
+<tr>
+<td>Decorator (GoF)</td>
+<td>usually <code>@decorator</code> syntax (Module 7)</td>
+</tr>
+<tr>
+<td>Singleton</td>
+<td><strong>a module</strong> — imported once, shared everywhere</td>
+</tr>
+</tbody>
+</table>
+<p>Use the class-based version when you need <em>state, multiple methods, or swapping at
+runtime</em>; use the language feature when you don't.</p>
+<h2 id="2-singleton">2. Singleton</h2>
+<p>Three implementations, in order of preference:</p>
+<table>
+<thead>
+<tr>
+<th>Variant</th>
+<th>How</th>
+<th>Trade-off</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Module</strong></td>
+<td>put state/functions at module top level</td>
+<td>simplest; the import system guarantees "once"</td>
+</tr>
+<tr>
+<td><strong>Metaclass</strong></td>
+<td><code>SingletonMeta.__call__</code> caches instances (Module 6)</td>
+<td>transparent to callers; testing pain</td>
+</tr>
+<tr>
+<td><code>__new__</code> cache</td>
+<td>override <code>__new__</code></td>
+<td><code>__init__</code> re-runs on every call!</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Pitfall:</strong> the <code>__new__</code> variant re-runs <code>__init__</code> each time <code>Singleton()</code> is
+called, silently resetting state. The metaclass variant avoids this because
+<code>Meta.__call__</code> skips the whole construction pipeline on a cache hit.
+Bigger pitfall: a singleton is global state — inject it (Module 9) rather than
+importing it everywhere, or tests will fight each other.</p>
+</blockquote>
+<h2 id="3-factory">3. Factory</h2>
+<p>The goal: callers say <em>what</em> they want, not <em>which class</em> to construct.</p>
+<pre><code class="language-python">class Exporter(Protocol):
+    def export(self, data) -&gt; str: ...
+
+_EXPORTERS: dict[str, Callable[[], Exporter]] = {}
+
+def register(fmt: str):
+    def deco(cls):
+        _EXPORTERS[fmt] = cls
+        return cls
+    return deco
+
+def make_exporter(fmt: str) -&gt; Exporter:      # the factory
+    try:
+        return _EXPORTERS[fmt]()
+    except KeyError:
+        raise ValueError(f&quot;unknown format {fmt!r}&quot;) from None
+</code></pre>
+<p>Registry + decorator = Open/Closed factory (Module 5): new formats register
+themselves, the factory never changes. <code>@classmethod</code> alternative constructors
+(<code>dict.fromkeys</code>, <code>Temperature.from_fahrenheit</code>) are the <em>simple factory</em> end of the
+same idea.</p>
+<h2 id="4-strategy">4. Strategy</h2>
+<pre><code class="language-python"># Function strategies: perfect when the strategy is one behavior
+def flat_shipping(order): return 5.0
+def weight_shipping(order): return order.weight * 0.5
+
+checkout(order, shipping=weight_shipping)
+
+# Class strategies: when a strategy has state or several methods
+class TieredShipping:
+    def __init__(self, tiers): self.tiers = tiers
+    def __call__(self, order): ...               # still callable!
+</code></pre>
+<p>Making class strategies <strong>callable</strong> (<code>__call__</code>, Module 2) lets both kinds mix in
+one registry — the caller never knows which it got.</p>
+<h2 id="5-observer">5. Observer</h2>
+<pre><code class="language-mermaid">flowchart LR
+    S[Subject / EventEmitter] --&gt;|notify| O1[logger]
+    S --&gt;|notify| O2[metrics]
+    S --&gt;|notify| O3[cache invalidator]
+</code></pre>
+<p>Design decisions that separate toy observers from production ones:</p>
+<table>
+<thead>
+<tr>
+<th>Decision</th>
+<th>Recommendation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Unsubscribe</td>
+<td><code>subscribe</code> returns an unsubscribe callable</td>
+</tr>
+<tr>
+<td>One observer raises</td>
+<td>catch, collect, keep notifying the rest</td>
+</tr>
+<tr>
+<td>Notification order</td>
+<td>document it or don't promise it</td>
+</tr>
+<tr>
+<td>Memory</td>
+<td>consider <code>weakref</code> so observers don't leak</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Pitfall:</strong> observers make control flow invisible — "who runs when I set this?"
+Keep handlers small and side-effect-obvious, or debugging becomes archaeology.</p>
+</blockquote>
+<h2 id="6-adapter">6. Adapter</h2>
+<p>Make an incompatible interface fit the one your code expects — the pattern you use
+when integrating third-party code you can't edit.</p>
+<pre><code class="language-python">class LegacyPrinter:                       # can't change this
+    def print_text(self, text, uppercase=False): ...
+
+class PrinterAdapter:                      # object adapter: wraps (composition)
+    def __init__(self, legacy): self._legacy = legacy
+    def write(self, text): self._legacy.print_text(text)   # our Protocol
+</code></pre>
+<p>Prefer the <strong>object adapter</strong> (wrap) over the class adapter (multiple inheritance) —
+composition keeps the legacy API from leaking through.</p>
+<h2 id="7-builder">7. Builder</h2>
+<p>Java needs builders because it lacks keyword arguments. Python often doesn't:</p>
+<table>
+<thead>
+<tr>
+<th>Situation</th>
+<th>Tool</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>≤ ~6 optional params</td>
+<td><strong>keyword args / dataclass with defaults</strong></td>
+</tr>
+<tr>
+<td>Stepwise construction, validation at the end</td>
+<td>Builder with <code>.build()</code></td>
+</tr>
+<tr>
+<td>Immutable target, fluent config</td>
+<td>Builder returning <code>self</code> per step</td>
+</tr>
+</tbody>
+</table>
+<p>If you do build one: each method <code>return self</code> (fluent chaining), and <code>.build()</code>
+validates completeness and produces the immutable product.</p>
+<hr>
+<h2 id="key-takeaways">Key Takeaways</h2>
+<ul>
+<li>Reach for the language feature first; the class-based pattern when state/swapping
+  demands it.</li>
+<li>Singleton: module first, metaclass if you must, never bare <code>__new__</code>.</li>
+<li>Factory = registry + Protocol; it's OCP applied to construction.</li>
+<li>Strategies are just callables; classes and functions can share a registry.</li>
+<li>Observer needs unsubscribe + error isolation before it's production-ready.</li>
+<li>Builder earns its place only when kwargs stop scaling.</li>
+</ul>
+<p>Next: <a href="../module_09_di/README.md">Module 9 — Dependency Injection</a>.</p>
+<hr>
+<h2 id="files-in-this-module">Files in This Module</h2>
+<ul>
+<li><code>concepts.py</code> — all six patterns, runnable</li>
+<li><code>exercise.py</code> — build a notification center, shipping strategies, and a query builder</li>
+<li><code>solution.py</code> — reference solution</li>
+</ul>
+</body>
+</html>

@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 8: Dataproc &amp; Spark</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-8-dataproc-spark">Module 8: Dataproc &amp; Spark</h1>
+<h2 id="learning-objectives">Learning Objectives</h2>
+<ul>
+<li>Run Spark/Hadoop on GCP with <strong>Dataproc</strong> clusters and <strong>Serverless Spark</strong> batches.</li>
+<li>Apply the <strong>ephemeral, job-scoped cluster</strong> pattern (compute separate from storage).</li>
+<li>Use <strong>autoscaling</strong>, <strong>preemptible/Spot workers</strong>, and initialization actions.</li>
+<li>Migrate on-prem Hadoop/Spark to GCP and know when Dataproc beats Dataflow/BigQuery.</li>
+<li>Read/write <strong>GCS (not HDFS)</strong> and integrate with BigQuery.</li>
+</ul>
+<hr>
+<h2 id="1-dataproc-deployment-models">1. Dataproc Deployment Models</h2>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>What</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Cluster</strong></td>
+<td>Managed Hadoop/Spark VMs you create/delete</td>
+<td>Interactive, notebooks, long-running, custom components</td>
+</tr>
+<tr>
+<td><strong>Serverless Spark (Batches)</strong></td>
+<td>Submit a Spark job, no cluster to size</td>
+<td>One-off/scheduled batch ETL, least ops</td>
+</tr>
+<tr>
+<td><strong>Serverless Interactive</strong></td>
+<td>Notebook sessions</td>
+<td>Ad-hoc analysis</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Exam tip:</strong> "run a Spark job without managing a cluster" → <strong>Serverless Spark
+batch</strong>. "need HBase/Presto/custom Hadoop ecosystem components or notebooks" → a
+<strong>cluster</strong>.</p>
+</blockquote>
+<h2 id="2-the-ephemeral-cluster-pattern">2. The Ephemeral Cluster Pattern</h2>
+<p>The cloud-native way: <strong>don't keep a long-running cluster with data in HDFS.</strong> Store data
+in <strong>GCS</strong>, spin up a cluster for a job, run, then delete it. Compute is disposable;
+storage is durable and shared.</p>
+<pre><code class="language-mermaid">flowchart LR
+    G[(GCS: data)] --&gt; C[Ephemeral Dataproc cluster]
+    C --&gt;|write results| G2[(GCS / BigQuery)]
+    C -.deleted after job.-&gt; X[💀]
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>HDFS on a static cluster</th>
+<th>GCS + ephemeral cluster</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Pay for idle compute 24/7</td>
+<td>Pay only during jobs</td>
+</tr>
+<tr>
+<td>Data locked to the cluster</td>
+<td>Data shared, durable, versioned</td>
+</tr>
+<tr>
+<td>Scaling = re-balance</td>
+<td>Scaling = new cluster size</td>
+</tr>
+</tbody>
+</table>
+<p>Use <code>--max-idle</code> / scheduled deletion, or Cloud Composer/Workflow Templates to
+create→submit→delete.</p>
+<h2 id="3-cost-levers">3. Cost Levers</h2>
+<table>
+<thead>
+<tr>
+<th>Lever</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Preemptible / Spot secondary workers</strong></td>
+<td>Up to ~80% cheaper; can be reclaimed — use for fault-tolerant batch</td>
+</tr>
+<tr>
+<td><strong>Autoscaling policy</strong></td>
+<td>Grow/shrink workers by YARN pending memory</td>
+</tr>
+<tr>
+<td><strong>Serverless</strong></td>
+<td>No idle cost; pay per job</td>
+</tr>
+<tr>
+<td><strong>Ephemeral clusters</strong></td>
+<td>No idle cost between jobs</td>
+</tr>
+<tr>
+<td><strong><code>--max-idle</code></strong></td>
+<td>Auto-delete idle clusters</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Pitfall:</strong> put <strong>only secondary (not primary) workers</strong> on Spot, and keep enough
+on-demand workers to hold shuffle data — losing all workers mid-shuffle fails the job.</p>
+</blockquote>
+<h2 id="4-migration-on-prem-hadoop-gcp">4. Migration: On-Prem Hadoop → GCP</h2>
+<table>
+<thead>
+<tr>
+<th>On-prem</th>
+<th>GCP target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>HDFS</td>
+<td><strong>Cloud Storage</strong> (via the GCS connector, <code>gs://</code>)</td>
+</tr>
+<tr>
+<td>Hive metastore</td>
+<td><strong>Dataproc Metastore</strong> (managed) / BigQuery</td>
+</tr>
+<tr>
+<td>Spark/MapReduce jobs</td>
+<td><strong>Dataproc</strong> (minimal code change)</td>
+</tr>
+<tr>
+<td>Oozie</td>
+<td><strong>Cloud Composer</strong> (Airflow)</td>
+</tr>
+<tr>
+<td>Impala/Presto</td>
+<td><strong>BigQuery</strong> or Dataproc Trino</td>
+</tr>
+</tbody>
+</table>
+<p>Lift-and-shift Spark first (Dataproc), then modernize hot paths to BigQuery/Dataflow.</p>
+<h2 id="5-dataproc-vs-dataflow-vs-bigquery-again-sharper">5. Dataproc vs Dataflow vs BigQuery (again, sharper)</h2>
+<table>
+<thead>
+<tr>
+<th>Choose</th>
+<th>When</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Dataproc</strong></td>
+<td>You already have <strong>Spark/Hadoop/Hive</strong> code or need those ecosystem tools</td>
+</tr>
+<tr>
+<td><strong>Dataflow</strong></td>
+<td>New pipelines, <strong>streaming</strong>, want fully-managed autoscaling Beam</td>
+</tr>
+<tr>
+<td><strong>BigQuery</strong></td>
+<td>The transform is expressible in <strong>SQL</strong> (ELT)</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="exam-focus">🎯 Exam Focus</h2>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Answer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>"Run existing PySpark nightly, no cluster management"</td>
+<td><strong>Serverless Spark batch</strong></td>
+</tr>
+<tr>
+<td>"Migrate on-prem Hadoop with minimal rewrite"</td>
+<td><strong>Dataproc</strong> + GCS (replace HDFS)</td>
+</tr>
+<tr>
+<td>"Cut Dataproc cost for a fault-tolerant batch job"</td>
+<td><strong>Spot secondary workers</strong> + autoscaling</td>
+</tr>
+<tr>
+<td>"Cluster sits idle between jobs"</td>
+<td><strong>Ephemeral clusters</strong> or <code>--max-idle</code>, or Serverless</td>
+</tr>
+<tr>
+<td>"Need Hive metastore in the cloud"</td>
+<td><strong>Dataproc Metastore</strong></td>
+</tr>
+<tr>
+<td>"Replace Oozie workflows"</td>
+<td><strong>Cloud Composer</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="practice-questions">Practice Questions</h3>
+<ol>
+<li><strong>Nightly PySpark ETL, team doesn't want to manage clusters.</strong> → <strong>Dataproc Serverless
+   batch</strong>.</li>
+<li><strong>On-prem Hadoop cluster (HDFS + Spark + Hive) must move to GCP cheaply and fast.</strong> →
+   <strong>Dataproc</strong> with data in <strong>GCS</strong>; Hive → <strong>Dataproc Metastore</strong>; keep Spark code.</li>
+<li><strong>Batch job cost is too high on all-on-demand workers.</strong> → Add <strong>Spot secondary
+   workers</strong> (+ autoscaling), keep primaries on-demand for shuffle.</li>
+<li><strong>A cluster is used a few hours/day but billed 24/7.</strong> → Make it <strong>ephemeral</strong>
+   (create→run→delete) or set <code>--max-idle</code>; or go <strong>Serverless</strong>.</li>
+<li><strong>Transformation is just aggregations/joins expressible in SQL.</strong> → Skip Spark; use
+   <strong>BigQuery</strong>.</li>
+</ol>
+<hr>
+<h2 id="key-takeaways">Key Takeaways</h2>
+<ul>
+<li>Prefer <strong>Serverless Spark</strong> or <strong>ephemeral clusters</strong> + <strong>GCS</strong> over static HDFS
+  clusters — no idle cost, durable shared storage.</li>
+<li>Cut cost with <strong>Spot secondary workers</strong> + <strong>autoscaling</strong>; keep primaries on-demand.</li>
+<li><strong>Dataproc</strong> = existing Spark/Hadoop; <strong>Dataflow</strong> = new/streaming; <strong>BigQuery</strong> = SQL.</li>
+<li>Migration: HDFS→GCS, Hive→Dataproc Metastore, Oozie→Composer.</li>
+</ul>
+<p>Next: <a href="../module_09_orchestration_composer/README.md">Module 9 — Orchestration with Cloud Composer</a>.</p>
+<hr>
+<h2 id="files-in-this-module">Files in This Module</h2>
+<ul>
+<li><code>concepts.tf</code> — an autoscaling ephemeral cluster (with Spot workers) and a Serverless
+  Spark batch</li>
+<li><code>job.py</code> — a PySpark job reading/writing GCS and BigQuery</li>
+<li><code>exercise.md</code> — run a word-count as a Serverless batch</li>
+<li><code>solution.tf</code> — reference solution</li>
+</ul>
+</body>
+</html>

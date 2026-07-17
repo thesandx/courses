@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 4: Protocols, ABCs &amp; Structural Typing</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-4-protocols-abcs-structural-typing">Module 4: Protocols, ABCs &amp; Structural Typing</h1>
+<h2 id="learning-objectives">Learning Objectives</h2>
+<ul>
+<li>Articulate <strong>duck typing</strong> and why idiomatic Python checks <em>behavior</em>, not type.</li>
+<li>Use <code>collections.abc</code> both to <strong>test</strong> capabilities (<code>isinstance(x, Iterable)</code>) and
+  to <strong>inherit</strong> mixin methods for free.</li>
+<li>Define <strong>Abstract Base Classes</strong> with <code>@abstractmethod</code> and know exactly when
+  instantiation fails.</li>
+<li>Write <strong><code>typing.Protocol</code></strong> classes for static <em>and</em> (with <code>@runtime_checkable</code>)
+  runtime structural checks — and know their limits.</li>
+<li>Implement the <strong>iterator protocol</strong> correctly (iterable vs iterator, why <code>__iter__</code>
+  returning <code>self</code> makes one-shot iterators).</li>
+</ul>
+<hr>
+<h2 id="1-duck-typing-capability-over-ancestry">1. Duck Typing: Capability over Ancestry</h2>
+<p><code>len(x)</code> doesn't care what <code>x</code> <em>is</em> — only that it defines <code>__len__</code>. Python's
+standard library is built on this: <code>json.dump</code> accepts anything with <code>.write</code>,
+<code>for</code> accepts anything with <code>__iter__</code>. The cost: errors surface at <em>call time</em>,
+deep in the stack. Modules 4's tools exist to move that error earlier.</p>
+<table>
+<thead>
+<tr>
+<th>Style</th>
+<th>Check</th>
+<th>Error appears</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>EAFP duck typing</td>
+<td>none — just call it</td>
+<td>mid-operation (<code>AttributeError</code>)</td>
+</tr>
+<tr>
+<td>ABC <code>isinstance</code></td>
+<td>nominal or <code>__subclasshook__</code></td>
+<td>at the boundary</td>
+</tr>
+<tr>
+<td><code>typing.Protocol</code></td>
+<td>structural, static</td>
+<td>in the type checker, before running</td>
+</tr>
+</tbody>
+</table>
+<h2 id="2-collectionsabc-interfaces-you-already-satisfy">2. <code>collections.abc</code>: Interfaces You Already Satisfy</h2>
+<p>Two superpowers:</p>
+<p><strong>a) Capability testing.</strong> <code>isinstance(x, Iterable)</code> is <code>True</code> for <em>any</em> class
+defining <code>__iter__</code> — even with no inheritance — because these ABCs implement
+<code>__subclasshook__</code> to check for the methods structurally.</p>
+<p><strong>b) Mixin methods.</strong> Inherit and implement a tiny core; the ABC derives the rest:</p>
+<table>
+<thead>
+<tr>
+<th>ABC</th>
+<th>You implement</th>
+<th>You get for free</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Sequence</code></td>
+<td><code>__getitem__</code>, <code>__len__</code></td>
+<td><code>__contains__</code>, <code>__iter__</code>, <code>__reversed__</code>, <code>index</code>, <code>count</code></td>
+</tr>
+<tr>
+<td><code>Mapping</code></td>
+<td><code>__getitem__</code>, <code>__len__</code>, <code>__iter__</code></td>
+<td><code>keys</code>, <code>values</code>, <code>items</code>, <code>get</code>, <code>__eq__</code>, <code>__contains__</code></td>
+</tr>
+<tr>
+<td><code>MutableSequence</code></td>
+<td>+ <code>__setitem__</code>, <code>__delitem__</code>, <code>insert</code></td>
+<td><code>append</code>, <code>extend</code>, <code>pop</code>, <code>remove</code>, <code>+=</code></td>
+</tr>
+<tr>
+<td><code>Set</code></td>
+<td><code>__contains__</code>, <code>__iter__</code>, <code>__len__</code></td>
+<td><code>&amp;</code>, <code>|</code>, <code>-</code>, <code>^</code>, comparisons</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Pitfall:</strong> the free <code>Sequence.__contains__</code> and <code>.index</code> are O(n) scans. Override
+them when your data structure can do better (e.g., a sorted sequence → bisect).</p>
+</blockquote>
+<h2 id="3-abstract-base-classes">3. Abstract Base Classes</h2>
+<pre><code class="language-python">from abc import ABC, abstractmethod
+
+class Storage(ABC):
+    @abstractmethod
+    def save(self, key: str, data: bytes) -&gt; None: ...
+
+    @abstractmethod
+    def load(self, key: str) -&gt; bytes: ...
+
+    def copy(self, src: str, dst: str) -&gt; None:      # concrete: uses abstracts
+        self.save(dst, self.load(src))
+</code></pre>
+<p>Rules that surprise people:</p>
+<table>
+<thead>
+<tr>
+<th>Fact</th>
+<th>Consequence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Instantiation fails only if abstract methods remain</td>
+<td>Subclass missing one method = still abstract</td>
+</tr>
+<tr>
+<td>The check happens at <strong>instantiation</strong>, not definition</td>
+<td>You can define incomplete subclasses freely</td>
+</tr>
+<tr>
+<td>Abstract methods can have bodies</td>
+<td>Subclasses may call <code>super().save(...)</code> for shared logic</td>
+</tr>
+<tr>
+<td><code>Storage.register(Thing)</code> — virtual subclass</td>
+<td><code>isinstance</code> passes but <strong>nothing is verified</strong></td>
+</tr>
+<tr>
+<td>Works with <code>@property</code>, <code>@classmethod</code>, <code>@staticmethod</code></td>
+<td>Stack <code>@abstractmethod</code> <strong>innermost</strong></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Pitfall:</strong> ABCs are <em>nominal</em> — a class with a perfect <code>save</code>/<code>load</code> that doesn't
+inherit <code>Storage</code> fails <code>isinstance</code>. When you don't own the class, that's a wall.
+Protocols knock it down.</p>
+</blockquote>
+<h2 id="4-typingprotocol-structural-typing">4. <code>typing.Protocol</code>: Structural Typing</h2>
+<p>A <code>Protocol</code> declares a <em>shape</em>. Anything with matching methods conforms — no
+inheritance, no registration. This is duck typing formalized for type checkers.</p>
+<pre><code class="language-python">from typing import Protocol, runtime_checkable
+
+@runtime_checkable
+class Serializer(Protocol):
+    def serialize(self) -&gt; str: ...
+
+def export(item: Serializer) -&gt; str:     # mypy checks structurally
+    return item.serialize()
+</code></pre>
+<pre><code class="language-mermaid">flowchart LR
+    subgraph Nominal
+        A[class JsonDoc&lt;br/&gt;inherits Storage] --&gt;|isinstance by ancestry| B[ABC]
+    end
+    subgraph Structural
+        C[any class with&lt;br/&gt;serialize method] --&gt;|matches shape| D[Protocol]
+    end
+</code></pre>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>ABC</th>
+<th>Protocol</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Conformance</td>
+<td>inherit / register</td>
+<td>just have the methods</td>
+</tr>
+<tr>
+<td>Third-party classes</td>
+<td>must be registered</td>
+<td>conform automatically</td>
+</tr>
+<tr>
+<td>Mixin methods</td>
+<td>yes — big win</td>
+<td>no (non-protocol members aren't inherited that way)</td>
+</tr>
+<tr>
+<td>Runtime <code>isinstance</code></td>
+<td>always</td>
+<td>only with <code>@runtime_checkable</code></td>
+</tr>
+<tr>
+<td>Checks method <strong>signatures</strong> at runtime</td>
+<td>n/a</td>
+<td><strong>No — presence only!</strong></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Pitfall:</strong> <code>@runtime_checkable</code> <code>isinstance</code> checks only that the <em>names exist as
+callables</em> — <code>serialize(self, x, y, z)</code> still passes. Full signature checking is the
+static checker's job.</p>
+</blockquote>
+<p><strong>Rule of thumb:</strong> own the hierarchy and want shared behavior → ABC. Describing what
+you <em>accept</em> (especially third-party objects) → Protocol.</p>
+<h2 id="5-the-iterator-protocol">5. The Iterator Protocol</h2>
+<table>
+<thead>
+<tr>
+<th>Term</th>
+<th>Must define</th>
+<th>Contract</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Iterable</strong></td>
+<td><code>__iter__</code> → returns an iterator</td>
+<td>can be looped over, many times</td>
+</tr>
+<tr>
+<td><strong>Iterator</strong></td>
+<td><code>__next__</code> + <code>__iter__</code> returning <code>self</code></td>
+<td>produces values, raises <code>StopIteration</code> when done — then is <strong>exhausted forever</strong></td>
+</tr>
+</tbody>
+</table>
+<p>A container should be <strong>iterable but not its own iterator</strong> — return a fresh iterator
+(easiest: make <code>__iter__</code> a generator) so two loops don't steal from each other.</p>
+<pre><code class="language-python">class Countdown:
+    def __init__(self, start): self.start = start
+    def __iter__(self):                  # generator = fresh iterator each call
+        n = self.start
+        while n &gt; 0:
+            yield n
+            n -= 1
+</code></pre>
+<blockquote>
+<p><strong>Pitfall:</strong> implementing <code>__next__</code> on the container and returning <code>self</code> from
+<code>__iter__</code> means the <em>second</em> <code>for</code> loop over the object silently does nothing.</p>
+</blockquote>
+<hr>
+<h2 id="key-takeaways">Key Takeaways</h2>
+<ul>
+<li><code>collections.abc</code> gives structural <code>isinstance</code> checks <em>and</em> free mixin methods.</li>
+<li>ABC = nominal contract + shared implementation; fails fast at instantiation.</li>
+<li>Protocol = structural contract; perfect for typing what you accept; runtime checks
+  verify names only.</li>
+<li>Containers return fresh iterators; iterators are one-shot by contract.</li>
+</ul>
+<p>Next: <a href="../module_05_solid/README.md">Module 5 — SOLID in Python</a>.</p>
+<hr>
+<h2 id="files-in-this-module">Files in This Module</h2>
+<ul>
+<li><code>concepts.py</code> — duck typing, abc mixins, ABCs, Protocols, iterators — all runnable</li>
+<li><code>exercise.py</code> — build a <code>SortedItems</code> Sequence, a <code>Notifier</code> ABC and a Protocol-typed pipeline</li>
+<li><code>solution.py</code> — reference solution</li>
+</ul>
+</body>
+</html>

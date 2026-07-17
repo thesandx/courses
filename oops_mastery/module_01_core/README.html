@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 1: The Core Object Model</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-1-the-core-object-model">Module 1: The Core Object Model</h1>
+<h2 id="learning-objectives">Learning Objectives</h2>
+<ul>
+<li>Explain what actually happens when Python executes a <code>class</code> statement and when you
+  call <code>ClassName(...)</code>.</li>
+<li>Choose correctly between <strong>instance</strong>, <strong>class</strong>, and <strong>static</strong> methods — and know
+  what <code>self</code> and <code>cls</code> really are.</li>
+<li>Use <strong>properties</strong> to expose computed/validated attributes without breaking callers.</li>
+<li>Read and predict the <strong>Method Resolution Order (MRO)</strong> for single and multiple
+  inheritance, and use <code>super()</code> cooperatively.</li>
+<li>Apply Python's <em>conventions</em> for encapsulation (<code>_name</code>, <code>__name</code>) and know what name
+  mangling does and does not protect.</li>
+</ul>
+<hr>
+<h2 id="1-classes-are-objects-instances-are-dictionaries-mostly">1. Classes Are Objects, Instances Are Dictionaries (Mostly)</h2>
+<p>A <code>class</code> statement is executable code. Python runs the body, collects the resulting
+names into a namespace, and calls <code>type(name, bases, namespace)</code> to build a <strong>class
+object</strong>. That class object is itself an instance of <code>type</code> — this fact powers
+everything in Module 6 (metaclasses).</p>
+<pre><code class="language-python">class Account:
+    bank = &quot;MegaBank&quot;            # class attribute — lives on the CLASS
+    def __init__(self, owner):   # runs on every instantiation
+        self.owner = owner       # instance attribute — lives on the INSTANCE
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Where an attribute lives</th>
+<th>Storage</th>
+<th>Shared?</th>
+<th>Lookup order</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Instance attribute</td>
+<td><code>instance.__dict__</code></td>
+<td>No — per object</td>
+<td>Checked <strong>first</strong></td>
+</tr>
+<tr>
+<td>Class attribute</td>
+<td><code>Account.__dict__</code></td>
+<td>Yes — all instances</td>
+<td>Checked second</td>
+</tr>
+<tr>
+<td>Base-class attribute</td>
+<td><code>Base.__dict__</code></td>
+<td>Yes</td>
+<td>Checked along the MRO</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Pitfall:</strong> a <em>mutable</em> class attribute (<code>items = []</code>) is shared by every instance.
+Appending via <code>self.items.append(...)</code> mutates the shared list. Initialize mutable
+state in <code>__init__</code>, always.</p>
+</blockquote>
+<p>Attribute <em>assignment</em> on an instance never modifies the class — it creates a new
+instance attribute that <strong>shadows</strong> the class one. This asymmetry (read falls through,
+write does not) is the #1 source of "class attribute" bugs.</p>
+<h2 id="2-the-three-method-kinds">2. The Three Method Kinds</h2>
+<pre><code class="language-python">class Temperature:
+    scale = &quot;celsius&quot;
+
+    def to_fahrenheit(self):          # instance method — needs per-object data
+        return self.degrees * 9 / 5 + 32
+
+    @classmethod
+    def from_fahrenheit(cls, f):      # alternative constructor — the classic use
+        return cls((f - 32) * 5 / 9)
+
+    @staticmethod
+    def is_valid(degrees):            # pure function, namespaced in the class
+        return degrees &gt;= -273.15
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>First arg</th>
+<th>Bound to</th>
+<th>Use when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Instance method</td>
+<td><code>self</code></td>
+<td>the instance</td>
+<td>Behavior needs instance state</td>
+</tr>
+<tr>
+<td><code>@classmethod</code></td>
+<td><code>cls</code></td>
+<td>the class</td>
+<td>Alternative constructors, class-level state</td>
+</tr>
+<tr>
+<td><code>@staticmethod</code></td>
+<td>—</td>
+<td>nothing</td>
+<td>Utility that belongs conceptually to the class</td>
+</tr>
+</tbody>
+</table>
+<p><code>@classmethod</code> constructors respect subclassing: <code>FancyTemperature.from_fahrenheit(212)</code>
+returns a <code>FancyTemperature</code> because <code>cls</code> <em>is</em> the subclass. A hardcoded
+<code>Temperature(...)</code> inside the method would not.</p>
+<h2 id="3-properties-attributes-with-behavior">3. Properties: Attributes with Behavior</h2>
+<p>Start with a plain attribute; upgrade to a <code>property</code> <strong>only when you need logic</strong> —
+callers never notice the change. This is why Python has no "make everything a
+getter/setter" culture.</p>
+<pre><code class="language-python">class Circle:
+    def __init__(self, radius):
+        self.radius = radius            # goes through the setter below!
+
+    @property
+    def radius(self):
+        return self._radius
+
+    @radius.setter
+    def radius(self, value):
+        if value &lt;= 0:
+            raise ValueError(&quot;radius must be positive&quot;)
+        self._radius = value
+
+    @property
+    def area(self):                     # read-only computed attribute
+        return 3.14159 * self._radius ** 2
+</code></pre>
+<blockquote>
+<p><strong>Pitfall:</strong> storing to <code>self.radius</code> inside the setter recurses forever. The backing
+field must have a different name — the <code>_radius</code> convention.</p>
+</blockquote>
+<h2 id="4-inheritance-mro-and-super">4. Inheritance, MRO, and <code>super()</code></h2>
+<p>Python linearizes the inheritance graph with the <strong>C3 algorithm</strong>; the result is
+<code>Class.__mro__</code>. Attribute lookup walks it left to right.</p>
+<pre><code class="language-mermaid">flowchart TD
+    D[D] --&gt; B[B] &amp; C[C]
+    B --&gt; A[A]
+    C --&gt; A
+    A --&gt; O[object]
+</code></pre>
+<p>For <code>class D(B, C)</code> the MRO is <code>D → B → C → A → object</code> — the "diamond" visits <code>A</code>
+<strong>once</strong>. <code>super()</code> does <em>not</em> mean "my parent"; it means <strong>"the next class in the
+MRO of <code>type(self)</code>"</strong>. That's what makes cooperative multiple inheritance work:</p>
+<pre><code class="language-python">class A:
+    def greet(self): print(&quot;A&quot;)
+class B(A):
+    def greet(self):
+        print(&quot;B&quot;); super().greet()
+class C(A):
+    def greet(self):
+        print(&quot;C&quot;); super().greet()
+class D(B, C):
+    def greet(self):
+        print(&quot;D&quot;); super().greet()
+
+D().greet()      # D, B, C, A  — B's super() call reaches C, not A!
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Consequence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Every class appears once in the MRO</td>
+<td>Diamonds are safe</td>
+</tr>
+<tr>
+<td>Children precede parents; left bases precede right</td>
+<td><code>D(B, C)</code> puts B before C</td>
+</tr>
+<tr>
+<td>Inconsistent orders raise <code>TypeError</code> at class creation</td>
+<td>Fail fast, not at call time</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Pitfall:</strong> in cooperative hierarchies, <strong>every</strong> <code>__init__</code> must call
+<code>super().__init__(...)</code> and pass along <code>**kwargs</code>, or the chain silently stops.</p>
+</blockquote>
+<h2 id="5-encapsulation-conventions-not-locks">5. Encapsulation: Conventions, Not Locks</h2>
+<table>
+<thead>
+<tr>
+<th>Spelling</th>
+<th>Meaning</th>
+<th>Enforced?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>Public API</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>_name</code></td>
+<td>Internal — "don't touch unless you know why"</td>
+<td>No (convention + <code>import *</code> skip)</td>
+</tr>
+<tr>
+<td><code>__name</code></td>
+<td>Name-mangled to <code>_ClassName__name</code></td>
+<td>Rewritten at compile time</td>
+</tr>
+<tr>
+<td><code>__name__</code></td>
+<td>Reserved for the language (dunders)</td>
+<td>Never invent your own</td>
+</tr>
+</tbody>
+</table>
+<p>Name mangling exists to prevent <strong>accidental override collisions in subclasses</strong>, not
+to provide privacy — <code>obj._ClassName__name</code> still works. Reach for <code>_single</code> by
+default; <code>__double</code> only when you're writing a base class others will subclass.</p>
+<hr>
+<h2 id="key-takeaways">Key Takeaways</h2>
+<ul>
+<li>Reads fall through instance → class → MRO; writes always land on the instance.</li>
+<li><code>@classmethod</code> = polymorphic constructors; <code>@staticmethod</code> = namespaced helpers.</li>
+<li>Properties let you start with plain attributes and add logic later — no API break.</li>
+<li><code>super()</code> follows the MRO of the <em>runtime</em> class, enabling cooperative diamonds.</li>
+<li>Encapsulation in Python is a social contract; mangling only prevents subclass clashes.</li>
+</ul>
+<p>Next: <a href="../module_02_dunders/README.md">Module 2 — Dunder Methods</a>.</p>
+<hr>
+<h2 id="files-in-this-module">Files in This Module</h2>
+<ul>
+<li><code>concepts.py</code> — every concept above, runnable with printed proof</li>
+<li><code>exercise.py</code> — build a <code>BankAccount</code> hierarchy exercising all five concepts</li>
+<li><code>solution.py</code> — reference solution</li>
+</ul>
+</body>
+</html>

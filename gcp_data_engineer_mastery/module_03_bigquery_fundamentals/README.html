@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 3: BigQuery Fundamentals</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-3-bigquery-fundamentals">Module 3: BigQuery Fundamentals</h1>
+<h2 id="learning-objectives">Learning Objectives</h2>
+<ul>
+<li>Model data with <strong>datasets, tables, views</strong>, and nested/repeated (<code>STRUCT</code>/<code>ARRAY</code>)
+  schemas.</li>
+<li>Choose among <strong>native tables, external tables, and BigLake</strong> for a source.</li>
+<li>Load data (batch load, <code>LOAD DATA</code>, streaming inserts) and understand each path's cost.</li>
+<li>Write correct <strong>GoogleSQL</strong>, including nested-data unnesting.</li>
+<li>Understand BigQuery's <strong>architecture</strong> (separation of storage &amp; compute) and why it's
+  serverless.</li>
+</ul>
+<hr>
+<h2 id="1-architecture-why-bigquery-is-different">1. Architecture: Why BigQuery Is Different</h2>
+<p>BigQuery separates <strong>storage</strong> (Colossus) from <strong>compute</strong> (Dremel/slots), connected by
+the Jupiter network. You don't provision servers; you submit SQL and BigQuery allocates
+<strong>slots</strong>.</p>
+<pre><code class="language-mermaid">flowchart LR
+    SQL[Your SQL] --&gt; D[Dremel engine&lt;br/&gt;slots = compute]
+    D &lt;--&gt;|Jupiter petabit net| C[(Colossus&lt;br/&gt;columnar storage)]
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Consequence for you</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Columnar storage</td>
+<td><code>SELECT</code> only the columns you need — it prunes the rest</td>
+</tr>
+<tr>
+<td>Storage ≠ compute</td>
+<td>Storage is cheap; you pay for <strong>bytes scanned</strong> (on-demand) or <strong>slot-time</strong></td>
+</tr>
+<tr>
+<td>Serverless</td>
+<td>No cluster to size; scales automatically</td>
+</tr>
+</tbody>
+</table>
+<h2 id="2-datasets-tables-views">2. Datasets, Tables, Views</h2>
+<table>
+<thead>
+<tr>
+<th>Object</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Dataset</strong></td>
+<td>Namespace + <strong>location</strong> (US/EU/region) + default IAM &amp; expiration</td>
+</tr>
+<tr>
+<td><strong>Native table</strong></td>
+<td>Data stored in BigQuery's managed columnar format (fastest)</td>
+</tr>
+<tr>
+<td><strong>External table</strong></td>
+<td>Schema over data left in GCS/Sheets/Bigtable — no load, no BQ storage cost</td>
+</tr>
+<tr>
+<td><strong>BigLake table</strong></td>
+<td>External table <strong>with</strong> fine-grained security + metadata caching</td>
+</tr>
+<tr>
+<td><strong>View</strong></td>
+<td>Saved query (logical); <strong>materialized view</strong> = precomputed &amp; auto-maintained</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Pitfall:</strong> A dataset's <strong>location is immutable</strong> and every table in it (and every
+query, load, and export) must stay in that location. Choose US/EU/region deliberately.</p>
+</blockquote>
+<h2 id="3-native-vs-external-vs-biglake">3. Native vs External vs BigLake</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Native</th>
+<th>External</th>
+<th>BigLake</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Storage cost</td>
+<td>BQ storage</td>
+<td>none (GCS)</td>
+<td>none (GCS)</td>
+</tr>
+<tr>
+<td>Query speed</td>
+<td>Fastest</td>
+<td>Slower (no clustering/stats)</td>
+<td>Slower, but metadata cache helps</td>
+</tr>
+<tr>
+<td>Partition/cluster</td>
+<td>Yes</td>
+<td>Limited (Hive partitioning)</td>
+<td>Hive partitioning + caching</td>
+</tr>
+<tr>
+<td>Fine-grained security</td>
+<td>Yes</td>
+<td>No</td>
+<td><strong>Yes</strong> (row/column, via BQ)</td>
+</tr>
+<tr>
+<td>Use when</td>
+<td>Hot, frequently queried</td>
+<td>Ad-hoc / staging over lake</td>
+<td>Governed lakehouse over GCS</td>
+</tr>
+</tbody>
+</table>
+<h2 id="4-loading-data-paths-cost">4. Loading Data — Paths &amp; Cost</h2>
+<table>
+<thead>
+<tr>
+<th>Path</th>
+<th>Cost</th>
+<th>Latency</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Batch load</strong> (<code>bq load</code>, <code>LOAD DATA</code>)</td>
+<td><strong>Free</strong> (uses a shared pool)</td>
+<td>minutes</td>
+<td>Bulk files from GCS</td>
+</tr>
+<tr>
+<td><strong>Storage Write API</strong></td>
+<td>Paid, cheap</td>
+<td>seconds</td>
+<td>High-throughput streaming (preferred)</td>
+</tr>
+<tr>
+<td><strong>Legacy <code>tabledata.insertAll</code></strong></td>
+<td>Paid</td>
+<td>seconds</td>
+<td>Older streaming (avoid for new work)</td>
+</tr>
+<tr>
+<td><strong>Query result → table</strong></td>
+<td>Query cost</td>
+<td>—</td>
+<td>Transform &amp; materialize</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Exam trap:</strong> <em>batch loads from GCS are free</em>; streaming inserts are <strong>not</strong>. If the
+question emphasizes cost and doesn't require real-time, choose <strong>batch load</strong>.</p>
+</blockquote>
+<h2 id="5-googlesql-nested-data">5. GoogleSQL &amp; Nested Data</h2>
+<p>BigQuery embraces <strong>nested &amp; repeated</strong> fields to avoid joins. Flatten with <code>UNNEST</code>.</p>
+<pre><code class="language-sql">-- One row per order, items is an ARRAY&lt;STRUCT&gt;. Explode to line items:
+SELECT o.order_id, item.sku, item.qty
+FROM orders AS o, UNNEST(o.items) AS item
+WHERE o.order_date = CURRENT_DATE();
+</code></pre>
+<blockquote>
+<p><strong>Pitfall:</strong> <code>SELECT *</code> scans (and bills for) <strong>every column</strong>. Name columns; on
+partitioned tables always add a partition filter.</p>
+</blockquote>
+<hr>
+<h2 id="exam-focus">🎯 Exam Focus</h2>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Answer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>"Load 500 GB nightly from GCS, minimize cost"</td>
+<td><strong>Batch load</strong> (free) into a native table</td>
+</tr>
+<tr>
+<td>"Real-time rows, high throughput"</td>
+<td><strong>Storage Write API</strong></td>
+</tr>
+<tr>
+<td>"Query lake files with row/column security"</td>
+<td><strong>BigLake</strong> table</td>
+</tr>
+<tr>
+<td>"Ad-hoc query of a CSV in GCS, don't want to load it"</td>
+<td><strong>External</strong> table</td>
+</tr>
+<tr>
+<td>"Data must reside in the EU"</td>
+<td>Create dataset in the <strong>EU</strong> location; keep buckets in EU</td>
+</tr>
+<tr>
+<td>"Reduce cost of repeated <code>SELECT AVG(x)</code> dashboards"</td>
+<td><strong>Materialized view</strong> (Module 4)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="practice-questions">Practice Questions</h3>
+<ol>
+<li><strong>You query a 10-column, 1 TB table but only need 2 columns. Cheapest change?</strong> →
+   Select only those 2 columns — columnar storage prunes the rest, cutting bytes scanned.</li>
+<li><strong>Compliance requires data stay in Europe. Where do you enforce it?</strong> → Dataset
+   <strong>location = EU</strong> (and colocate GCS). Location is immutable — set it at creation.</li>
+<li><strong>A source CSV in GCS is queried a few times for exploration; you don't want BQ storage
+   cost.</strong> → <strong>External table</strong> (or BigLake if you need governance).</li>
+<li><strong>Nightly 800 GB load, cost-sensitive, not time-critical.</strong> → <strong>Batch load</strong> (free) vs
+   streaming (paid).</li>
+<li><strong>You need row-level security over data physically in GCS.</strong> → <strong>BigLake</strong> table
+   (external tables can't do fine-grained security).</li>
+</ol>
+<hr>
+<h2 id="key-takeaways">Key Takeaways</h2>
+<ul>
+<li>BigQuery = <strong>serverless, columnar, storage/compute-separated</strong>; you pay for bytes
+  scanned or slot-time.</li>
+<li>Dataset <strong>location is immutable</strong> — choose it up front and colocate storage.</li>
+<li><strong>Batch loads are free</strong>; streaming costs — pick based on latency need.</li>
+<li>Prefer <strong>native</strong> for hot data, <strong>BigLake</strong> for governed lake access; avoid <code>SELECT *</code>.</li>
+</ul>
+<p>Next: <a href="../module_04_bigquery_at_scale/README.md">Module 4 — BigQuery at Scale</a>.</p>
+<hr>
+<h2 id="files-in-this-module">Files in This Module</h2>
+<ul>
+<li><code>concepts.tf</code> — dataset, native table (nested schema), and a BigLake external table</li>
+<li><code>queries.sql</code> — runnable GoogleSQL: nested unnesting, DDL, load statements</li>
+<li><code>exercise.md</code> — model and load an events dataset</li>
+<li><code>solution.tf</code> / <code>solution.sql</code> — reference solution</li>
+</ul>
+</body>
+</html>

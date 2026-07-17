@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Python OOP Mastery — from `class` to production architecture</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="python-oop-mastery-from-class-to-production-architecture">Python OOP Mastery — from <code>class</code> to production architecture</h1>
+<p>Work through ten progressive modules and one capstone to go from writing basic classes
+to designing a plugin-driven, dependency-injected service the way senior Python
+engineers do. Every module pairs a deep-dive README with runnable code, a hands-on
+exercise, and a reference solution — by the end you will not just <em>use</em> Python's object
+model, you will be able to explain and extend it.</p>
+<h2 id="who-this-is-for">Who This Is For</h2>
+<ul>
+<li>Python developers who can write functions and scripts but want to design real systems.</li>
+<li>Engineers from Java/C# who need to unlearn "everything is a class" and learn what
+  <em>Pythonic</em> OOP actually looks like (protocols, dunders, composition).</li>
+<li>Anyone preparing for senior Python interviews where descriptors, metaclasses, MRO,
+  and SOLID trade-offs come up.</li>
+</ul>
+<h2 id="how-each-module-is-structured">How Each Module Is Structured</h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>README.md</code></td>
+<td>Learning objectives + deep-dive concepts with tables and diagrams</td>
+</tr>
+<tr>
+<td><code>concepts.py</code></td>
+<td>Annotated, runnable examples — <code>python concepts.py</code> prints proof of every idea</td>
+</tr>
+<tr>
+<td><code>exercise.py</code></td>
+<td>Lab with numbered TODOs and self-verification checks</td>
+</tr>
+<tr>
+<td><code>solution.py</code></td>
+<td>Complete reference solution with commentary</td>
+</tr>
+</tbody>
+</table>
+<h2 id="the-curriculum">The Curriculum</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Module</th>
+<th>You Will Master</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>01</td>
+<td><strong><a href="module_01_core/README.md">Core Object Model</a></strong></td>
+<td>Classes vs instances, <code>__init__</code>, class/static methods, properties, inheritance, MRO, name mangling</td>
+</tr>
+<tr>
+<td>02</td>
+<td><strong><a href="module_02_dunders/README.md">Dunder Methods</a></strong></td>
+<td><code>__repr__</code>/<code>__eq__</code>/<code>__hash__</code>, operator overloading, <code>__call__</code>, context managers, <code>__new__</code></td>
+</tr>
+<tr>
+<td>03</td>
+<td><strong><a href="module_03_descriptors/README.md">Descriptors</a></strong></td>
+<td>The descriptor protocol, data vs non-data descriptors, how <code>property</code> really works, <code>__slots__</code>, <code>__set_name__</code></td>
+</tr>
+<tr>
+<td>04</td>
+<td><strong><a href="module_04_protocols/README.md">Protocols &amp; ABCs</a></strong></td>
+<td>Duck typing, <code>collections.abc</code>, <code>typing.Protocol</code>, structural vs nominal typing, iterators</td>
+</tr>
+<tr>
+<td>05</td>
+<td><strong><a href="module_05_solid/README.md">SOLID in Python</a></strong></td>
+<td>All five principles with Pythonic (not Java-translated) implementations and when to break them</td>
+</tr>
+<tr>
+<td>06</td>
+<td><strong><a href="module_06_metaclasses/README.md">Metaclasses</a></strong></td>
+<td><code>type</code>, class creation pipeline, custom metaclasses, <code>__init_subclass__</code>, registries</td>
+</tr>
+<tr>
+<td>07</td>
+<td><strong><a href="module_07_decorators/README.md">Decorators</a></strong></td>
+<td>Function/class decorators, <code>functools.wraps</code>, parameterized decorators, class-based decorators</td>
+</tr>
+<tr>
+<td>08</td>
+<td><strong><a href="module_08_patterns/README.md">Design Patterns</a></strong></td>
+<td>Singleton, Factory, Strategy, Observer, Adapter, Builder — the Pythonic versions</td>
+</tr>
+<tr>
+<td>09</td>
+<td><strong><a href="module_09_di/README.md">Dependency Injection</a></strong></td>
+<td>Constructor injection, protocols as seams, composition root, a minimal DI container</td>
+</tr>
+<tr>
+<td>10</td>
+<td><strong><a href="module_10_microservice/README.md">Microservice Architecture</a></strong></td>
+<td>Layered architecture: domain, repository, service, API layers built purely with OOP</td>
+</tr>
+<tr>
+<td>🏆</td>
+<td><strong><a href="capstone/README.md">Capstone</a></strong></td>
+<td><em>PluginPay</em> — an extensible payment-processing service that applies every module</td>
+</tr>
+</tbody>
+</table>
+<h2 id="prerequisites-tooling">Prerequisites &amp; Tooling</h2>
+<p>Python 3.11+ and a terminal — no third-party packages needed for any module.</p>
+<pre><code class="language-bash">python3 --version          # 3.11 or newer
+cd oops_mastery
+python3 module_01_core/concepts.py   # every concepts.py runs standalone
+</code></pre>
+<h2 id="suggested-learning-path">Suggested Learning Path</h2>
+<pre><code class="language-mermaid">flowchart LR
+    A[01 core] --&gt; B[02 dunders] --&gt; C[03 descriptors] --&gt; D[04 protocols]
+    D --&gt; E[05 solid] --&gt; F[06 metaclasses] --&gt; G[07 decorators]
+    G --&gt; H[08 patterns] --&gt; I[09 di] --&gt; J[10 microservice] --&gt; Z[🏆 Capstone]
+</code></pre>
+<p>Modules 1–4 teach the <em>object model</em> (mechanics), 5–7 teach the <em>machinery</em>
+(principles and metaprogramming), 8–10 teach <em>architecture</em>. Do them in order —
+later modules deliberately reuse earlier vocabulary.</p>
+<h2 id="ground-rules">Ground Rules</h2>
+<ol>
+<li><strong>Run everything.</strong> Each <code>concepts.py</code> prints and asserts observable results — read
+   the output next to the source.</li>
+<li><strong>Attempt every exercise before opening the solution.</strong> The struggle is the course.</li>
+<li><strong>Prefer composition over inheritance</strong> — you'll see this rule earn its keep from
+   Module 5 onward.</li>
+<li><strong>Dunders are for the interpreter, not for you</strong> — define them, never call them
+   directly (<code>len(x)</code>, not <code>x.__len__()</code>).</li>
+<li>If a class has no state, it probably wants to be a function. Python is not Java.</li>
+</ol>
+<p>Start with <a href="module_01_core/README.md">module_01_core</a>.</p>
+</body>
+</html>

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 8 Exercise: Serverless Spark ETL</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="module-8-exercise-serverless-spark-etl">Module 8 Exercise: Serverless Spark ETL</h1>
+<h2 id="goal">Goal</h2>
+<p>Run a PySpark aggregation as a <strong>Serverless Spark batch</strong> (no cluster to manage) that
+reads CSV sales data from GCS and writes per-category revenue to the curated zone as
+Parquet. Then provision an <strong>ephemeral autoscaling cluster</strong> with Spot workers as the
+alternative, and compare.</p>
+<h2 id="tasks">Tasks</h2>
+<p>Create <code>agg.py</code> (Spark) and <code>main.tf</code> (infra). Reference the <code>solution.*</code> files after.</p>
+<h3 id="todo-1-upload-input">TODO 1 — Upload input</h3>
+<p>Put a small <code>sales.csv</code> (<code>category,amount</code> rows) in
+<code>gs://$PROJECT_ID-lake-raw/sales/</code> and the job file in <code>gs://$PROJECT_ID-lake-raw/jobs/</code>.</p>
+<h3 id="todo-2-spark-job">TODO 2 — Spark job</h3>
+<p><code>agg.py</code> reads the CSV (<code>header=True</code>), groups by <code>category</code>, sums <code>amount</code>, and writes
+Parquet to <code>gs://$PROJECT_ID-lake-curated/category_revenue/</code>. Use <strong>gs://</strong> paths only.</p>
+<h3 id="todo-3-serverless-batch-terraform">TODO 3 — Serverless batch (Terraform)</h3>
+<p>Provision a <code>google_dataproc_batch</code> (PySpark) that runs <code>agg.py</code> with the input/output
+args. Runtime version <code>2.2</code>.</p>
+<h3 id="todo-4-ephemeral-cluster-terraform">TODO 4 — Ephemeral cluster (Terraform)</h3>
+<p>Also define a <code>google_dataproc_cluster</code> with 2 on-demand primaries, 2 <strong>SPOT</strong>
+secondaries, and <code>idle_delete_ttl = 1800s</code>. (Comment which one you'd use for a scheduled
+nightly job and why → Serverless.)</p>
+<h2 id="self-verification">Self-Verification</h2>
+<pre><code class="language-bash">terraform init &amp;&amp; terraform apply -var project_id=&quot;$PROJECT_ID&quot;
+
+# The batch ran and produced output:
+gcloud dataproc batches list --region=us-central1
+gcloud storage ls gs://$PROJECT_ID-lake-curated/category_revenue/
+#   → _SUCCESS + part-*.parquet files
+
+# Query the result with BigQuery over the Parquet (external):
+bq query --use_legacy_sql=false \
+  &quot;SELECT * FROM EXTERNAL_QUERY OR load it; or: bq load --source_format=PARQUET ...&quot;
+</code></pre>
+<h2 id="stretch-goals">Stretch Goals</h2>
+<ol>
+<li>Write the aggregation <strong>directly to BigQuery</strong> using the Spark-BigQuery connector.</li>
+<li>Add an <strong>autoscaling policy</strong> to the cluster and describe the scale trigger.</li>
+<li>Convert the whole job to a BigQuery SQL statement and argue when that's the better
+   choice (transform is set-based → BigQuery wins).</li>
+</ol>
+<h2 id="cleanup">Cleanup</h2>
+<pre><code class="language-bash">terraform destroy -var project_id=&quot;$PROJECT_ID&quot;
+gcloud dataproc batches delete wordcount-batch --region=us-central1 -q 2&gt;/dev/null || true
+</code></pre>
+</body>
+</html>

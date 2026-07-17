@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🏆 Capstone: RideShare Analytics Platform</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+}
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+pre {
+  background: var(--code-bg); padding: 1em; border-radius: 6px;
+  overflow-x: auto; line-height: 1.45;
+}
+pre code { background: transparent; padding: 0; font-size: 100%; }
+blockquote {
+  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
+  border-left: .25em solid var(--border);
+}
+table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; }
+tr:nth-child(2n) td { background: var(--code-bg); }
+img { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+</style>
+</head>
+<body>
+<h1 id="capstone-rideshare-analytics-platform">🏆 Capstone: RideShare Analytics Platform</h1>
+<h2 id="overview">Overview</h2>
+<p>Build a complete, production-shaped data platform for a ride-share company that ingests
+live trip events, processes them in <strong>streaming and batch</strong>, stores them cost-optimally,
+governs and secures them, predicts demand with ML, and is fully <strong>monitored</strong> and
+<strong>cost-controlled</strong> — all as Terraform + Beam + Airflow + SQL.</p>
+<p>This single system exercises <strong>every module</strong> in the course. If you can build and defend
+each decision here, you're ready for the exam and for real GCP data engineering.</p>
+<h2 id="architecture">Architecture</h2>
+<pre><code class="language-mermaid">flowchart TD
+    subgraph Ingest
+      APP[Rider/Driver apps] --&gt;|trip events| PS[(Pub/Sub topic: trips)]
+      PS --&gt; DLQ[(DLQ topic)]
+    end
+
+    subgraph Stream
+      PS --&gt; DF[Dataflow streaming&lt;br/&gt;parse • window • enrich]
+      DF --&gt; BQR[(BigQuery: trips_raw&lt;br/&gt;partitioned + clustered)]
+      DF --&gt; BT[(Bigtable: live driver locations)]
+    end
+
+    subgraph Batch
+      GCS[(GCS lake&lt;br/&gt;raw / curated)] --&gt; DP[Dataproc Serverless&lt;br/&gt;nightly enrichment]
+      DP --&gt; BQC[(BigQuery: trips_curated)]
+    end
+
+    subgraph Orchestrate
+      COMP[Cloud Composer&lt;br/&gt;daily rollup DAG] --&gt; BQC
+      COMP --&gt; BQM[(BigQuery marts)]
+    end
+
+    subgraph Analyze
+      BQM --&gt; BQML[BQML ARIMA_PLUS&lt;br/&gt;demand forecast]
+      BQM --&gt; LK[Looker Studio + BI Engine]
+    end
+
+    subgraph Govern &amp; Operate
+      KMS[CMEK / KMS] -.encrypts.-&gt; BQR
+      PT[Policy tags] -.mask PII.-&gt; BQC
+      MON[Monitoring: lag/backlog/error alerts] -.watches.-&gt; DF
+      BUD[Billing budget] -.guards.-&gt; ALL[(project)]
+    end
+</code></pre>
+<h2 id="project-structure">Project Structure</h2>
+<pre><code>capstone/
+├── README.md
+├── terraform/                 # the whole platform as IaC
+│   ├── main.tf                # providers, APIs, dedicated service accounts
+│   ├── variables.tf
+│   ├── storage.tf             # lake buckets (raw/curated), lifecycle, UBLA
+│   ├── streaming.tf           # Pub/Sub topic + schema + DLQ + subscriptions
+│   ├── bigquery.tf            # datasets + partitioned/clustered tables + MV
+│   ├── bigtable.tf            # live driver-location store
+│   ├── governance.tf          # KMS/CMEK + policy-tag taxonomy
+│   ├── monitoring.tf          # alerts + billing budget
+│   └── outputs.tf
+├── pipelines/
+│   ├── streaming_enrich.py    # Beam: Pub/Sub → windows → BigQuery + Bigtable
+│   └── daily_rollup_dag.py    # Airflow: idempotent daily curated → marts + forecast
+└── sql/
+    ├── schema.sql             # marts DDL, row/column security
+    └── ml.sql                 # BQML demand forecast (ARIMA_PLUS)
+</code></pre>
+<h2 id="concepts-applied-per-module">Concepts Applied Per Module</h2>
+<table>
+<thead>
+<tr>
+<th>Module</th>
+<th>Concept</th>
+<th>Where in the Capstone</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1 Foundations</td>
+<td>Least-privilege service accounts, APIs</td>
+<td><code>terraform/main.tf</code></td>
+</tr>
+<tr>
+<td>2 Cloud Storage</td>
+<td>Lake zoning, lifecycle, UBLA</td>
+<td><code>terraform/storage.tf</code></td>
+</tr>
+<tr>
+<td>3 BigQuery</td>
+<td>Datasets, nested schema, BigLake</td>
+<td><code>terraform/bigquery.tf</code>, <code>sql/schema.sql</code></td>
+</tr>
+<tr>
+<td>4 BigQuery at scale</td>
+<td>Partition + cluster, materialized view</td>
+<td><code>terraform/bigquery.tf</code></td>
+</tr>
+<tr>
+<td>5 Databases</td>
+<td>Bigtable for live locations (row-key design)</td>
+<td><code>terraform/bigtable.tf</code></td>
+</tr>
+<tr>
+<td>6 Pub/Sub</td>
+<td>Schema, DLQ, exactly-once, BQ subscription</td>
+<td><code>terraform/streaming.tf</code></td>
+</tr>
+<tr>
+<td>7 Dataflow/Beam</td>
+<td>Windowed streaming enrichment</td>
+<td><code>pipelines/streaming_enrich.py</code></td>
+</tr>
+<tr>
+<td>8 Dataproc</td>
+<td>Serverless Spark nightly enrichment</td>
+<td>referenced by the DAG</td>
+</tr>
+<tr>
+<td>9 Composer</td>
+<td>Idempotent daily rollup DAG</td>
+<td><code>pipelines/daily_rollup_dag.py</code></td>
+</tr>
+<tr>
+<td>10 Governance</td>
+<td>CMEK, policy tags, row-access policy</td>
+<td><code>terraform/governance.tf</code>, <code>sql/schema.sql</code></td>
+</tr>
+<tr>
+<td>11 ML &amp; BI</td>
+<td>ARIMA_PLUS forecast, BI Engine</td>
+<td><code>sql/ml.sql</code>, <code>terraform/bigquery.tf</code></td>
+</tr>
+<tr>
+<td>12 Reliability/cost</td>
+<td>Lag/error alerts, billing budget</td>
+<td><code>terraform/monitoring.tf</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="how-to-run">How to Run</h2>
+<pre><code class="language-bash">cd terraform
+
+# 1. Configure and provision the platform.
+export TF_VAR_project_id=&quot;your-project&quot;
+export TF_VAR_billing_account=&quot;XXXXXX-XXXXXX-XXXXXX&quot;
+export TF_VAR_alert_email=&quot;you@example.com&quot;
+terraform init
+terraform apply
+
+# 2. Deploy the streaming pipeline (build a Flex template or run directly).
+cd ../pipelines
+pip install 'apache-beam[gcp]'
+python streaming_enrich.py \
+  --runner=DataflowRunner --project=$TF_VAR_project_id --region=us-central1 \
+  --streaming --enable_streaming_engine \
+  --subscription=projects/$TF_VAR_project_id/subscriptions/trips-dataflow \
+  --bq_table=$TF_VAR_project_id:rideshare.trips_raw \
+  --temp_location=gs://$TF_VAR_project_id-rideshare-raw/tmp
+
+# 3. Create marts + train the forecast.
+bq query --use_legacy_sql=false &lt; ../sql/schema.sql
+bq query --use_legacy_sql=false &lt; ../sql/ml.sql
+
+# 4. Deploy the DAG to Composer.
+gcloud storage cp daily_rollup_dag.py &quot;$(terraform -chdir=../terraform output -raw dag_gcs_prefix)&quot;
+
+# 5. Publish a test trip event.
+gcloud pubsub topics publish trips \
+  --message='{&quot;trip_id&quot;:&quot;t1&quot;,&quot;driver_id&quot;:&quot;d9&quot;,&quot;rider_id&quot;:&quot;r3&quot;,&quot;fare_cents&quot;:1450,&quot;lat&quot;:37.77,&quot;lng&quot;:-122.41,&quot;event_ts&quot;:1751846400}' \
+  --ordering-key=d9
+</code></pre>
+<h2 id="how-to-verify">How to Verify</h2>
+<pre><code class="language-bash"># Events land in the partitioned raw table:
+bq query --use_legacy_sql=false \
+  'SELECT COUNT(*) FROM rideshare.trips_raw WHERE DATE(event_ts)=CURRENT_DATE()'
+#   → &gt; 0
+
+# Streaming pipeline is healthy (watermark not lagging):
+gcloud dataflow jobs list --region=us-central1 --status=active
+
+# Live driver location is queryable in Bigtable:
+cbt -project=$TF_VAR_project_id -instance=rideshare-live read driver_locations count=5
+
+# The demand forecast produced 7 future rows:
+bq query --use_legacy_sql=false \
+  'SELECT COUNT(*) FROM ML.FORECAST(MODEL rideshare_ml.demand, STRUCT(7 AS horizon, 0.8 AS confidence_level))'
+#   → 7
+
+# Budget + alerts exist:
+gcloud billing budgets list --billing-account=&quot;$TF_VAR_billing_account&quot; --format=&quot;value(displayName)&quot;
+gcloud alpha monitoring policies list --format=&quot;value(displayName)&quot;
+</code></pre>
+<h2 id="readiness-mastery-checklist">Readiness / Mastery Checklist</h2>
+<ul>
+<li>[x] Streaming ingest with schema validation, DLQ, and exactly-once (Modules 6–7)</li>
+<li>[x] Cost-optimized storage: partitioned + clustered tables, tiered lake (Modules 2, 4)</li>
+<li>[x] Correct store per need: BigQuery analytics + Bigtable low-latency lookups (Module 5)</li>
+<li>[x] Idempotent, backfillable batch orchestration (Modules 8–9)</li>
+<li>[x] Governance: CMEK, column-level policy tags, row-access policy (Module 10)</li>
+<li>[x] ML forecast served to BI with BI Engine acceleration (Module 11)</li>
+<li>[x] Observability + budget guardrails (Module 12)</li>
+<li>[x] Entire platform reproducible as Terraform (Module 1 ground rules)</li>
+</ul>
+<h2 id="extend-it-stretch">Extend It (Stretch)</h2>
+<ol>
+<li>Add <strong>VPC Service Controls</strong> around BigQuery/GCS to block exfiltration.</li>
+<li>Add a <strong>Vertex AI</strong> endpoint serving the forecast online with a Feature Store.</li>
+<li>Add <strong>cross-region BigQuery replication</strong> and define RPO/RTO for the platform.</li>
+<li>Wire the budget's 100% alert to a <strong>Pub/Sub → Cloud Function</strong> that disables billing.</li>
+</ol>
+<h2 id="cleanup">Cleanup</h2>
+<pre><code class="language-bash">cd terraform
+terraform destroy   # tears down Pub/Sub, BigQuery, Bigtable, Composer, buckets, etc.
+</code></pre>
+</body>
+</html>
