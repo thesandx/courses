@@ -7,52 +7,234 @@
 <style>
 :root {
   --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
-  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e; --accent: #0969da;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
-    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1; --accent: #4493f8;
   }
 }
 * { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
 body {
-  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
-  background: var(--bg); color: var(--fg);
+  margin: 0; background: var(--bg); color: var(--fg);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
-  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+  font-size: 16px; line-height: 1.65; word-wrap: break-word;
+  -webkit-font-smoothing: antialiased;
 }
-h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
-h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+.page { max-width: 880px; margin: 0 auto; padding: 2.5rem 1.5rem 5rem; }
+h1, h2, h3, h4, h5, h6 { margin-top: 1.6em; margin-bottom: .5em; line-height: 1.25; font-weight: 650; }
+h1 { font-size: 2.1em; margin-top: 0; border-bottom: 2px solid var(--border); padding-bottom: .35em; letter-spacing: -.02em; }
 h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
 h3 { font-size: 1.25em; }
+h4 { font-size: 1.05em; }
+p { margin: 0 0 1em; }
 a { color: var(--link); text-decoration: none; }
 a:hover { text-decoration: underline; }
-code, pre {
+strong { font-weight: 650; }
+code, pre, kbd {
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-  font-size: 85%;
 }
-code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; font-size: 85%; }
 pre {
-  background: var(--code-bg); padding: 1em; border-radius: 6px;
-  overflow-x: auto; line-height: 1.45;
+  background: var(--code-bg); padding: 1em 1.2em; border-radius: 8px;
+  overflow-x: auto; line-height: 1.5; font-size: 85%;
+  border: 1px solid var(--border); margin: 0 0 1.2em;
 }
-pre code { background: transparent; padding: 0; font-size: 100%; }
+pre code { background: transparent; padding: 0; font-size: 100%; border-radius: 0; }
+.codehilite { background: var(--code-bg); border-radius: 8px; margin: 0 0 1.2em; }
+.codehilite pre { margin: 0; border: 1px solid var(--border); }
 blockquote {
-  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
-  border-left: .25em solid var(--border);
+  margin: 0 0 1.2em; padding: .5em 1.1em; color: var(--quote);
+  border-left: 4px solid var(--accent); background: var(--code-bg);
+  border-radius: 0 8px 8px 0;
 }
-table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
-th, td { border: 1px solid var(--border); padding: 6px 13px; }
-th { font-weight: 600; }
+blockquote > :first-child { margin-top: 0; }
+blockquote > :last-child { margin-bottom: 0; }
+table {
+  border-collapse: collapse; display: block; overflow-x: auto;
+  max-width: 100%; margin: 0 0 1.2em; font-size: .95em;
+}
+th, td { border: 1px solid var(--border); padding: 8px 14px; }
+th { font-weight: 650; background: var(--code-bg); }
 tr:nth-child(2n) td { background: var(--code-bg); }
-img { max-width: 100%; }
-hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
-ul, ol { padding-left: 2em; }
-li + li { margin-top: .25em; }
+img { max-width: 100%; border-radius: 8px; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 2em 0; }
+ul, ol { padding-left: 1.8em; margin: 0 0 1em; }
+li { margin: .3em 0; }
+li > p { margin-bottom: .5em; }
+input[type="checkbox"] { margin-right: .4em; }
+::selection { background: color-mix(in srgb, var(--accent) 25%, transparent); }
+/* Pygments syntax highlighting — light */
+pre { line-height: 125%; }
+td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+.codehilite .hll { background-color: #ffffcc }
+.codehilite { background: #f8f8f8; }
+.codehilite .c { color: #3D7B7B; font-style: italic } /* Comment */
+.codehilite .err { border: 1px solid #F00 } /* Error */
+.codehilite .k { color: #008000; font-weight: bold } /* Keyword */
+.codehilite .o { color: #666 } /* Operator */
+.codehilite .ch { color: #3D7B7B; font-style: italic } /* Comment.Hashbang */
+.codehilite .cm { color: #3D7B7B; font-style: italic } /* Comment.Multiline */
+.codehilite .cp { color: #9C6500 } /* Comment.Preproc */
+.codehilite .cpf { color: #3D7B7B; font-style: italic } /* Comment.PreprocFile */
+.codehilite .c1 { color: #3D7B7B; font-style: italic } /* Comment.Single */
+.codehilite .cs { color: #3D7B7B; font-style: italic } /* Comment.Special */
+.codehilite .gd { color: #A00000 } /* Generic.Deleted */
+.codehilite .ge { font-style: italic } /* Generic.Emph */
+.codehilite .ges { font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.codehilite .gr { color: #E40000 } /* Generic.Error */
+.codehilite .gh { color: #000080; font-weight: bold } /* Generic.Heading */
+.codehilite .gi { color: #008400 } /* Generic.Inserted */
+.codehilite .go { color: #717171 } /* Generic.Output */
+.codehilite .gp { color: #000080; font-weight: bold } /* Generic.Prompt */
+.codehilite .gs { font-weight: bold } /* Generic.Strong */
+.codehilite .gu { color: #800080; font-weight: bold } /* Generic.Subheading */
+.codehilite .gt { color: #04D } /* Generic.Traceback */
+.codehilite .kc { color: #008000; font-weight: bold } /* Keyword.Constant */
+.codehilite .kd { color: #008000; font-weight: bold } /* Keyword.Declaration */
+.codehilite .kn { color: #008000; font-weight: bold } /* Keyword.Namespace */
+.codehilite .kp { color: #008000 } /* Keyword.Pseudo */
+.codehilite .kr { color: #008000; font-weight: bold } /* Keyword.Reserved */
+.codehilite .kt { color: #B00040 } /* Keyword.Type */
+.codehilite .m { color: #666 } /* Literal.Number */
+.codehilite .s { color: #BA2121 } /* Literal.String */
+.codehilite .na { color: #687822 } /* Name.Attribute */
+.codehilite .nb { color: #008000 } /* Name.Builtin */
+.codehilite .nc { color: #00F; font-weight: bold } /* Name.Class */
+.codehilite .no { color: #800 } /* Name.Constant */
+.codehilite .nd { color: #A2F } /* Name.Decorator */
+.codehilite .ni { color: #717171; font-weight: bold } /* Name.Entity */
+.codehilite .ne { color: #CB3F38; font-weight: bold } /* Name.Exception */
+.codehilite .nf { color: #00F } /* Name.Function */
+.codehilite .nl { color: #767600 } /* Name.Label */
+.codehilite .nn { color: #00F; font-weight: bold } /* Name.Namespace */
+.codehilite .nt { color: #008000; font-weight: bold } /* Name.Tag */
+.codehilite .nv { color: #19177C } /* Name.Variable */
+.codehilite .ow { color: #A2F; font-weight: bold } /* Operator.Word */
+.codehilite .w { color: #BBB } /* Text.Whitespace */
+.codehilite .mb { color: #666 } /* Literal.Number.Bin */
+.codehilite .mf { color: #666 } /* Literal.Number.Float */
+.codehilite .mh { color: #666 } /* Literal.Number.Hex */
+.codehilite .mi { color: #666 } /* Literal.Number.Integer */
+.codehilite .mo { color: #666 } /* Literal.Number.Oct */
+.codehilite .sa { color: #BA2121 } /* Literal.String.Affix */
+.codehilite .sb { color: #BA2121 } /* Literal.String.Backtick */
+.codehilite .sc { color: #BA2121 } /* Literal.String.Char */
+.codehilite .dl { color: #BA2121 } /* Literal.String.Delimiter */
+.codehilite .sd { color: #BA2121; font-style: italic } /* Literal.String.Doc */
+.codehilite .s2 { color: #BA2121 } /* Literal.String.Double */
+.codehilite .se { color: #AA5D1F; font-weight: bold } /* Literal.String.Escape */
+.codehilite .sh { color: #BA2121 } /* Literal.String.Heredoc */
+.codehilite .si { color: #A45A77; font-weight: bold } /* Literal.String.Interpol */
+.codehilite .sx { color: #008000 } /* Literal.String.Other */
+.codehilite .sr { color: #A45A77 } /* Literal.String.Regex */
+.codehilite .s1 { color: #BA2121 } /* Literal.String.Single */
+.codehilite .ss { color: #19177C } /* Literal.String.Symbol */
+.codehilite .bp { color: #008000 } /* Name.Builtin.Pseudo */
+.codehilite .fm { color: #00F } /* Name.Function.Magic */
+.codehilite .vc { color: #19177C } /* Name.Variable.Class */
+.codehilite .vg { color: #19177C } /* Name.Variable.Global */
+.codehilite .vi { color: #19177C } /* Name.Variable.Instance */
+.codehilite .vm { color: #19177C } /* Name.Variable.Magic */
+.codehilite .il { color: #666 } /* Literal.Number.Integer.Long */
+/* Pygments syntax highlighting — dark */
+@media (prefers-color-scheme: dark) {
+pre { line-height: 125%; }
+td.linenos .normal { color: #6e7681; background-color: #0d1117; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: #6e7681; background-color: #0d1117; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #e6edf3; background-color: #6e7681; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #e6edf3; background-color: #6e7681; padding-left: 5px; padding-right: 5px; }
+.codehilite .hll { background-color: #6e7681 }
+.codehilite { background: #0d1117; color: #E6EDF3 }
+.codehilite .c { color: #8B949E; font-style: italic } /* Comment */
+.codehilite .err { color: #F85149 } /* Error */
+.codehilite .esc { color: #E6EDF3 } /* Escape */
+.codehilite .g { color: #E6EDF3 } /* Generic */
+.codehilite .k { color: #FF7B72 } /* Keyword */
+.codehilite .l { color: #A5D6FF } /* Literal */
+.codehilite .n { color: #E6EDF3 } /* Name */
+.codehilite .o { color: #FF7B72; font-weight: bold } /* Operator */
+.codehilite .x { color: #E6EDF3 } /* Other */
+.codehilite .p { color: #E6EDF3 } /* Punctuation */
+.codehilite .ch { color: #8B949E; font-style: italic } /* Comment.Hashbang */
+.codehilite .cm { color: #8B949E; font-style: italic } /* Comment.Multiline */
+.codehilite .cp { color: #8B949E; font-weight: bold; font-style: italic } /* Comment.Preproc */
+.codehilite .cpf { color: #8B949E; font-style: italic } /* Comment.PreprocFile */
+.codehilite .c1 { color: #8B949E; font-style: italic } /* Comment.Single */
+.codehilite .cs { color: #8B949E; font-weight: bold; font-style: italic } /* Comment.Special */
+.codehilite .gd { color: #FFA198; background-color: #490202 } /* Generic.Deleted */
+.codehilite .ge { color: #E6EDF3; font-style: italic } /* Generic.Emph */
+.codehilite .ges { color: #E6EDF3; font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.codehilite .gr { color: #FFA198 } /* Generic.Error */
+.codehilite .gh { color: #79C0FF; font-weight: bold } /* Generic.Heading */
+.codehilite .gi { color: #56D364; background-color: #0F5323 } /* Generic.Inserted */
+.codehilite .go { color: #8B949E } /* Generic.Output */
+.codehilite .gp { color: #8B949E } /* Generic.Prompt */
+.codehilite .gs { color: #E6EDF3; font-weight: bold } /* Generic.Strong */
+.codehilite .gu { color: #79C0FF } /* Generic.Subheading */
+.codehilite .gt { color: #FF7B72 } /* Generic.Traceback */
+.codehilite .g-Underline { color: #E6EDF3; text-decoration: underline } /* Generic.Underline */
+.codehilite .kc { color: #79C0FF } /* Keyword.Constant */
+.codehilite .kd { color: #FF7B72 } /* Keyword.Declaration */
+.codehilite .kn { color: #FF7B72 } /* Keyword.Namespace */
+.codehilite .kp { color: #79C0FF } /* Keyword.Pseudo */
+.codehilite .kr { color: #FF7B72 } /* Keyword.Reserved */
+.codehilite .kt { color: #FF7B72 } /* Keyword.Type */
+.codehilite .ld { color: #79C0FF } /* Literal.Date */
+.codehilite .m { color: #A5D6FF } /* Literal.Number */
+.codehilite .s { color: #A5D6FF } /* Literal.String */
+.codehilite .na { color: #E6EDF3 } /* Name.Attribute */
+.codehilite .nb { color: #E6EDF3 } /* Name.Builtin */
+.codehilite .nc { color: #F0883E; font-weight: bold } /* Name.Class */
+.codehilite .no { color: #79C0FF; font-weight: bold } /* Name.Constant */
+.codehilite .nd { color: #D2A8FF; font-weight: bold } /* Name.Decorator */
+.codehilite .ni { color: #FFA657 } /* Name.Entity */
+.codehilite .ne { color: #F0883E; font-weight: bold } /* Name.Exception */
+.codehilite .nf { color: #D2A8FF; font-weight: bold } /* Name.Function */
+.codehilite .nl { color: #79C0FF; font-weight: bold } /* Name.Label */
+.codehilite .nn { color: #FF7B72 } /* Name.Namespace */
+.codehilite .nx { color: #E6EDF3 } /* Name.Other */
+.codehilite .py { color: #79C0FF } /* Name.Property */
+.codehilite .nt { color: #7EE787 } /* Name.Tag */
+.codehilite .nv { color: #79C0FF } /* Name.Variable */
+.codehilite .ow { color: #FF7B72; font-weight: bold } /* Operator.Word */
+.codehilite .pm { color: #E6EDF3 } /* Punctuation.Marker */
+.codehilite .w { color: #6E7681 } /* Text.Whitespace */
+.codehilite .mb { color: #A5D6FF } /* Literal.Number.Bin */
+.codehilite .mf { color: #A5D6FF } /* Literal.Number.Float */
+.codehilite .mh { color: #A5D6FF } /* Literal.Number.Hex */
+.codehilite .mi { color: #A5D6FF } /* Literal.Number.Integer */
+.codehilite .mo { color: #A5D6FF } /* Literal.Number.Oct */
+.codehilite .sa { color: #79C0FF } /* Literal.String.Affix */
+.codehilite .sb { color: #A5D6FF } /* Literal.String.Backtick */
+.codehilite .sc { color: #A5D6FF } /* Literal.String.Char */
+.codehilite .dl { color: #79C0FF } /* Literal.String.Delimiter */
+.codehilite .sd { color: #A5D6FF } /* Literal.String.Doc */
+.codehilite .s2 { color: #A5D6FF } /* Literal.String.Double */
+.codehilite .se { color: #79C0FF } /* Literal.String.Escape */
+.codehilite .sh { color: #79C0FF } /* Literal.String.Heredoc */
+.codehilite .si { color: #A5D6FF } /* Literal.String.Interpol */
+.codehilite .sx { color: #A5D6FF } /* Literal.String.Other */
+.codehilite .sr { color: #79C0FF } /* Literal.String.Regex */
+.codehilite .s1 { color: #A5D6FF } /* Literal.String.Single */
+.codehilite .ss { color: #A5D6FF } /* Literal.String.Symbol */
+.codehilite .bp { color: #E6EDF3 } /* Name.Builtin.Pseudo */
+.codehilite .fm { color: #D2A8FF; font-weight: bold } /* Name.Function.Magic */
+.codehilite .vc { color: #79C0FF } /* Name.Variable.Class */
+.codehilite .vg { color: #79C0FF } /* Name.Variable.Global */
+.codehilite .vi { color: #79C0FF } /* Name.Variable.Instance */
+.codehilite .vm { color: #79C0FF } /* Name.Variable.Magic */
+.codehilite .il { color: #A5D6FF } /* Literal.Number.Integer.Long */
+}
 </style>
 </head>
 <body>
+<main class="page">
 <h1 id="phase-04-streaming-ingestion-with-kafka-2-v040">Phase 04 — Streaming Ingestion with Kafka ② (<code>v0.4.0</code>)</h1>
 <blockquote>
 <p><strong>Mission:</strong> run Kafka for real. Produce NovaMart clickstream events with Avro +
@@ -85,75 +267,79 @@ who has operated both.</p>
 </ol>
 <h2 id="2-build">2. Build</h2>
 <h3 id="21-kafka-locally-dockerdocker-composekafkayml">2.1 Kafka locally — <code>docker/docker-compose.kafka.yml</code></h3>
-<pre><code class="language-yaml">services:
-  kafka:
-    image: confluentinc/cp-kafka:7.6.1
-    environment:
-      KAFKA_NODE_ID: 1
-      KAFKA_PROCESS_ROLES: broker,controller        # KRaft — no ZooKeeper (say why in interviews: metadata quorum moved into Kafka itself)
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:29093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
-      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1     # RF=1 locally; say &quot;RF=3 + min.insync=2 + acks=all&quot; for prod (§30)
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: &quot;false&quot;      # explicit topics only — prod hygiene
-    ports: [&quot;9092:9092&quot;]
-  schema-registry:
-    image: confluentinc/cp-schema-registry:7.6.1
-    depends_on: [kafka]
-    environment:
-      SCHEMA_REGISTRY_HOST_NAME: schema-registry
-      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka:9092
-      SCHEMA_REGISTRY_SCHEMA_COMPATIBILITY_LEVEL: BACKWARD
-    ports: [&quot;8081:8081&quot;]
-  kafka-ui:
-    image: provectuslabs/kafka-ui:latest
-    environment:
-      KAFKA_CLUSTERS_0_BOOTSTRAP_SERVERS: kafka:9092
-      KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
-    ports: [&quot;8080:8080&quot;]
-</code></pre>
+<div class="codehilite"><pre><span></span><code><span class="nt">services</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">kafka</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">confluentinc/cp-kafka:7.6.1</span>
+<span class="w">    </span><span class="nt">environment</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">KAFKA_NODE_ID</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="w">      </span><span class="nt">KAFKA_PROCESS_ROLES</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">broker,controller</span><span class="w">        </span><span class="c1"># KRaft — no ZooKeeper (say why in interviews: metadata quorum moved into Kafka itself)</span>
+<span class="w">      </span><span class="nt">KAFKA_CONTROLLER_QUORUM_VOTERS</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1@kafka:29093</span>
+<span class="w">      </span><span class="nt">KAFKA_LISTENERS</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:29093</span>
+<span class="w">      </span><span class="nt">KAFKA_ADVERTISED_LISTENERS</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">PLAINTEXT://localhost:9092</span>
+<span class="w">      </span><span class="nt">KAFKA_CONTROLLER_LISTENER_NAMES</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">CONTROLLER</span>
+<span class="w">      </span><span class="nt">KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span><span class="w">     </span><span class="c1"># RF=1 locally; say &quot;RF=3 + min.insync=2 + acks=all&quot; for prod (§30)</span>
+<span class="w">      </span><span class="nt">KAFKA_AUTO_CREATE_TOPICS_ENABLE</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;false&quot;</span><span class="w">      </span><span class="c1"># explicit topics only — prod hygiene</span>
+<span class="w">    </span><span class="nt">ports</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;9092:9092&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">schema-registry</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">confluentinc/cp-schema-registry:7.6.1</span>
+<span class="w">    </span><span class="nt">depends_on</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">kafka</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">environment</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">SCHEMA_REGISTRY_HOST_NAME</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">schema-registry</span>
+<span class="w">      </span><span class="nt">SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">PLAINTEXT://kafka:9092</span>
+<span class="w">      </span><span class="nt">SCHEMA_REGISTRY_SCHEMA_COMPATIBILITY_LEVEL</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">BACKWARD</span>
+<span class="w">    </span><span class="nt">ports</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;8081:8081&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">kafka-ui</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">provectuslabs/kafka-ui:latest</span>
+<span class="w">    </span><span class="nt">environment</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">KAFKA_CLUSTERS_0_BOOTSTRAP_SERVERS</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kafka:9092</span>
+<span class="w">      </span><span class="nt">KAFKA_CLUSTERS_0_SCHEMAREGISTRY</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://schema-registry:8081</span>
+<span class="w">    </span><span class="nt">ports</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;8080:8080&quot;</span><span class="p p-Indicator">]</span>
+</code></pre></div>
+
 <p>Create topics deliberately (counts are a design decision, not a default — §11):</p>
-<pre><code class="language-bash">docker exec -it kafka kafka-topics --bootstrap-server localhost:9092 --create \
-  --topic novamart.clickstream.v1 --partitions 6 --replication-factor 1
-docker exec -it kafka kafka-topics --bootstrap-server localhost:9092 --create \
-  --topic novamart.clickstream.v1.dlq --partitions 1 --replication-factor 1
-</code></pre>
+<div class="codehilite"><pre><span></span><code>docker<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-it<span class="w"> </span>kafka<span class="w"> </span>kafka-topics<span class="w"> </span>--bootstrap-server<span class="w"> </span>localhost:9092<span class="w"> </span>--create<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--topic<span class="w"> </span>novamart.clickstream.v1<span class="w"> </span>--partitions<span class="w"> </span><span class="m">6</span><span class="w"> </span>--replication-factor<span class="w"> </span><span class="m">1</span>
+docker<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-it<span class="w"> </span>kafka<span class="w"> </span>kafka-topics<span class="w"> </span>--bootstrap-server<span class="w"> </span>localhost:9092<span class="w"> </span>--create<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--topic<span class="w"> </span>novamart.clickstream.v1.dlq<span class="w"> </span>--partitions<span class="w"> </span><span class="m">1</span><span class="w"> </span>--replication-factor<span class="w"> </span><span class="m">1</span>
+</code></pre></div>
+
 <p>Why 6? Peak 1,500 ev/s ÷ ~10K per partition &lt; 1 — so 6 is pure headroom +
 consumer parallelism. Being able to say "the math says 1, I chose 6 for
 rebalancing granularity and growth" is the point.</p>
 <h3 id="22-avro-contract-producer-generatorsgen_clickstreampy">2.2 Avro contract + producer — <code>generators/gen_clickstream.py</code></h3>
 <p><code>contracts/clickstream.v1.avsc</code>:</p>
-<pre><code class="language-json">{&quot;type&quot;: &quot;record&quot;, &quot;name&quot;: &quot;ClickEvent&quot;, &quot;namespace&quot;: &quot;novamart&quot;,
- &quot;fields&quot;: [
-   {&quot;name&quot;: &quot;event_id&quot;,   &quot;type&quot;: &quot;string&quot;},
-   {&quot;name&quot;: &quot;session_id&quot;, &quot;type&quot;: &quot;string&quot;},
-   {&quot;name&quot;: &quot;customer_id&quot;,&quot;type&quot;: [&quot;null&quot;, &quot;string&quot;], &quot;default&quot;: null},
-   {&quot;name&quot;: &quot;event_type&quot;, &quot;type&quot;: {&quot;type&quot;: &quot;enum&quot;, &quot;name&quot;: &quot;EventType&quot;,
-       &quot;symbols&quot;: [&quot;page_view&quot;,&quot;search&quot;,&quot;add_to_cart&quot;,&quot;checkout&quot;,&quot;purchase&quot;]}},
-   {&quot;name&quot;: &quot;url&quot;,        &quot;type&quot;: &quot;string&quot;},
-   {&quot;name&quot;: &quot;event_ts&quot;,   &quot;type&quot;: {&quot;type&quot;: &quot;long&quot;, &quot;logicalType&quot;: &quot;timestamp-millis&quot;}},
-   {&quot;name&quot;: &quot;user_agent&quot;, &quot;type&quot;: [&quot;null&quot;,&quot;string&quot;], &quot;default&quot;: null}
- ]}
-</code></pre>
+<div class="codehilite"><pre><span></span><code><span class="p">{</span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;record&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ClickEvent&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;namespace&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;novamart&quot;</span><span class="p">,</span>
+<span class="w"> </span><span class="nt">&quot;fields&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">   </span><span class="p">{</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;event_id&quot;</span><span class="p">,</span><span class="w">   </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;string&quot;</span><span class="p">},</span>
+<span class="w">   </span><span class="p">{</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;session_id&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;string&quot;</span><span class="p">},</span>
+<span class="w">   </span><span class="p">{</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;customer_id&quot;</span><span class="p">,</span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;null&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;string&quot;</span><span class="p">],</span><span class="w"> </span><span class="nt">&quot;default&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">},</span>
+<span class="w">   </span><span class="p">{</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;event_type&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;enum&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;EventType&quot;</span><span class="p">,</span>
+<span class="w">       </span><span class="nt">&quot;symbols&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;page_view&quot;</span><span class="p">,</span><span class="s2">&quot;search&quot;</span><span class="p">,</span><span class="s2">&quot;add_to_cart&quot;</span><span class="p">,</span><span class="s2">&quot;checkout&quot;</span><span class="p">,</span><span class="s2">&quot;purchase&quot;</span><span class="p">]}},</span>
+<span class="w">   </span><span class="p">{</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;url&quot;</span><span class="p">,</span><span class="w">        </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;string&quot;</span><span class="p">},</span>
+<span class="w">   </span><span class="p">{</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;event_ts&quot;</span><span class="p">,</span><span class="w">   </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;long&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;logicalType&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;timestamp-millis&quot;</span><span class="p">}},</span>
+<span class="w">   </span><span class="p">{</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;user_agent&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;null&quot;</span><span class="p">,</span><span class="s2">&quot;string&quot;</span><span class="p">],</span><span class="w"> </span><span class="nt">&quot;default&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">}</span>
+<span class="w"> </span><span class="p">]}</span>
+</code></pre></div>
+
 <p>Producer essentials (<code>confluent-kafka[avro]</code>):</p>
-<pre><code class="language-python">producer = SerializingProducer({
-    &quot;bootstrap.servers&quot;: &quot;localhost:9092&quot;,
-    &quot;key.serializer&quot;: StringSerializer(),
-    &quot;value.serializer&quot;: AvroSerializer(schema_registry_client, schema_str),
-    &quot;enable.idempotence&quot;: True,     # dedup layer 1 of 4 (§18): broker drops retry-duplicates
-    &quot;acks&quot;: &quot;all&quot;,
-    &quot;linger.ms&quot;: 20, &quot;batch.size&quot;: 65536,   # batching = why Kafka is fast (§30)
-})
-producer.produce(topic, key=event[&quot;session_id&quot;], value=event, on_delivery=cb)
-</code></pre>
+<div class="codehilite"><pre><span></span><code><span class="n">producer</span> <span class="o">=</span> <span class="n">SerializingProducer</span><span class="p">({</span>
+    <span class="s2">&quot;bootstrap.servers&quot;</span><span class="p">:</span> <span class="s2">&quot;localhost:9092&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;key.serializer&quot;</span><span class="p">:</span> <span class="n">StringSerializer</span><span class="p">(),</span>
+    <span class="s2">&quot;value.serializer&quot;</span><span class="p">:</span> <span class="n">AvroSerializer</span><span class="p">(</span><span class="n">schema_registry_client</span><span class="p">,</span> <span class="n">schema_str</span><span class="p">),</span>
+    <span class="s2">&quot;enable.idempotence&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>     <span class="c1"># dedup layer 1 of 4 (§18): broker drops retry-duplicates</span>
+    <span class="s2">&quot;acks&quot;</span><span class="p">:</span> <span class="s2">&quot;all&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;linger.ms&quot;</span><span class="p">:</span> <span class="mi">20</span><span class="p">,</span> <span class="s2">&quot;batch.size&quot;</span><span class="p">:</span> <span class="mi">65536</span><span class="p">,</span>   <span class="c1"># batching = why Kafka is fast (§30)</span>
+<span class="p">})</span>
+<span class="n">producer</span><span class="o">.</span><span class="n">produce</span><span class="p">(</span><span class="n">topic</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">event</span><span class="p">[</span><span class="s2">&quot;session_id&quot;</span><span class="p">],</span> <span class="n">value</span><span class="o">=</span><span class="n">event</span><span class="p">,</span> <span class="n">on_delivery</span><span class="o">=</span><span class="n">cb</span><span class="p">)</span>
+</code></pre></div>
+
 <p>The generator simulates sessions (5–30 events each), configurable rate
 (<code>--eps 200</code>), a <code>--late-fraction</code> that emits events with old <code>event_ts</code>
 (event-time vs processing-time fodder), and <code>--poison-fraction</code> that sends
 schema-invalid bytes directly with a raw producer (DLQ fodder).</p>
 <h3 id="23-the-micro-batching-consumer-srcpipeforgeingestionkafka_consumerpy">2.3 The micro-batching consumer — <code>src/pipeforge/ingestion/kafka_consumer.py</code></h3>
 <p>The heart of the phase. Design (write this docstring first, code second):</p>
-<pre><code>Consumer group: pf-raw-lander
+<div class="codehilite"><pre><span></span><code>Consumer group: pf-raw-lander
 Loop:
   poll() up to FLUSH_MAX_EVENTS or FLUSH_INTERVAL_S (60s), buffering per topic-partition
   deserialize Avro; failures → produce raw bytes + error header to .dlq topic
@@ -163,7 +349,8 @@ Loop:
   THEN commit offsets (manual, synchronous)          ← at-least-once boundary
 Crash between GCS write and commit ⇒ batch re-lands under a new batch_id
   ⇒ duplicates in RAW ⇒ removed in ODP by (event_id) dedup. Effectively-once.
-</code></pre>
+</code></pre></div>
+
 <p>Implementation notes:
 - <code>enable.auto.commit: false</code>, <code>auto.offset.reset: earliest</code>.
 - Filenames carry offset ranges — your replay/debug breadcrumbs.
@@ -233,5 +420,6 @@ prevention (retention sized to max tolerable outage; lag alert at 50% of retenti
 <li>Add Prometheus JMX exporter + Grafana for broker metrics.</li>
 <li>Implement a consumer <strong>backpressure</strong> test: cap GCS write speed, watch lag grow, reason about scaling (partitions vs consumers).</li>
 </ul>
+</main>
 </body>
 </html>

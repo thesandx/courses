@@ -7,52 +7,234 @@
 <style>
 :root {
   --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
-  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e;
+  --code-bg: #f6f8fa; --link: #0969da; --quote: #59636e; --accent: #0969da;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
-    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1;
+    --code-bg: #161b22; --link: #4493f8; --quote: #9198a1; --accent: #4493f8;
   }
 }
 * { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
 body {
-  margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 900px;
-  background: var(--bg); color: var(--fg);
+  margin: 0; background: var(--bg); color: var(--fg);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
-  font-size: 16px; line-height: 1.6; word-wrap: break-word;
+  font-size: 16px; line-height: 1.65; word-wrap: break-word;
+  -webkit-font-smoothing: antialiased;
 }
-h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: .5em; line-height: 1.25; font-weight: 600; }
-h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+.page { max-width: 880px; margin: 0 auto; padding: 2.5rem 1.5rem 5rem; }
+h1, h2, h3, h4, h5, h6 { margin-top: 1.6em; margin-bottom: .5em; line-height: 1.25; font-weight: 650; }
+h1 { font-size: 2.1em; margin-top: 0; border-bottom: 2px solid var(--border); padding-bottom: .35em; letter-spacing: -.02em; }
 h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
 h3 { font-size: 1.25em; }
+h4 { font-size: 1.05em; }
+p { margin: 0 0 1em; }
 a { color: var(--link); text-decoration: none; }
 a:hover { text-decoration: underline; }
-code, pre {
+strong { font-weight: 650; }
+code, pre, kbd {
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-  font-size: 85%;
 }
-code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; }
+code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; font-size: 85%; }
 pre {
-  background: var(--code-bg); padding: 1em; border-radius: 6px;
-  overflow-x: auto; line-height: 1.45;
+  background: var(--code-bg); padding: 1em 1.2em; border-radius: 8px;
+  overflow-x: auto; line-height: 1.5; font-size: 85%;
+  border: 1px solid var(--border); margin: 0 0 1.2em;
 }
-pre code { background: transparent; padding: 0; font-size: 100%; }
+pre code { background: transparent; padding: 0; font-size: 100%; border-radius: 0; }
+.codehilite { background: var(--code-bg); border-radius: 8px; margin: 0 0 1.2em; }
+.codehilite pre { margin: 0; border: 1px solid var(--border); }
 blockquote {
-  margin: 0 0 1em; padding: 0 1em; color: var(--quote);
-  border-left: .25em solid var(--border);
+  margin: 0 0 1.2em; padding: .5em 1.1em; color: var(--quote);
+  border-left: 4px solid var(--accent); background: var(--code-bg);
+  border-radius: 0 8px 8px 0;
 }
-table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin-bottom: 1em; }
-th, td { border: 1px solid var(--border); padding: 6px 13px; }
-th { font-weight: 600; }
+blockquote > :first-child { margin-top: 0; }
+blockquote > :last-child { margin-bottom: 0; }
+table {
+  border-collapse: collapse; display: block; overflow-x: auto;
+  max-width: 100%; margin: 0 0 1.2em; font-size: .95em;
+}
+th, td { border: 1px solid var(--border); padding: 8px 14px; }
+th { font-weight: 650; background: var(--code-bg); }
 tr:nth-child(2n) td { background: var(--code-bg); }
-img { max-width: 100%; }
-hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
-ul, ol { padding-left: 2em; }
-li + li { margin-top: .25em; }
+img { max-width: 100%; border-radius: 8px; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 2em 0; }
+ul, ol { padding-left: 1.8em; margin: 0 0 1em; }
+li { margin: .3em 0; }
+li > p { margin-bottom: .5em; }
+input[type="checkbox"] { margin-right: .4em; }
+::selection { background: color-mix(in srgb, var(--accent) 25%, transparent); }
+/* Pygments syntax highlighting — light */
+pre { line-height: 125%; }
+td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+.codehilite .hll { background-color: #ffffcc }
+.codehilite { background: #f8f8f8; }
+.codehilite .c { color: #3D7B7B; font-style: italic } /* Comment */
+.codehilite .err { border: 1px solid #F00 } /* Error */
+.codehilite .k { color: #008000; font-weight: bold } /* Keyword */
+.codehilite .o { color: #666 } /* Operator */
+.codehilite .ch { color: #3D7B7B; font-style: italic } /* Comment.Hashbang */
+.codehilite .cm { color: #3D7B7B; font-style: italic } /* Comment.Multiline */
+.codehilite .cp { color: #9C6500 } /* Comment.Preproc */
+.codehilite .cpf { color: #3D7B7B; font-style: italic } /* Comment.PreprocFile */
+.codehilite .c1 { color: #3D7B7B; font-style: italic } /* Comment.Single */
+.codehilite .cs { color: #3D7B7B; font-style: italic } /* Comment.Special */
+.codehilite .gd { color: #A00000 } /* Generic.Deleted */
+.codehilite .ge { font-style: italic } /* Generic.Emph */
+.codehilite .ges { font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.codehilite .gr { color: #E40000 } /* Generic.Error */
+.codehilite .gh { color: #000080; font-weight: bold } /* Generic.Heading */
+.codehilite .gi { color: #008400 } /* Generic.Inserted */
+.codehilite .go { color: #717171 } /* Generic.Output */
+.codehilite .gp { color: #000080; font-weight: bold } /* Generic.Prompt */
+.codehilite .gs { font-weight: bold } /* Generic.Strong */
+.codehilite .gu { color: #800080; font-weight: bold } /* Generic.Subheading */
+.codehilite .gt { color: #04D } /* Generic.Traceback */
+.codehilite .kc { color: #008000; font-weight: bold } /* Keyword.Constant */
+.codehilite .kd { color: #008000; font-weight: bold } /* Keyword.Declaration */
+.codehilite .kn { color: #008000; font-weight: bold } /* Keyword.Namespace */
+.codehilite .kp { color: #008000 } /* Keyword.Pseudo */
+.codehilite .kr { color: #008000; font-weight: bold } /* Keyword.Reserved */
+.codehilite .kt { color: #B00040 } /* Keyword.Type */
+.codehilite .m { color: #666 } /* Literal.Number */
+.codehilite .s { color: #BA2121 } /* Literal.String */
+.codehilite .na { color: #687822 } /* Name.Attribute */
+.codehilite .nb { color: #008000 } /* Name.Builtin */
+.codehilite .nc { color: #00F; font-weight: bold } /* Name.Class */
+.codehilite .no { color: #800 } /* Name.Constant */
+.codehilite .nd { color: #A2F } /* Name.Decorator */
+.codehilite .ni { color: #717171; font-weight: bold } /* Name.Entity */
+.codehilite .ne { color: #CB3F38; font-weight: bold } /* Name.Exception */
+.codehilite .nf { color: #00F } /* Name.Function */
+.codehilite .nl { color: #767600 } /* Name.Label */
+.codehilite .nn { color: #00F; font-weight: bold } /* Name.Namespace */
+.codehilite .nt { color: #008000; font-weight: bold } /* Name.Tag */
+.codehilite .nv { color: #19177C } /* Name.Variable */
+.codehilite .ow { color: #A2F; font-weight: bold } /* Operator.Word */
+.codehilite .w { color: #BBB } /* Text.Whitespace */
+.codehilite .mb { color: #666 } /* Literal.Number.Bin */
+.codehilite .mf { color: #666 } /* Literal.Number.Float */
+.codehilite .mh { color: #666 } /* Literal.Number.Hex */
+.codehilite .mi { color: #666 } /* Literal.Number.Integer */
+.codehilite .mo { color: #666 } /* Literal.Number.Oct */
+.codehilite .sa { color: #BA2121 } /* Literal.String.Affix */
+.codehilite .sb { color: #BA2121 } /* Literal.String.Backtick */
+.codehilite .sc { color: #BA2121 } /* Literal.String.Char */
+.codehilite .dl { color: #BA2121 } /* Literal.String.Delimiter */
+.codehilite .sd { color: #BA2121; font-style: italic } /* Literal.String.Doc */
+.codehilite .s2 { color: #BA2121 } /* Literal.String.Double */
+.codehilite .se { color: #AA5D1F; font-weight: bold } /* Literal.String.Escape */
+.codehilite .sh { color: #BA2121 } /* Literal.String.Heredoc */
+.codehilite .si { color: #A45A77; font-weight: bold } /* Literal.String.Interpol */
+.codehilite .sx { color: #008000 } /* Literal.String.Other */
+.codehilite .sr { color: #A45A77 } /* Literal.String.Regex */
+.codehilite .s1 { color: #BA2121 } /* Literal.String.Single */
+.codehilite .ss { color: #19177C } /* Literal.String.Symbol */
+.codehilite .bp { color: #008000 } /* Name.Builtin.Pseudo */
+.codehilite .fm { color: #00F } /* Name.Function.Magic */
+.codehilite .vc { color: #19177C } /* Name.Variable.Class */
+.codehilite .vg { color: #19177C } /* Name.Variable.Global */
+.codehilite .vi { color: #19177C } /* Name.Variable.Instance */
+.codehilite .vm { color: #19177C } /* Name.Variable.Magic */
+.codehilite .il { color: #666 } /* Literal.Number.Integer.Long */
+/* Pygments syntax highlighting — dark */
+@media (prefers-color-scheme: dark) {
+pre { line-height: 125%; }
+td.linenos .normal { color: #6e7681; background-color: #0d1117; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: #6e7681; background-color: #0d1117; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #e6edf3; background-color: #6e7681; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #e6edf3; background-color: #6e7681; padding-left: 5px; padding-right: 5px; }
+.codehilite .hll { background-color: #6e7681 }
+.codehilite { background: #0d1117; color: #E6EDF3 }
+.codehilite .c { color: #8B949E; font-style: italic } /* Comment */
+.codehilite .err { color: #F85149 } /* Error */
+.codehilite .esc { color: #E6EDF3 } /* Escape */
+.codehilite .g { color: #E6EDF3 } /* Generic */
+.codehilite .k { color: #FF7B72 } /* Keyword */
+.codehilite .l { color: #A5D6FF } /* Literal */
+.codehilite .n { color: #E6EDF3 } /* Name */
+.codehilite .o { color: #FF7B72; font-weight: bold } /* Operator */
+.codehilite .x { color: #E6EDF3 } /* Other */
+.codehilite .p { color: #E6EDF3 } /* Punctuation */
+.codehilite .ch { color: #8B949E; font-style: italic } /* Comment.Hashbang */
+.codehilite .cm { color: #8B949E; font-style: italic } /* Comment.Multiline */
+.codehilite .cp { color: #8B949E; font-weight: bold; font-style: italic } /* Comment.Preproc */
+.codehilite .cpf { color: #8B949E; font-style: italic } /* Comment.PreprocFile */
+.codehilite .c1 { color: #8B949E; font-style: italic } /* Comment.Single */
+.codehilite .cs { color: #8B949E; font-weight: bold; font-style: italic } /* Comment.Special */
+.codehilite .gd { color: #FFA198; background-color: #490202 } /* Generic.Deleted */
+.codehilite .ge { color: #E6EDF3; font-style: italic } /* Generic.Emph */
+.codehilite .ges { color: #E6EDF3; font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.codehilite .gr { color: #FFA198 } /* Generic.Error */
+.codehilite .gh { color: #79C0FF; font-weight: bold } /* Generic.Heading */
+.codehilite .gi { color: #56D364; background-color: #0F5323 } /* Generic.Inserted */
+.codehilite .go { color: #8B949E } /* Generic.Output */
+.codehilite .gp { color: #8B949E } /* Generic.Prompt */
+.codehilite .gs { color: #E6EDF3; font-weight: bold } /* Generic.Strong */
+.codehilite .gu { color: #79C0FF } /* Generic.Subheading */
+.codehilite .gt { color: #FF7B72 } /* Generic.Traceback */
+.codehilite .g-Underline { color: #E6EDF3; text-decoration: underline } /* Generic.Underline */
+.codehilite .kc { color: #79C0FF } /* Keyword.Constant */
+.codehilite .kd { color: #FF7B72 } /* Keyword.Declaration */
+.codehilite .kn { color: #FF7B72 } /* Keyword.Namespace */
+.codehilite .kp { color: #79C0FF } /* Keyword.Pseudo */
+.codehilite .kr { color: #FF7B72 } /* Keyword.Reserved */
+.codehilite .kt { color: #FF7B72 } /* Keyword.Type */
+.codehilite .ld { color: #79C0FF } /* Literal.Date */
+.codehilite .m { color: #A5D6FF } /* Literal.Number */
+.codehilite .s { color: #A5D6FF } /* Literal.String */
+.codehilite .na { color: #E6EDF3 } /* Name.Attribute */
+.codehilite .nb { color: #E6EDF3 } /* Name.Builtin */
+.codehilite .nc { color: #F0883E; font-weight: bold } /* Name.Class */
+.codehilite .no { color: #79C0FF; font-weight: bold } /* Name.Constant */
+.codehilite .nd { color: #D2A8FF; font-weight: bold } /* Name.Decorator */
+.codehilite .ni { color: #FFA657 } /* Name.Entity */
+.codehilite .ne { color: #F0883E; font-weight: bold } /* Name.Exception */
+.codehilite .nf { color: #D2A8FF; font-weight: bold } /* Name.Function */
+.codehilite .nl { color: #79C0FF; font-weight: bold } /* Name.Label */
+.codehilite .nn { color: #FF7B72 } /* Name.Namespace */
+.codehilite .nx { color: #E6EDF3 } /* Name.Other */
+.codehilite .py { color: #79C0FF } /* Name.Property */
+.codehilite .nt { color: #7EE787 } /* Name.Tag */
+.codehilite .nv { color: #79C0FF } /* Name.Variable */
+.codehilite .ow { color: #FF7B72; font-weight: bold } /* Operator.Word */
+.codehilite .pm { color: #E6EDF3 } /* Punctuation.Marker */
+.codehilite .w { color: #6E7681 } /* Text.Whitespace */
+.codehilite .mb { color: #A5D6FF } /* Literal.Number.Bin */
+.codehilite .mf { color: #A5D6FF } /* Literal.Number.Float */
+.codehilite .mh { color: #A5D6FF } /* Literal.Number.Hex */
+.codehilite .mi { color: #A5D6FF } /* Literal.Number.Integer */
+.codehilite .mo { color: #A5D6FF } /* Literal.Number.Oct */
+.codehilite .sa { color: #79C0FF } /* Literal.String.Affix */
+.codehilite .sb { color: #A5D6FF } /* Literal.String.Backtick */
+.codehilite .sc { color: #A5D6FF } /* Literal.String.Char */
+.codehilite .dl { color: #79C0FF } /* Literal.String.Delimiter */
+.codehilite .sd { color: #A5D6FF } /* Literal.String.Doc */
+.codehilite .s2 { color: #A5D6FF } /* Literal.String.Double */
+.codehilite .se { color: #79C0FF } /* Literal.String.Escape */
+.codehilite .sh { color: #79C0FF } /* Literal.String.Heredoc */
+.codehilite .si { color: #A5D6FF } /* Literal.String.Interpol */
+.codehilite .sx { color: #A5D6FF } /* Literal.String.Other */
+.codehilite .sr { color: #79C0FF } /* Literal.String.Regex */
+.codehilite .s1 { color: #A5D6FF } /* Literal.String.Single */
+.codehilite .ss { color: #A5D6FF } /* Literal.String.Symbol */
+.codehilite .bp { color: #E6EDF3 } /* Name.Builtin.Pseudo */
+.codehilite .fm { color: #D2A8FF; font-weight: bold } /* Name.Function.Magic */
+.codehilite .vc { color: #79C0FF } /* Name.Variable.Class */
+.codehilite .vg { color: #79C0FF } /* Name.Variable.Global */
+.codehilite .vi { color: #79C0FF } /* Name.Variable.Instance */
+.codehilite .vm { color: #79C0FF } /* Name.Variable.Magic */
+.codehilite .il { color: #A5D6FF } /* Literal.Number.Integer.Long */
+}
 </style>
 </head>
 <body>
+<main class="page">
 <h1 id="phase-05-spark-on-dataproc-rawodpfdp-scd2-surrogate-keys-56-v050">Phase 05 — Spark on Dataproc: RAW→ODP→FDP, SCD2 &amp; Surrogate Keys ⑤⑥ (<code>v0.5.0</code>)</h1>
 <blockquote>
 <p><strong>Mission:</strong> distributed processing enters the platform. PySpark jobs on
@@ -97,10 +279,11 @@ and because late events land in old event_date partitions, the job processes a
 [D−2, D]. That one sentence is the §17 "append &amp; compact + grace period" strategy
 in production form.</p>
 <p><strong>The dedup you promised in Phase 4</strong> — the ROW_NUMBER pattern (§18), verbatim:</p>
-<pre><code class="language-python">w = Window.partitionBy(&quot;event_id&quot;).orderBy(F.col(&quot;event_ts&quot;).desc(),
-                                           F.col(&quot;_pf_ingested_at&quot;).desc())
-deduped = df.withColumn(&quot;rn&quot;, F.row_number().over(w)).filter(&quot;rn = 1&quot;).drop(&quot;rn&quot;)
-</code></pre>
+<div class="codehilite"><pre><span></span><code><span class="n">w</span> <span class="o">=</span> <span class="n">Window</span><span class="o">.</span><span class="n">partitionBy</span><span class="p">(</span><span class="s2">&quot;event_id&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">orderBy</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s2">&quot;event_ts&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">desc</span><span class="p">(),</span>
+                                           <span class="n">F</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s2">&quot;_pf_ingested_at&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">desc</span><span class="p">())</span>
+<span class="n">deduped</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">withColumn</span><span class="p">(</span><span class="s2">&quot;rn&quot;</span><span class="p">,</span> <span class="n">F</span><span class="o">.</span><span class="n">row_number</span><span class="p">()</span><span class="o">.</span><span class="n">over</span><span class="p">(</span><span class="n">w</span><span class="p">))</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="s2">&quot;rn = 1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="s2">&quot;rn&quot;</span><span class="p">)</span>
+</code></pre></div>
+
 <p><strong>SCD2 (⑤):</strong> dims keep full history with <code>effective_from</code>, <code>effective_to</code>,
 <code>is_current</code>. Use it where reporting accuracy depends on historical attribute
 values (customer tier at <em>order time</em> — §6). You'll join facts to dims <em>as-of
@@ -126,91 +309,96 @@ connection for external tables. Also grant the SA <code>roles/bigquery.jobUser</
 dataset-level write on <code>fdp_staging</code>/<code>fdp</code>.</p>
 <h3 id="22-job-scaffolding-srcpipeforgeprocessingspark">2.2 Job scaffolding — <code>src/pipeforge/processing/spark/</code></h3>
 <p><code>session.py</code>:</p>
-<pre><code class="language-python">def spark_session(app: str) -&gt; SparkSession:
-    return (SparkSession.builder.appName(app)
-        .config(&quot;spark.sql.sources.partitionOverwriteMode&quot;, &quot;dynamic&quot;)  # idempotent partition writes
-        .config(&quot;spark.sql.adaptive.enabled&quot;, &quot;true&quot;)                   # AQE: runtime coalesce/skew (§29)
-        .config(&quot;spark.sql.session.timeZone&quot;, &quot;UTC&quot;)
-        .getOrCreate())
-</code></pre>
+<div class="codehilite"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">spark_session</span><span class="p">(</span><span class="n">app</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SparkSession</span><span class="p">:</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">SparkSession</span><span class="o">.</span><span class="n">builder</span><span class="o">.</span><span class="n">appName</span><span class="p">(</span><span class="n">app</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">config</span><span class="p">(</span><span class="s2">&quot;spark.sql.sources.partitionOverwriteMode&quot;</span><span class="p">,</span> <span class="s2">&quot;dynamic&quot;</span><span class="p">)</span>  <span class="c1"># idempotent partition writes</span>
+        <span class="o">.</span><span class="n">config</span><span class="p">(</span><span class="s2">&quot;spark.sql.adaptive.enabled&quot;</span><span class="p">,</span> <span class="s2">&quot;true&quot;</span><span class="p">)</span>                   <span class="c1"># AQE: runtime coalesce/skew (§29)</span>
+        <span class="o">.</span><span class="n">config</span><span class="p">(</span><span class="s2">&quot;spark.sql.session.timeZone&quot;</span><span class="p">,</span> <span class="s2">&quot;UTC&quot;</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">getOrCreate</span><span class="p">())</span>
+</code></pre></div>
+
 <p><code>standardize.py</code> (RAW→ODP, one job for ALL datasets — parameter-driven):</p>
-<pre><code class="language-python">def run(dataset_name: str, execution_date: str, lookback_days: int = 2) -&gt; None:
-    ds, contract = load_registry(dataset_name)          # reads Phase-2 metadata
-    spark = spark_session(f&quot;odp-{dataset_name}&quot;)
+<div class="codehilite"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="n">dataset_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">execution_date</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">lookback_days</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">ds</span><span class="p">,</span> <span class="n">contract</span> <span class="o">=</span> <span class="n">load_registry</span><span class="p">(</span><span class="n">dataset_name</span><span class="p">)</span>          <span class="c1"># reads Phase-2 metadata</span>
+    <span class="n">spark</span> <span class="o">=</span> <span class="n">spark_session</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;odp-</span><span class="si">{</span><span class="n">dataset_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
-    # 1. Read only complete batches for the window (manifests are the source of truth)
-    paths = latest_complete_batches(ds, execution_date, lookback_days)
-    raw = read_source_native(spark, ds, paths)          # csv/jsonl/parquet per contract
+    <span class="c1"># 1. Read only complete batches for the window (manifests are the source of truth)</span>
+    <span class="n">paths</span> <span class="o">=</span> <span class="n">latest_complete_batches</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="n">execution_date</span><span class="p">,</span> <span class="n">lookback_days</span><span class="p">)</span>
+    <span class="n">raw</span> <span class="o">=</span> <span class="n">read_source_native</span><span class="p">(</span><span class="n">spark</span><span class="p">,</span> <span class="n">ds</span><span class="p">,</span> <span class="n">paths</span><span class="p">)</span>          <span class="c1"># csv/jsonl/parquet per contract</span>
 
-    # 2. Type-cast from the contract (contract-driven casting = zero per-dataset code)
-    typed = cast_per_contract(raw, contract)            # bad casts -&gt; _pf_cast_errors column
+    <span class="c1"># 2. Type-cast from the contract (contract-driven casting = zero per-dataset code)</span>
+    <span class="n">typed</span> <span class="o">=</span> <span class="n">cast_per_contract</span><span class="p">(</span><span class="n">raw</span><span class="p">,</span> <span class="n">contract</span><span class="p">)</span>            <span class="c1"># bad casts -&gt; _pf_cast_errors column</span>
 
-    # 3. Audit columns
-    typed = (typed
-        .withColumn(&quot;_pf_ingested_at&quot;, F.col(&quot;_pf_ingested_at&quot;).cast(&quot;timestamp&quot;))
-        .withColumn(&quot;_pf_batch_id&quot;, F.input_file_name())
-        .withColumn(&quot;event_date&quot;, F.to_date(F.col(ds.business_date_column))))
+    <span class="c1"># 3. Audit columns</span>
+    <span class="n">typed</span> <span class="o">=</span> <span class="p">(</span><span class="n">typed</span>
+        <span class="o">.</span><span class="n">withColumn</span><span class="p">(</span><span class="s2">&quot;_pf_ingested_at&quot;</span><span class="p">,</span> <span class="n">F</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s2">&quot;_pf_ingested_at&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="s2">&quot;timestamp&quot;</span><span class="p">))</span>
+        <span class="o">.</span><span class="n">withColumn</span><span class="p">(</span><span class="s2">&quot;_pf_batch_id&quot;</span><span class="p">,</span> <span class="n">F</span><span class="o">.</span><span class="n">input_file_name</span><span class="p">())</span>
+        <span class="o">.</span><span class="n">withColumn</span><span class="p">(</span><span class="s2">&quot;event_date&quot;</span><span class="p">,</span> <span class="n">F</span><span class="o">.</span><span class="n">to_date</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="n">ds</span><span class="o">.</span><span class="n">business_date_column</span><span class="p">))))</span>
 
-    # 4. Dedup (ROW_NUMBER pattern) on primary keys
-    deduped, dup_count = dedup(typed, ds.primary_keys, order_col=ds.business_date_column)
+    <span class="c1"># 4. Dedup (ROW_NUMBER pattern) on primary keys</span>
+    <span class="n">deduped</span><span class="p">,</span> <span class="n">dup_count</span> <span class="o">=</span> <span class="n">dedup</span><span class="p">(</span><span class="n">typed</span><span class="p">,</span> <span class="n">ds</span><span class="o">.</span><span class="n">primary_keys</span><span class="p">,</span> <span class="n">order_col</span><span class="o">=</span><span class="n">ds</span><span class="o">.</span><span class="n">business_date_column</span><span class="p">)</span>
 
-    # 5. Write: dynamic partition overwrite of ONLY the touched event_date partitions
-    (deduped.write.mode(&quot;overwrite&quot;)
-        .partitionBy(&quot;event_date&quot;)
-        .parquet(f&quot;gs://{settings.odp_bucket}/{dataset_name}/&quot;))
+    <span class="c1"># 5. Write: dynamic partition overwrite of ONLY the touched event_date partitions</span>
+    <span class="p">(</span><span class="n">deduped</span><span class="o">.</span><span class="n">write</span><span class="o">.</span><span class="n">mode</span><span class="p">(</span><span class="s2">&quot;overwrite&quot;</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">partitionBy</span><span class="p">(</span><span class="s2">&quot;event_date&quot;</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">parquet</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;gs://</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">odp_bucket</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">dataset_name</span><span class="si">}</span><span class="s2">/&quot;</span><span class="p">))</span>
 
-    emit_audit(rows_read=raw.count(), rows_written=deduped.count(),
-               rows_deduped=dup_count)                  # -&gt; pipeline_run
-</code></pre>
+    <span class="n">emit_audit</span><span class="p">(</span><span class="n">rows_read</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">count</span><span class="p">(),</span> <span class="n">rows_written</span><span class="o">=</span><span class="n">deduped</span><span class="o">.</span><span class="n">count</span><span class="p">(),</span>
+               <span class="n">rows_deduped</span><span class="o">=</span><span class="n">dup_count</span><span class="p">)</span>                  <span class="c1"># -&gt; pipeline_run</span>
+</code></pre></div>
+
 <p>Target file sizes while writing: aim for the 100 MB–1 GB sweet spot (§11);
 <code>coalesce()</code> small datasets to 1 file — streaming micro-batches will otherwise
 give you the <strong>small-file problem</strong>; schedule a weekly compaction of clickstream
 ODP partitions (this is your §11 "compaction is mandatory" checkbox).</p>
 <p><code>scd2.py</code> (ODP→FDP for dims) — the algorithm, which you should be able to
 whiteboard cold by the end of this phase:</p>
-<pre><code class="language-python">def build_scd2_changeset(spark, dataset, execution_date):
-    &quot;&quot;&quot;Compare today's ODP snapshot of a dim against current FDP rows.
-    Emit a changeset with row_action in {INSERT_NEW, CLOSE_AND_INSERT}.&quot;&quot;&quot;
-    incoming = spark.read.parquet(odp_path(dataset)).where(f&quot;event_date &lt;= '{execution_date}'&quot;)
-    incoming = latest_per_key(incoming, dataset.primary_keys)        # ROW_NUMBER again
-    incoming = incoming.withColumn(&quot;sk&quot;, surrogate_key(dataset, *dataset.primary_keys)) \
-                       .withColumn(&quot;attr_hash&quot;, F.sha2(F.concat_ws(&quot;|&quot;, *tracked_attrs), 256))
+<div class="codehilite"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">build_scd2_changeset</span><span class="p">(</span><span class="n">spark</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">execution_date</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compare today&#39;s ODP snapshot of a dim against current FDP rows.</span>
+<span class="sd">    Emit a changeset with row_action in {INSERT_NEW, CLOSE_AND_INSERT}.&quot;&quot;&quot;</span>
+    <span class="n">incoming</span> <span class="o">=</span> <span class="n">spark</span><span class="o">.</span><span class="n">read</span><span class="o">.</span><span class="n">parquet</span><span class="p">(</span><span class="n">odp_path</span><span class="p">(</span><span class="n">dataset</span><span class="p">))</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;event_date &lt;= &#39;</span><span class="si">{</span><span class="n">execution_date</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
+    <span class="n">incoming</span> <span class="o">=</span> <span class="n">latest_per_key</span><span class="p">(</span><span class="n">incoming</span><span class="p">,</span> <span class="n">dataset</span><span class="o">.</span><span class="n">primary_keys</span><span class="p">)</span>        <span class="c1"># ROW_NUMBER again</span>
+    <span class="n">incoming</span> <span class="o">=</span> <span class="n">incoming</span><span class="o">.</span><span class="n">withColumn</span><span class="p">(</span><span class="s2">&quot;sk&quot;</span><span class="p">,</span> <span class="n">surrogate_key</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="o">*</span><span class="n">dataset</span><span class="o">.</span><span class="n">primary_keys</span><span class="p">))</span> \
+                       <span class="o">.</span><span class="n">withColumn</span><span class="p">(</span><span class="s2">&quot;attr_hash&quot;</span><span class="p">,</span> <span class="n">F</span><span class="o">.</span><span class="n">sha2</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">concat_ws</span><span class="p">(</span><span class="s2">&quot;|&quot;</span><span class="p">,</span> <span class="o">*</span><span class="n">tracked_attrs</span><span class="p">),</span> <span class="mi">256</span><span class="p">))</span>
 
-    current = read_bq(spark, f&quot;fdp.dim_{dataset.name}&quot;).where(&quot;is_current&quot;)
+    <span class="n">current</span> <span class="o">=</span> <span class="n">read_bq</span><span class="p">(</span><span class="n">spark</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;fdp.dim_</span><span class="si">{</span><span class="n">dataset</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="s2">&quot;is_current&quot;</span><span class="p">)</span>
 
-    joined = incoming.alias(&quot;n&quot;).join(current.alias(&quot;c&quot;),
-                                      on=dataset.primary_keys, how=&quot;left&quot;)
-    new_keys  = joined.where(&quot;c.sk IS NULL&quot;)                          # never seen
-    changed   = joined.where(&quot;c.sk IS NOT NULL AND n.attr_hash != c.attr_hash&quot;)
-    return new_keys, changed
-</code></pre>
+    <span class="n">joined</span> <span class="o">=</span> <span class="n">incoming</span><span class="o">.</span><span class="n">alias</span><span class="p">(</span><span class="s2">&quot;n&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">current</span><span class="o">.</span><span class="n">alias</span><span class="p">(</span><span class="s2">&quot;c&quot;</span><span class="p">),</span>
+                                      <span class="n">on</span><span class="o">=</span><span class="n">dataset</span><span class="o">.</span><span class="n">primary_keys</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">)</span>
+    <span class="n">new_keys</span>  <span class="o">=</span> <span class="n">joined</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="s2">&quot;c.sk IS NULL&quot;</span><span class="p">)</span>                          <span class="c1"># never seen</span>
+    <span class="n">changed</span>   <span class="o">=</span> <span class="n">joined</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="s2">&quot;c.sk IS NOT NULL AND n.attr_hash != c.attr_hash&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">new_keys</span><span class="p">,</span> <span class="n">changed</span>
+</code></pre></div>
+
 <p>Then the framework runs the atomic close-and-insert in BigQuery (one script,
 <code>serving/sql/scd2_merge.sql.j2</code>, rendered per dataset):</p>
-<pre><code class="language-sql">MERGE `fdp.dim_{{ name }}` t
-USING `fdp_staging.dim_{{ name }}_changes_{{ ds_nodash }}` s
-ON t.{{ nk }} = s.{{ nk }} AND t.is_current
-WHEN MATCHED AND s.row_action = 'CLOSE_AND_INSERT' THEN
-  UPDATE SET t.is_current = FALSE, t.effective_to = s.effective_from
-WHEN NOT MATCHED BY TARGET THEN
-  INSERT ({{ cols }}, effective_from, effective_to, is_current)
-  VALUES ({{ cols }}, s.effective_from, TIMESTAMP '9999-12-31', TRUE);
--- Second statement inserts the new versions for CLOSE_AND_INSERT keys;
--- both run in one multi-statement transaction =&gt; atomic, re-runnable.
-</code></pre>
+<div class="codehilite"><pre><span></span><code><span class="n">MERGE</span><span class="w"> </span><span class="o">`</span><span class="n">fdp</span><span class="p">.</span><span class="n">dim_</span><span class="err">{{</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="err">}}</span><span class="o">`</span><span class="w"> </span><span class="n">t</span>
+<span class="k">USING</span><span class="w"> </span><span class="o">`</span><span class="n">fdp_staging</span><span class="p">.</span><span class="n">dim_</span><span class="err">{{</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="err">}}</span><span class="n">_changes_</span><span class="err">{{</span><span class="w"> </span><span class="n">ds_nodash</span><span class="w"> </span><span class="err">}}</span><span class="o">`</span><span class="w"> </span><span class="n">s</span>
+<span class="k">ON</span><span class="w"> </span><span class="n">t</span><span class="p">.</span><span class="err">{{</span><span class="w"> </span><span class="n">nk</span><span class="w"> </span><span class="err">}}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">s</span><span class="p">.</span><span class="err">{{</span><span class="w"> </span><span class="n">nk</span><span class="w"> </span><span class="err">}}</span><span class="w"> </span><span class="k">AND</span><span class="w"> </span><span class="n">t</span><span class="p">.</span><span class="n">is_current</span>
+<span class="k">WHEN</span><span class="w"> </span><span class="n">MATCHED</span><span class="w"> </span><span class="k">AND</span><span class="w"> </span><span class="n">s</span><span class="p">.</span><span class="n">row_action</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;CLOSE_AND_INSERT&#39;</span><span class="w"> </span><span class="k">THEN</span>
+<span class="w">  </span><span class="k">UPDATE</span><span class="w"> </span><span class="k">SET</span><span class="w"> </span><span class="n">t</span><span class="p">.</span><span class="n">is_current</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">FALSE</span><span class="p">,</span><span class="w"> </span><span class="n">t</span><span class="p">.</span><span class="n">effective_to</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">s</span><span class="p">.</span><span class="n">effective_from</span>
+<span class="k">WHEN</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="n">MATCHED</span><span class="w"> </span><span class="k">BY</span><span class="w"> </span><span class="n">TARGET</span><span class="w"> </span><span class="k">THEN</span>
+<span class="w">  </span><span class="k">INSERT</span><span class="w"> </span><span class="p">(</span><span class="err">{{</span><span class="w"> </span><span class="n">cols</span><span class="w"> </span><span class="err">}}</span><span class="p">,</span><span class="w"> </span><span class="n">effective_from</span><span class="p">,</span><span class="w"> </span><span class="n">effective_to</span><span class="p">,</span><span class="w"> </span><span class="n">is_current</span><span class="p">)</span>
+<span class="w">  </span><span class="k">VALUES</span><span class="w"> </span><span class="p">(</span><span class="err">{{</span><span class="w"> </span><span class="n">cols</span><span class="w"> </span><span class="err">}}</span><span class="p">,</span><span class="w"> </span><span class="n">s</span><span class="p">.</span><span class="n">effective_from</span><span class="p">,</span><span class="w"> </span><span class="k">TIMESTAMP</span><span class="w"> </span><span class="s1">&#39;9999-12-31&#39;</span><span class="p">,</span><span class="w"> </span><span class="k">TRUE</span><span class="p">);</span>
+<span class="c1">-- Second statement inserts the new versions for CLOSE_AND_INSERT keys;</span>
+<span class="c1">-- both run in one multi-statement transaction =&gt; atomic, re-runnable.</span>
+</code></pre></div>
+
 <p>Re-run safety: the changeset for a re-run is empty (attr_hash matches) — SCD2 via
 MERGE is idempotent <em>by construction</em>. That's the interview line.</p>
 <p><code>sessionize.py</code> (clickstream ODP→FDP <code>fct_sessions</code>): sessions = gaps &gt; 30 min per
 customer — lag/window functions, event-time based. This job is your shuffle/skew
 laboratory (a handful of bot customers with 100x events — you'll fix them in P13).</p>
 <h3 id="23-submitting-to-dataproc-serverless">2.3 Submitting to Dataproc Serverless</h3>
-<pre><code class="language-bash">gcloud dataproc batches submit pyspark src/pipeforge/processing/spark/standardize.py \
-  --project $PROJECT_ID --region us-central1 \
-  --deps-bucket gs://$PROJECT_ID-pf-dev-artifacts \
-  --subnet pf-dev-subnet \
-  --service-account pf-dev-pipeline@$PROJECT_ID.iam.gserviceaccount.com \
-  --properties spark.executor.instances=2,spark.driver.memory=4g \
-  -- --dataset clickstream --execution-date 2026-07-15
-</code></pre>
+<div class="codehilite"><pre><span></span><code>gcloud<span class="w"> </span>dataproc<span class="w"> </span>batches<span class="w"> </span>submit<span class="w"> </span>pyspark<span class="w"> </span>src/pipeforge/processing/spark/standardize.py<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--project<span class="w"> </span><span class="nv">$PROJECT_ID</span><span class="w"> </span>--region<span class="w"> </span>us-central1<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--deps-bucket<span class="w"> </span>gs://<span class="nv">$PROJECT_ID</span>-pf-dev-artifacts<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--subnet<span class="w"> </span>pf-dev-subnet<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--service-account<span class="w"> </span>pf-dev-pipeline@<span class="nv">$PROJECT_ID</span>.iam.gserviceaccount.com<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--properties<span class="w"> </span>spark.executor.instances<span class="o">=</span><span class="m">2</span>,spark.driver.memory<span class="o">=</span>4g<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--<span class="w"> </span>--dataset<span class="w"> </span>clickstream<span class="w"> </span>--execution-date<span class="w"> </span><span class="m">2026</span>-07-15
+</code></pre></div>
+
 <p>Wrap it as <code>pipeforge spark submit --job standardize --dataset clickstream
 --execution-date …</code> (packages your wheel to the artifacts bucket first). Also
 support <code>--local</code> (spark-submit against local files) — the dev loop must not cost
@@ -269,5 +457,6 @@ keys stable across runs. Tag <code>v0.5.0</code>.</p>
   including the delete events your watermark loader misses.</li>
 <li><code>EXPLAIN</code> both MERGE strategies in BQ; measure slot-time.</li>
 </ul>
+</main>
 </body>
 </html>
