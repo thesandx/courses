@@ -77,6 +77,30 @@ FROM ml.customers;
 
 ---
 
+## 6. Classic ML Theory the Exam Still Tests
+
+The bank keeps a core of pre-Vertex ML-theory items. Know each in one line:
+
+| Concept | What to know |
+|---|---|
+| **Lifecycle order** | Process data → **split train/validation/test** → train → evaluate on held-out data → tune → predict → monitor. "Data prep is done, what's next?" → the split. |
+| **Overfitting** | Great on training, poor on new data → regularization, **dropout** (neural nets), early stopping, more/better data |
+| **L1 vs L2** | L1 (lasso) zeroes weights → **sparsity / feature selection**; L2 (ridge) shrinks smoothly → default anti-overfitting |
+| **Learning rate** | Loss oscillates/diverges → **too high, lower it** (or decay/warm-up); painfully slow steady descent → too low |
+| **Batch size** | Bigger = smoother gradients, more memory; smaller = noisier, sometimes generalizes better |
+| **Feature cross** | Synthetic feature crossing 2+ features (bucketized lat × long, neighborhood × hour) so a **linear** model learns non-linear interactions |
+| **Wide & Deep** | Wide/linear part **memorizes** crosses; deep part (embeddings) **generalizes** — the classic recommender architecture |
+| **Embeddings** | Learned dense vectors for high-cardinality categoricals (user IDs, words); replace infeasible one-hot |
+| **Hyperparameter tuning** | Not manual grid search — **Vertex AI hyperparameter tuning** (Vizier, Bayesian optimization) |
+| **Imbalanced classes** | Accuracy lies; use **precision/recall, PR-AUC, F1**; fix with class weights, over/under-sampling, threshold tuning |
+| **Precision vs recall** | False positives costly → optimize precision; missed positives costly → optimize recall; the decision threshold trades one for the other |
+| **Nulls for real-valued features** | Impute (e.g., 0 or mean) — visual prep in **Dataprep/Wrangler**; you can't just drop rows the model needs |
+
+### Looker Studio freshness
+Dashboards read from a **cache**; "data less than an hour old isn't showing" →
+shorten the **data freshness** interval (or manually refresh). Distinguish from
+*slow* dashboards, which want **BI Engine** (Module 4) or a materialized view.
+
 ## 🎯 Exam Focus
 
 | Scenario | Answer |

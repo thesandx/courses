@@ -81,6 +81,49 @@ GOOD row key: sensor42#20260707        <- field-promote id first -> spreads writ
 
 ---
 
+## 6. Exam Deep Dive: AlloyDB, Spanner Keys & Bigtable Operations
+
+### AlloyDB — the HTAP answer
+**AlloyDB for PostgreSQL** = fully Postgres-compatible, Google-optimized:
+disaggregated storage plus an in-memory **columnar engine**, so one database
+serves **transactions AND analytics**. Exam signal: "stays PostgreSQL, better
+performance than Cloud SQL, analytics on live transactional data without a
+separate warehouse" → AlloyDB. (Global write scaling → still Spanner; plain
+lift-and-shift → Cloud SQL.)
+
+### Cloud SQL vs Spanner — the sizing/scale line
+Cloud SQL scales *up* (one primary; read replicas for reads) and is bounded by
+one machine + its storage cap (tens of TB). Choose **Spanner** when any of:
+data beyond Cloud SQL's comfortable size, **horizontal write scaling**,
+multi-region synchronous replication / 99.999% SLA, or "global financial
+ledger / bank transactions" language. A ~20 TB relational OLTP move sits right
+on the boundary — pick by growth trajectory and HA requirements, and expect the
+question to hinge on exactly that.
+
+### Spanner primary keys & interleaving
+- **Never** use monotonically increasing keys (timestamps, auto-increment): they
+  hotspot the last split. Use **UUIDv4**, bit-reversed sequences, or hash prefixes.
+- **Interleaved tables** (`INTERLEAVE IN PARENT`) co-locate child rows physically
+  with the parent (child PK prefixed by parent PK) — cheap parent+child reads and
+  joins when children are always accessed via their parent (Customers → Orders).
+
+### Bigtable operations toolkit
+- **Key Visualizer**: heatmap of access per key range over time — THE tool to
+  prove hotspots from bad row-key design.
+- **When to scale up**: rising **write pressure in Key Visualizer**, **sustained
+  write-latency increase**, or storage utilization approaching the per-node
+  recommendation (~70%) — not one-off latency blips.
+- **SSD vs HDD** (fixed at instance creation): SSD by default; HDD only for
+  large, scan-heavy, latency-tolerant archives that are never user-facing.
+- **HBase API compatibility**: on-prem HBase (and Cassandra-style) workloads land
+  on Bigtable with minimal app change.
+- **No secondary indexes**: maintain **application-managed index tables** (write
+  the data under a second key) when two access paths must both be fast.
+
+### Firestore/Datastore → analytics
+Managed export (`gcloud firestore export`) writes a consistent snapshot to GCS
+that **loads directly into BigQuery**. Vocabulary: entities ≈ rows, kinds ≈ tables.
+
 ## 🎯 Exam Focus
 
 | Trigger phrase | Answer |

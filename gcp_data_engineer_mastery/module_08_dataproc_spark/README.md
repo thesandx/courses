@@ -78,6 +78,37 @@ Lift-and-shift Spark first (Dataproc), then modernize hot paths to BigQuery/Data
 
 ---
 
+## 6. Performance Tuning, Metastore & the Hive-to-BigQuery Line
+
+### Disk-I/O-bound jobs → local SSDs
+The dataset lives on GCS, but **shuffle and spill still hit worker-local disks**.
+A job that was fast on bare metal and crawls on Dataproc with heavy disk I/O in
+its profile wants **local SSDs attached to workers** (or larger persistent disks —
+PD throughput scales with size). More vCPUs don't help an I/O-bound stage.
+
+### Autoscaling without losing work
+Downscaling can kill running tasks and their shuffle data. Two features make it
+safe: **graceful decommissioning** (`--graceful-decommission-timeout` lets YARN
+drain nodes first) and **Enhanced Flexibility Mode (EFM)** (keeps shuffle data off
+preemptible secondary workers, so spot reclaims cost retries, not job failures).
+
+### Non-splittable inputs cap parallelism
+Four large gzip files = at most four parallel read tasks, no matter the cluster
+size. Use splittable columnar formats (Parquet/ORC + Snappy) — which is the lake
+standard anyway.
+
+### Dataproc Metastore
+Ephemeral clusters that share Hive/Spark SQL/Trino table definitions need a
+**managed Hive metastore that outlives clusters** — that's Dataproc Metastore
+(BigLake Metastore for BigQuery interop). Init-script rebuilds are the fragile
+anti-pattern.
+
+### When the answer stops being Dataproc
+"Team knows HiveQL / data is ORC-Parquet on GCS / wants interactive SQL with
+minimal ops" → **BigQuery** (external or BigLake tables, or load it) beats
+running a Hive cluster. Dataproc earns its place for existing *Spark/Hadoop code*
+and ecosystem dependencies — not for plain SQL exploration of files.
+
 ## 🎯 Exam Focus
 
 | Scenario | Answer |
