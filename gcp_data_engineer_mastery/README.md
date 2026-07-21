@@ -47,7 +47,8 @@ decision table and 4–6 practice questions modeled on the real item style.
 | 11 | **[ML & Analytics Integration](module_11_ml_analytics/README.md)** | BigQuery ML, Vertex AI, feature pipelines, and Looker / Looker Studio |
 | 12 | **[Reliability, Monitoring & Cost](module_12_reliability_cost/README.md)** | SLOs, Cloud Monitoring, budgets/quotas, and CI/CD for data pipelines |
 | 🏆 | **[Capstone: RideShare Analytics Platform](capstone/README.md)** | A complete streaming + batch lakehouse that applies every module |
-| 🎯 | **[Mock Exam](mock_exam/README.md)** | An interactive, browser-based practice exam — 110 original PDE-style questions with instant feedback, explanations, and a per-domain score breakdown (open `mock_exam/index.html`) |
+| 📎 | **[Exam Topics Appendix](EXAM_TOPICS_APPENDIX.md)** | Gap-closing notes mapped to the real exam's question bank: AlloyDB, BI Engine, sharded vs partitioned tables, interleaved tables, Key Visualizer, Transfer Appliance, private connectivity, side outputs, feature crosses/embeddings, and more |
+| 🎯 | **[Mock Exam](mock_exam/README.md)** | An interactive, browser-based practice exam — 141 original PDE-style questions with instant feedback, explanations, and a per-domain score breakdown (open `mock_exam/index.html`) |
 
 ## Prerequisites & Tooling
 

@@ -1,11 +1,14 @@
 # 🎯 PDE Mock Exam — Interactive Practice
 
-A self-contained, browser-based mock exam with **110 original practice questions**
+A self-contained, browser-based mock exam with **141 original practice questions**
 covering every domain of the Google Cloud **Professional Data Engineer** certification.
 
 > These are original questions written for this course in the style of the real
 > exam (scenario → best-service/best-practice choice). They are **not** copied from
-> the actual exam or from any question-dump site.
+> the actual exam or from any question-dump site — but their topic coverage was
+> **audited against the concepts the real exam's public question bank is known to
+> test**, so completing this exam (and the [Exam Topics Appendix](../EXAM_TOPICS_APPENDIX.md))
+> prepares you for the areas real questions draw from.
 
 ## How to Use
 
@@ -32,25 +35,26 @@ start gcp_data_engineer_mastery\mock_exam\index.html       # Windows
   can close the tab and resume later. "Reset exam" wipes it for a fresh attempt.
 - **Keyboard shortcuts** — `←`/`→` to navigate, `A`–`D` to answer.
 
-## Coverage (110 questions)
+## Coverage (141 questions)
 
 | Domain | Questions |
 |---|---|
-| BigQuery (fundamentals, scale, cost, security) | 20 |
-| Dataflow & Apache Beam | 14 |
-| Databases (Spanner, Bigtable, Cloud SQL, Firestore, Memorystore) | 14 |
+| BigQuery (fundamentals, scale, cost, security, BI Engine, sharding vs partitioning) | 26 |
+| Databases (Spanner, Bigtable, Cloud SQL, AlloyDB, Firestore, Memorystore) | 21 |
+| Dataflow & Apache Beam (incl. side outputs, monitoring) | 16 |
+| ML & Analytics (BigQuery ML, Vertex AI, feature engineering, Looker) | 14 |
 | Pub/Sub & Streaming | 12 |
-| Security & Governance (IAM, CMEK, DLP, VPC-SC, Dataplex) | 10 |
+| Security & Governance (IAM, CMEK, DLP, VPC-SC, Dataplex) | 11 |
+| Orchestration & Integration (Composer, Data Fusion, Datastream, DTS) | 11 |
+| Dataproc & Hadoop migration (incl. local SSD & EFM tuning) | 10 |
 | Storage & Data Lakes | 8 |
-| Dataproc & Hadoop migration | 8 |
-| Orchestration & Integration (Composer, Data Fusion, Datastream, DTS) | 8 |
-| ML & Analytics (BigQuery ML, Vertex AI, Looker) | 8 |
 | Reliability, Monitoring & Cost | 8 |
+| Migration & Hybrid Networking (Transfer Appliance, Interconnect, Kafka) | 4 |
 
 ## Suggested Study Loop
 
 1. Finish (or skim) the course modules.
-2. Take the full 110-question exam untimed; read every explanation — including
+2. Take the full 141-question exam untimed; read every explanation — including
    for questions you got right.
 3. Check the per-domain breakdown; re-read the weakest modules' **Exam Focus** tables.
 4. Retake filtered to your weak domains until you're consistently above 80%.

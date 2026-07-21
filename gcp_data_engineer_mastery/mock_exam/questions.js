@@ -1343,4 +1343,395 @@ o: [
 a: 1,
 e: "The exam expects the modern answer: everything (code, DAGs, infra) in git, tested in CI, promoted through environments by automation — reducing manual production edits that cause outages."
 }
+,
+
+// ============ Additions from real-exam topic gap analysis ============
+
+// ---------------------------------------------------------------- BigQuery
+{
+d: "BigQuery",
+q: "A legacy pipeline creates one table per day (events_20240101, events_20240102, ...). Queries over long ranges are slow and one hit the per-query table limit. What should you do?",
+o: [
+"Keep sharding but query fewer days at a time.",
+"Convert the date-sharded tables into a single date-partitioned table; until then, query shards with a wildcard table filtered on _TABLE_SUFFIX.",
+"Create a view per month.",
+"Export everything to Cloud Storage."
+],
+a: 1,
+e: "Partitioning is recommended over sharding: sharded tables carry per-table schema/metadata/permission overhead and per-query table limits, while one partitioned table supports thousands of partitions with pruning. Wildcard tables (`events_*` with _TABLE_SUFFIX filters) are the bridge while you migrate."
+},
+{
+d: "BigQuery",
+q: "You model orders with their line items in BigQuery. Analysts always fetch an order together with its items, and join costs are hurting. What's the idiomatic BigQuery design?",
+o: [
+"Strict third normal form across two tables.",
+"Denormalize: store line items as an ARRAY<STRUCT<...>> (nested, repeated field) inside the order row, and UNNEST() when you need to flatten.",
+"One giant flat table with items as JSON strings.",
+"A separate dataset per order."
+],
+a: 1,
+e: "BigQuery is columnar and join-averse at scale: nested/repeated STRUCT arrays keep the one-to-many relationship inside the parent row — no join, no duplication of parent columns, and UNNEST flattens on demand. Avro/Parquet loads preserve nested schemas (CSV cannot)."
+},
+{
+d: "BigQuery",
+q: "Looker Studio dashboards over BigQuery are slow; many users run varied interactive aggregations on the same tables. You don't want to rewrite queries. What's the designed fix?",
+o: [
+"Increase the Looker Studio refresh interval.",
+"Create a BI Engine reservation so dashboard queries are served from in-memory acceleration.",
+"Row-level security to reduce data processed.",
+"Export the data to Sheets."
+],
+a: 1,
+e: "BI Engine is BigQuery's in-memory analysis acceleration: reserve capacity in the project and eligible dashboard/interactive queries speed up transparently — no query rewrites. A materialized view is the alternative when ONE heavy aggregation dominates; for many varied interactive queries, BI Engine fits better."
+},
+{
+d: "BigQuery",
+q: "Compliance regularly needs to find all rows containing a specific user ID across wide log tables — a needle-in-haystack lookup that currently scans terabytes. What BigQuery feature targets this?",
+o: [
+"LIMIT clauses.",
+"A search index on the table and the SEARCH() function for point lookups.",
+"More clustering columns (beyond the 4 allowed).",
+"Legacy SQL."
+],
+a: 1,
+e: "CREATE SEARCH INDEX builds an inverted index over string columns; SEARCH() then serves point lookups (IDs, emails, tokens in logs) without full scans — the feature built for GDPR-style 'find this identifier anywhere' work."
+},
+{
+d: "BigQuery",
+q: "You must choose partition granularity for a table receiving ~2 GB/day, queried mostly by month, retained for 15 years. Daily partitioning would create ~5,475 partitions. What do you consider?",
+o: [
+"Nothing — partition count is unlimited.",
+"Partition limits (up to 10,000 partitions per table) and pruning granularity: monthly partitioning (or daily with expiration) keeps counts safe and matches the query pattern.",
+"Hourly partitioning for maximum pruning.",
+"Avoid partitioning entirely on principle."
+],
+a: 1,
+e: "Partitioned tables have a partition-count limit (10,000). Choose granularity to match query patterns and retention: monthly partitions (180 over 15 years) suit month-scoped queries; hourly would explode the count for no benefit. Partition expiration bounds retention automatically."
+},
+{
+d: "BigQuery",
+q: "Rows stream into a BigQuery table continuously, and you want a standing SQL transformation whose results flow onward (e.g., to another table or Pub/Sub) without managing a pipeline. Which capability is this?",
+o: [
+"Scheduled queries every minute.",
+"BigQuery continuous queries — long-running SQL over arriving data with results written out as they're produced.",
+"Table snapshots.",
+"The BI Engine."
+],
+a: 1,
+e: "Continuous queries are BigQuery's SQL-only streaming processing: the query runs perpetually over new arrivals and emits results onward. For complex event-time logic (windows, late data), Dataflow is still the tool — but for SQL-shaped streaming transforms this avoids a pipeline entirely."
+},
+
+// ---------------------------------------------------------------- Databases
+{
+d: "Databases",
+q: "A PostgreSQL-based application needs to stay PostgreSQL, wants better performance than Cloud SQL, and must serve transactional traffic AND analytical queries on the same database without a separate warehouse. Which service?",
+o: [
+"Cloud SQL for PostgreSQL with more vCPUs.",
+"AlloyDB for PostgreSQL — PostgreSQL-compatible with a columnar engine for analytics on transactional data (HTAP).",
+"Spanner with the PostgreSQL interface.",
+"Bigtable."
+],
+a: 1,
+e: "AlloyDB is Google's optimized PostgreSQL: disaggregated storage for transactional performance plus an in-memory columnar engine that accelerates analytics over the same data — the 'one database for OLTP + analytics, stays Postgres' answer. Spanner's PG interface targets global write scaling, not HTAP."
+},
+{
+d: "Databases",
+q: "In Spanner, Customers and their Orders are always read together, and you want the child rows physically co-located with the parent for cheap joins. Which schema feature?",
+o: [
+"Foreign keys alone.",
+"Interleaved tables: declare Orders INTERLEAVE IN PARENT Customers, with Orders' primary key prefixed by the Customers key.",
+"A materialized join view.",
+"Storing orders as a JSON column."
+],
+a: 1,
+e: "Interleaving stores child rows physically within the parent's row range, so parent+children reads and joins along that hierarchy avoid cross-split work. It's the Spanner-specific locality tool — use when children are (almost) always accessed via their parent."
+},
+{
+d: "Databases",
+q: "You suspect a Bigtable performance problem is caused by hot ranges of row keys, and you need to see the access pattern across the keyspace over time to prove it. Which tool?",
+o: [
+"Cloud Trace.",
+"Key Visualizer — a heatmap of Bigtable access patterns by key range over time.",
+"BigQuery INFORMATION_SCHEMA.",
+"The gcloud CLI's describe command."
+],
+a: 1,
+e: "Key Visualizer generates hourly/daily heatmaps of reads/writes/latency per key range — hotspots show as bright bands, confirming row-key design issues (e.g., sequential keys). It's the diagnostic that pairs with fixing the key schema."
+},
+{
+d: "Databases",
+q: "When is an HDD (instead of SSD) Bigtable cluster the right choice?",
+o: [
+"Whenever you want to save money on a serving workload.",
+"Only for large (≥10 TB), latency-tolerant, scan-heavy archival workloads that are not user-facing; SSD is the default for anything latency-sensitive.",
+"For time-series data, always.",
+"Never — HDD is deprecated."
+],
+a: 1,
+e: "HDD costs less but delivers much slower random reads. Google's guidance: choose HDD only for big, batch/scan-oriented, latency-insensitive datasets; user-facing or mixed workloads take SSD. Storage type is fixed at instance creation, so this choice matters up front."
+},
+{
+d: "Databases",
+q: "Your on-prem analytics stack runs Apache HBase and the team wants to move to a managed GCP service with minimal application change. Which target and why?",
+o: [
+"Cloud SQL, because HBase is relational.",
+"Bigtable — it exposes an HBase-compatible API, so existing HBase client code largely works unchanged.",
+"Firestore, because both are NoSQL.",
+"BigQuery, because it's the analytics service."
+],
+a: 1,
+e: "Bigtable is the managed wide-column store with an HBase-compatible client API — the designed landing zone for HBase (and Cassandra-style) workloads. The data model (row key, column families) maps directly; the ops burden disappears."
+},
+{
+d: "Databases",
+q: "You need to analyze Firestore (Datastore mode) application data in BigQuery nightly. What's the supported low-effort path?",
+o: [
+"Query Firestore directly from BigQuery with a JDBC driver.",
+"Use the managed export (gcloud firestore export) to a Cloud Storage bucket, then load the export into BigQuery.",
+"Write a custom crawler over the REST API.",
+"Screenshot the console."
+],
+a: 1,
+e: "Firestore's managed export writes a consistent snapshot to GCS in a format BigQuery can load directly (per kind/collection). Schedule export + load and you have nightly analytics without touching the app. Know the vocabulary: entities ≈ rows, kinds ≈ tables."
+},
+{
+d: "Databases",
+q: "A team migrating from on-prem Cassandra asks which GCP service most closely matches Cassandra's wide-column, high-write-throughput, key-addressed model. Your answer?",
+o: [
+"Cloud SQL",
+"Bigtable (same wide-column family lineage; design the row key around access patterns just like Cassandra partition keys)",
+"Cloud Spanner",
+"Memorystore"
+],
+a: 1,
+e: "Cassandra and Bigtable share the wide-column model: massive write throughput, key-range access, denormalized query-first schema design. Cassandra partition-key thinking translates directly to Bigtable row-key design, making it the natural managed replacement."
+},
+
+// ------------------------------------------------- Migration & Networking
+{
+d: "Migration & Networking",
+q: "You must move 400 TB from a data center with a saturated 100 Mbps internet link to Cloud Storage within 2 months. What should you use?",
+o: [
+"gsutil with parallel composite uploads.",
+"Transfer Appliance — a shipped physical device you load locally and return to Google for ingestion.",
+"Storage Transfer Service over the existing link.",
+"Compress the data first and use the link."
+],
+a: 1,
+e: "Do the math first: 400 TB over 100 Mbps is roughly a year of continuous transfer — no software tool fixes physics. Transfer Appliance exists exactly for 'lots of data, weak link, real deadline'. STS/gsutil are answers only when bandwidth × time covers the volume."
+},
+{
+d: "Migration & Networking",
+q: "Regulation says data ingested from your on-prem systems into BigQuery must never traverse the public internet. Which combination satisfies this?",
+o: [
+"HTTPS uploads — encryption is equivalent to privacy.",
+"Cloud Interconnect (or Cloud VPN) into your VPC plus Private Google Access so on-prem/VPC hosts reach Google APIs on private IPs.",
+"A firewall rule allowing only Google IPs.",
+"VPC peering between on-prem and Google."
+],
+a: 1,
+e: "Interconnect/VPN provides the private path into the VPC; Private Google Access (private.googleapis.com / restricted.googleapis.com with VPC-SC) lets that private path reach BigQuery/GCS APIs without public IPs. TLS encrypts but still rides the public internet — it doesn't meet a 'no public internet' mandate."
+},
+{
+d: "Migration & Networking",
+q: "You're setting up Datastream CDC from an on-prem MySQL (no public IPs) into BigQuery, and traffic must stay private end to end. Which Datastream connectivity method fits?",
+o: [
+"IP allowlisting of Datastream public addresses.",
+"Private connectivity — peer Datastream into your VPC so it reaches the source over your Interconnect/VPN.",
+"Forward-SSH over the internet.",
+"Publishing the database to a public IP temporarily."
+],
+a: 1,
+e: "Datastream's private connectivity configuration attaches it to your VPC via peering, so CDC traffic flows over the private Interconnect/VPN path — matching a 'no public internet' constraint. Allowlisting and SSH-forwarding both still traverse public networks."
+},
+{
+d: "Migration & Networking",
+q: "Your company runs a large on-prem Kafka estate feeding many consumers, and wants to start landing those streams in GCP with minimal disruption. Reasonable approaches include:",
+o: [
+"Rewrite all producers to use Pub/Sub immediately.",
+"Bridge Kafka to Pub/Sub with the Pub/Sub Kafka connector (or read Kafka directly from Dataflow), or adopt Google Cloud Managed Service for Apache Kafka if keeping the Kafka protocol matters.",
+"FTP the Kafka log segments nightly.",
+"Kafka data cannot reach GCP."
+],
+a: 1,
+e: "The migration-friendly patterns: connector-based mirroring Kafka→Pub/Sub, Dataflow's KafkaIO reading the existing cluster, or moving the cluster itself to the managed Kafka service. Big-bang producer rewrites are the wrong first move."
+},
+
+// ------------------------------------------------- Dataproc & Hadoop
+{
+d: "Dataproc & Hadoop",
+q: "A Hadoop job that was fast on on-prem bare metal is slow on Dataproc; profiling shows it is disk-I/O bound during shuffle/spill (data itself is on GCS). What's the targeted fix?",
+o: [
+"More vCPUs per worker.",
+"Attach local SSDs to the workers (or enlarge persistent disks) so shuffle and spill hit fast local storage.",
+"Move input data into HDFS.",
+"Switch the cluster to HDD boot disks."
+],
+a: 1,
+e: "Shuffle/spill happens on worker-local disks even when the dataset lives on GCS. Local SSDs give the IOPS/throughput bare metal had; persistent-disk throughput also scales with disk size. More CPU doesn't help an I/O-bound stage."
+},
+{
+d: "Dataproc & Hadoop",
+q: "Autoscaling removes Dataproc workers mid-job and running Spark tasks lose shuffle data, causing recomputation. Which two features mitigate this?",
+o: [
+"Bigger master node.",
+"Graceful decommissioning (let YARN drain work before removing nodes) and Enhanced Flexibility Mode (keep shuffle data off preemptible secondary workers).",
+"Disabling autoscaling forever.",
+"Switching to HDDs."
+],
+a: 1,
+e: "Graceful decommission timeouts let nodes finish/hand off work before removal; EFM writes shuffle data to primary workers (or HCFS) so losing spot secondaries costs little. Together they make autoscaling + preemptibles safe for real jobs."
+},
+
+// ------------------------------------------------- Dataflow & Beam
+{
+d: "Dataflow & Beam",
+q: "Your streaming pipeline must divert malformed records for later inspection instead of crashing or silently dropping them. What's the idiomatic Beam construct?",
+o: [
+"try/except that logs and swallows errors.",
+"A ParDo with multiple tagged outputs (side outputs): main output for valid records, a dead-letter output written to BigQuery/GCS for the bad ones.",
+"A side input containing the bad records.",
+"Two separate pipelines reading the same source."
+],
+a: 1,
+e: "Tagged (side) outputs let one ParDo route each element: parse successes to the main PCollection, failures — with error context — to a dead-letter sink. Don't confuse with side INPUTS, which broadcast small lookup data into a ParDo."
+},
+{
+d: "Dataflow & Beam",
+q: "You want an alert that fires when your Pub/Sub → Dataflow → GCS pipeline silently stops processing. Which signal combination is right?",
+o: [
+"Alert on Dataflow worker count dropping.",
+"Alert on rising subscription/num_undelivered_messages (and oldest_unacked_message_age) at the source plus a falling output write rate at the sink.",
+"Alert on CPU utilization above 80%.",
+"Alert when the job status is not 'Running'."
+],
+a: 1,
+e: "A stuck pipeline often still shows 'Running' with healthy CPU. The user-visible truth is backlog growing at the source (undelivered messages, unacked age) while sink output flat-lines — alert on those. Watermark/system lag are the equivalent Dataflow-side metrics."
+},
+
+// ------------------------------------------------- Orchestration & Integration
+{
+d: "Orchestration & Integration",
+q: "Upstream files land in a GCS bucket at unpredictable times, and each arrival must kick off a Composer DAG (Dataproc transform → BigQuery load). Scheduling hourly wastes runs and adds latency. What's the recommended trigger design?",
+o: [
+"Schedule the DAG every 5 minutes.",
+"A Cloud Storage object-finalize event triggers a Cloud Function (or Eventarc) that calls the Airflow REST API to trigger the parameterized DAG.",
+"A while-loop sensor task holding a worker slot forever.",
+"Ask the upstream team to also click 'Trigger DAG'."
+],
+a: 1,
+e: "Event-driven beats polling when arrival times are unknown: the bucket's finalize event fires a function that triggers the DAG (passing the object name as a parameter). One parameterized DAG serves all files; no wasted scheduled runs, minimal latency."
+},
+{
+d: "Orchestration & Integration",
+q: "Analysts must clean inconsistent CSVs (mixed types in columns, unstandardized phone/address formats) with an interactive, visual tool before the data reaches BigQuery. Which GCP tool is built for this?",
+o: [
+"The BigQuery console's preview tab.",
+"Cloud Data Fusion's Wrangler — interactive data preparation (profiling, type fixes, format standardization) that then runs as a pipeline at scale.",
+"Vim on the CSV files.",
+"Cloud Shell's csvtool."
+],
+a: 1,
+e: "Wrangler (in Data Fusion) is the visual data-prep experience aimed at analysts: explore a sample, build cleansing directives interactively, then execute them as a managed pipeline over the full data. It's the modern exam answer where 'Dataprep' appeared historically."
+},
+{
+d: "Orchestration & Integration",
+q: "CSV files have columns whose types are inconsistent (some rows STRING, some INT64), so typed loads fail. Which robust SQL-first pattern gets this data into a typed production table?",
+o: [
+"Keep retrying the load until it works.",
+"Load into a staging table with all-STRING columns, transform with SQL (SAFE_CAST, REGEXP_REPLACE, dedupe), then INSERT/MERGE into the typed final table.",
+"Edit the CSVs by hand.",
+"Use JSON instead of CSV — types become irrelevant."
+],
+a: 1,
+e: "The ELT staging pattern: land raw data permissively (STRINGs never fail to parse), then apply typed, validated transformation in SQL where errors are inspectable (SAFE_CAST yields NULL instead of failing), and only clean rows reach production. This — or a Data Fusion/Dataflow transform — is the exam's cleansing answer."
+},
+
+// ---------------------------------------------------------------- ML
+{
+d: "ML & Analytics",
+q: "A linear model predicting taxi fares can't capture that the pickup-neighborhood × hour-of-day interaction matters. Without switching to a deep model, which feature engineering technique lets a linear model learn such non-linear interactions?",
+o: [
+"Normalize the inputs.",
+"A feature cross — a synthetic feature crossing neighborhood and hour (often after bucketizing), giving the linear model a weight per combination.",
+"Remove one of the two features.",
+"Increase the learning rate."
+],
+a: 1,
+e: "Feature crosses (e.g., lat×long grid cells, neighborhood×hour) create combinatorial features so linear models memorize interaction effects. It's the classic pre-deep-learning answer — and the 'wide' half of wide-and-deep models."
+},
+{
+d: "ML & Analytics",
+q: "A recommender should both memorize specific historical combinations (users who bought A buy B) and generalize to unseen combinations via learned representations. Which architecture is designed for exactly this trade-off?",
+o: [
+"A decision stump.",
+"Wide & Deep: a wide linear component (feature crosses, memorization) trained jointly with a deep component (embeddings, generalization).",
+"k-means clustering.",
+"A single linear regression."
+],
+a: 1,
+e: "Wide & Deep pairs a linear model over crossed sparse features (memorization) with a DNN over embeddings (generalization) — the canonical recommender architecture this exam has long referenced."
+},
+{
+d: "ML & Analytics",
+q: "You have a categorical feature with 2 million distinct values (user ID). One-hot encoding is infeasible. What's the standard representation?",
+o: [
+"Drop the feature.",
+"An embedding — a learned dense low-dimensional vector per category that places similar categories near each other.",
+"Alphabetical integer encoding fed directly to the model.",
+"A separate model per user."
+],
+a: 1,
+e: "Embeddings compress huge sparse categorical spaces into small dense vectors learned with the task, capturing similarity structure. Raw integer codes impose a false ordering; one-hot at this cardinality explodes parameters."
+},
+{
+d: "ML & Analytics",
+q: "During training, the loss doesn't decrease — it oscillates wildly and sometimes increases. What's the most likely knob to turn first?",
+o: [
+"Increase the batch size to 1.",
+"Lower the learning rate (or apply decay) — oscillating/diverging loss is the classic symptom of steps that are too large.",
+"Add more layers.",
+"Train for more epochs unchanged."
+],
+a: 1,
+e: "Too-high learning rates overshoot minima, producing oscillation or divergence; lowering the rate (or using warmup/decay, or an adaptive optimizer) is the first fix. Too-low rates show the opposite symptom: painfully slow but steady descent."
+},
+{
+d: "ML & Analytics",
+q: "You want regularization that also performs feature selection by driving irrelevant feature weights to exactly zero. Which do you choose?",
+o: [
+"L2 (ridge).",
+"L1 (lasso) — its penalty zeroes out weights, yielding sparse models; L2 only shrinks weights smoothly toward zero.",
+"Dropout.",
+"Batch normalization."
+],
+a: 1,
+e: "L1's absolute-value penalty produces exact zeros → built-in feature selection and sparse models. L2 shrinks all weights but rarely to zero — the default anti-overfitting choice when sparsity isn't a goal. (Dropout regularizes deep nets, not feature selection.)"
+},
+{
+d: "ML & Analytics",
+q: "Your team hand-tunes learning rate, layer sizes, and regularization by trial and error on Vertex AI. What's the managed, smarter alternative?",
+o: [
+"Fix all hyperparameters at library defaults.",
+"Vertex AI hyperparameter tuning (Vizier): define ranges and a metric, and Bayesian optimization searches the space across parallel trials.",
+"Only ever use grid search on two values each.",
+"Change one parameter per week."
+],
+a: 1,
+e: "Vertex AI's tuning service (powered by Vizier) runs parallel trials and uses Bayesian optimization to converge on good hyperparameters far more efficiently than manual or exhaustive grid search."
+},
+
+// ------------------------------------------------- Security & Governance
+{
+d: "Security & Governance",
+q: "Onboarding/offboarding keeps breaking access: engineers get roles granted to their personal accounts, and departures leave stale grants. What's the Google-recommended structure?",
+o: [
+"Grant roles to individual users but audit quarterly.",
+"Grant IAM roles to Google Groups per function (e.g., data-analysts@), and manage membership in the group — identity changes never touch IAM policy.",
+"Share one service account's key among the team.",
+"Give everyone Viewer at the org level plus exceptions."
+],
+a: 1,
+e: "Groups are the recommended grant target: IAM policy stays stable while membership handles joiners/leavers, and access reviews happen in one place. Shared keys and per-user grants are the anti-patterns this question type punishes."
+}
 ];
