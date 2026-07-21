@@ -88,6 +88,41 @@ LIMIT 10;
 
 ---
 
+## 6. Sharding vs Partitioning, BI Engine & Newer Accelerators
+
+### Date-sharded tables are the legacy anti-pattern
+One-table-per-day (`events_20240101`, …) forces per-table metadata/permission
+overhead and hits the **per-query table limit**; a partitioned table supports up
+to **10,000 partitions** with pruning. Bridge while migrating with **wildcard
+tables**: `` `ds.events_*` `` filtered on the `_TABLE_SUFFIX` pseudo-column; land
+on `CREATE TABLE ... PARTITION BY` + one `INSERT ... SELECT` over the wildcard.
+**Choose partition granularity to match the query pattern and the partition-count
+limit** — 15 years of data queried by month wants monthly (180 partitions), not
+hourly (131k — over the limit).
+
+### BI Engine — accelerate dashboards without rewriting anything
+**BI Engine** is an in-memory acceleration reservation: Looker Studio and
+SQL-interface BI queries transparently speed up. Choose it when *many varied
+interactive queries* are slow; choose a **materialized view** when *one heavy
+aggregation* dominates (petabyte fact table, fixed filter+aggregate shape →
+materialized view). Both can coexist.
+
+### Search indexes — needle-in-haystack lookups
+`CREATE SEARCH INDEX` + `SEARCH()` serves point lookups (an ID or email anywhere
+in wide log tables) without full scans — the GDPR "find this identifier" tool.
+
+### Continuous queries — SQL-only streaming
+A continuous query runs perpetually over arriving rows and writes results onward
+(table, Pub/Sub). SQL-shaped streaming transforms without a pipeline; complex
+event-time logic still → Dataflow.
+
+### Mixed workloads: split your reservations
+Latency-sensitive dashboards and cost-tolerant ETL fight over slots. The pattern:
+an **editions reservation with a baseline + autoscaling** sized for the
+SLA-critical workload, and a **separate reservation — or on-demand billing — for
+ad-hoc/ETL** (on-demand when the requirement says "bill by data scanned"). Don't
+set the baseline to the spike; that's what autoscaling is for.
+
 ## 🎯 Exam Focus
 
 | Scenario | Answer |

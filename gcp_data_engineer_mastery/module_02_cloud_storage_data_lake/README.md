@@ -97,6 +97,34 @@ BigQuery security/metadata over GCS without loading. This is the modern "lakehou
 
 ---
 
+## 6. Getting Data In: Transfer Options & the Bandwidth Math
+
+A recurring exam item gives you a data volume, a link speed, and a deadline —
+**do the math before picking a tool** (time ≈ volume ÷ effective bandwidth; e.g.,
+400 TB over 100 Mbps ≈ a year — no software fixes that):
+
+| Scenario | Answer |
+|---|---|
+| < a few TB, one-off, decent bandwidth | `gcloud storage cp` / `gsutil` (parallel composite uploads for big files) |
+| Large, recurring/scheduled transfers; S3, HTTP, or on-prem NAS sources | **Storage Transfer Service** (agent pools for on-prem, incremental sync) |
+| Tens of TB–PB over a weak link, or a deadline the math can't meet | **Transfer Appliance** — physical device shipped, loaded locally, ingested by Google |
+| Google SaaS (Ads, GA4, YouTube) or S3/Redshift/Teradata → BigQuery | **BigQuery Data Transfer Service** (also loads **from GCS to BigQuery** on a schedule — a no-code path) |
+| Continuous database change replication | **Datastream** (CDC — Module 13) |
+
+### Cold, Immutable Archives (compliance pattern)
+For data read once or twice a year that must be **immutable for N years** at
+minimum cost: **export from BigQuery to Cloud Storage**, set the object class to
+**Archive**, apply a **locked retention policy** (WORM — nobody, not even owners,
+can delete early), and keep it queryable on the rare occasion you need it via a
+**BigQuery external table**. This beats keeping it in BigQuery native storage
+(even long-term pricing) and beats snapshots/clones for multi-year immutability.
+
+### Tiering & Multi-Cloud Exposure
+BigQuery serves the *active* analytics; a GCS copy (often compressed
+Avro/Parquet) serves *file-based consumers* — other clouds, partners, replays.
+Same lakehouse thinking as the zoning pattern above: BigQuery is a consumer of
+the lake, GCS is the interchange format.
+
 ## 🎯 Exam Focus
 
 | Scenario | Answer |

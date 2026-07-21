@@ -80,6 +80,45 @@ WHERE o.order_date = CURRENT_DATE();
 
 ---
 
+## 6. Exam Deep Dive: Formats, Consistency & Sharing
+
+### File formats for loading
+Prefer **Avro** (or Parquet) over CSV/JSON for serious pipelines: self-describing
+schema, preserves **nested/repeated** structures, compresses well, and — critically
+— compressed Avro/Parquet **load in parallel**. Gzipped CSV/JSON is *not splittable*,
+so one file = one reader. "Transform text files to compressed Avro with Dataflow,
+land in GCS, load/link to BigQuery" is a canonical pattern.
+
+### Legacy SQL vs GoogleSQL (standard SQL)
+Old datasets may contain **legacy SQL views** — these can't be consumed through
+modern interfaces (ODBC/JDBC drivers require standard SQL). Fix: **recreate the
+view in GoogleSQL** and authenticate tools via a **service account**. On the exam,
+"legacy SQL" in a scenario is almost always the thing to migrate away from.
+
+### Streaming-insert visibility vs batch consistency
+Streaming rows are queryable within seconds, but an aggregation issued *immediately*
+after inserts may miss in-flight rows. If the app **requires read-after-write
+consistency for aggregates**, accumulate and use **batch loads** (each load job is
+atomic — readers see all of it or none of it) or query with a small delay.
+
+### Large query results → destination tables
+Interactive results have size caps and get discarded. For "retrieve a huge result
+set and query it further," set a **destination table** on the query job (with
+`allow_large_results` semantics) — the result becomes a normal table for follow-on
+SQL. Cheap, low-maintenance, no export loop.
+
+### Sharing without copying
+- **Authorized views / authorized datasets**: consumers query the view without
+  access to base tables — and **query costs bill to the consumer's project**, a
+  detail the exam loves ("analysis costs assigned to the requesting team").
+- **Analytics Hub**: publish/subscribe dataset sharing across orgs, no copies.
+
+### Multi-cloud: BigQuery Omni + BigLake
+Data in **AWS S3 / Azure Blob** can be queried from BigQuery without moving it:
+**BigQuery Omni** runs BigQuery compute in the other cloud, and **BigLake tables**
+over S3/GCS give governed access (users query tables; they never touch buckets).
+"Query up-to-date data across clouds from one SQL surface" → Omni + BigLake.
+
 ## 🎯 Exam Focus
 
 | Scenario | Answer |

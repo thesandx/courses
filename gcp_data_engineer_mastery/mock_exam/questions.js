@@ -1734,4 +1734,224 @@ o: [
 a: 1,
 e: "Groups are the recommended grant target: IAM policy stays stable while membership handles joiners/leavers, and access reviews happen in one place. Shared keys and per-user grants are the anti-patterns this question type punishes."
 }
+,
+
+// ============ Additions from the full-bank sweep (every ~5th question) ============
+
+{
+d: "BigQuery",
+q: "An app performs streaming inserts into BigQuery and immediately runs an aggregation, but the results sometimes miss rows that were just written. The aggregates must be complete when they run. What's the recommended redesign?",
+o: [
+"Retry the aggregation until the numbers stop changing.",
+"Accumulate messages and use periodic batch load jobs (each load is atomic), running the aggregation after each completed load.",
+"Route the inserts through Cloud SQL first.",
+"Wait exactly twice the average streaming latency before querying."
+],
+a: 1,
+e: "Streamed rows become visible within seconds but there's no guarantee an immediate query sees every in-flight row. Batch load jobs are atomic — after the job completes, queries see all of the data — so accumulate-and-load (e.g., every couple of minutes) is the design when aggregate completeness matters more than second-level latency."
+},
+{
+d: "BigQuery",
+q: "Analysts consuming a dataset via ODBC report errors against an old view. You discover the view is written in legacy SQL. What do you do?",
+o: [
+"Tell them ODBC isn't supported by BigQuery.",
+"Recreate the view in GoogleSQL (standard SQL) — drivers and modern tooling require it — and authenticate the connection with a service account.",
+"Enable a legacy-SQL flag on the ODBC driver.",
+"Export the view to CSV nightly."
+],
+a: 1,
+e: "Legacy SQL views are a compatibility dead end: standard-SQL consumers (ODBC/JDBC, most modern tooling) can't use them. Migrate the view to GoogleSQL; connections from BI tools authenticate via a service account with dataset-scoped read access."
+},
+{
+d: "BigQuery",
+q: "A query produces a very large result set that analysts need to keep querying for further analysis, with low maintenance and cost. What's the built-in mechanism?",
+o: [
+"Copy-paste results into a new project.",
+"Run the query with a destination table (allowing large results) so the output is materialized as a normal table for follow-on SQL.",
+"Export to Sheets.",
+"Increase the interactive result-size limit in settings."
+],
+a: 1,
+e: "Query jobs can write results straight into a destination table — bypassing interactive result-size limits and turning the result into a first-class table for further queries. No export loops, no extra services."
+},
+{
+d: "BigQuery",
+q: "Your company stores analytical data in both Cloud Storage and AWS S3 (all US). Analysts must query all of it from BigQuery with up-to-date results, without being granted direct access to the buckets. What's the design?",
+o: [
+"Nightly copy jobs from S3 into BigQuery.",
+"BigQuery Omni for the S3 side, with BigLake tables over both the GCS and S3 data — users query governed tables, never the storage.",
+"Public bucket URLs referenced in views.",
+"A federated Cloud SQL proxy in AWS."
+],
+a: 1,
+e: "BigQuery Omni runs BigQuery's engine next to the data in AWS/Azure, and BigLake tables add governed, table-level access (users need no storage permissions) with fine-grained security. That combination answers 'query in place across clouds, no direct bucket access'."
+},
+{
+d: "BigQuery",
+q: "You expose user-level data as aggregates to other projects via an authorized view. Who pays for the queries the consuming teams run against the view?",
+o: [
+"Your project — the view lives there.",
+"The consuming project that runs the query — compute/bytes-scanned bill to the query's billing project, which is exactly why authorized views suit 'costs assigned to each analyzing team'.",
+"Google absorbs cross-project query costs.",
+"Costs are split 50/50 automatically."
+],
+a: 1,
+e: "Query cost follows the project that issues the job, not the project that owns the data. An authorized view therefore shares curated results while each consumer's analysis lands on their own bill — a detail scenario questions test explicitly."
+},
+{
+d: "Orchestration & Integration",
+q: "A data analyst needs a fully managed, no-code way to load 200 CSV files (~15 MB each) that land daily in a GCS bucket into BigQuery, with a SQL transformation afterward. What do you recommend?",
+o: [
+"A custom Cloud Run service triggered by Cloud Scheduler.",
+"BigQuery Data Transfer Service configured with the bucket as a source on a daily schedule, plus a scheduled query for the SQL transform.",
+"A Spark job on Dataproc.",
+"Manual bq load commands each morning."
+],
+a: 1,
+e: "BQ DTS isn't only for SaaS sources — it also runs scheduled Cloud Storage → BigQuery loads with zero code, and a scheduled query covers the transform. For an analyst-owned pipeline, that no-code pairing beats writing services or Spark; the key fact to remember is that DTS supports Cloud Storage as a scheduled source."
+},
+{
+d: "Pub/Sub & Streaming",
+q: "A push subscription feeds an event-driven consumer that occasionally goes down or gets overloaded. Requirements: tolerate downtime, retry failed messages gradually without hammering the recovering app, and park messages after 10 failed attempts. How do you configure it?",
+o: [
+"Raise the ack deadline to the maximum.",
+"Set the subscription retry policy to exponential backoff and attach a dead-letter topic (a different topic) with max delivery attempts = 10.",
+"Use immediate redelivery with a dead-letter to the same source topic.",
+"Switch to daily batch delivery."
+],
+a: 1,
+e: "Exponential backoff spaces out redeliveries so a recovering consumer isn't stampeded; the dead-letter topic (never the source topic — that would loop) captures poison messages after the attempt limit. Message retention covers the downtime itself."
+},
+{
+d: "Orchestration & Integration",
+q: "A SQL aggregation must run every 2 hours, append to a table, retry on failure, and email the team after repeated failures. The team already runs Cloud Composer. Which implementation fits?",
+o: [
+"A BigQuery scheduled query — it supports retries and escalation emails after N failures.",
+"A Composer DAG using BigQueryInsertJobOperator with retries set and email_on_failure enabled.",
+"A cron job on a GCE VM calling bq query.",
+"A Cloud Function with no retry configuration."
+],
+a: 1,
+e: "Airflow operators carry exactly the knobs the requirements name: retries/retry_delay per task and email_on_failure notifications. Scheduled queries can notify on failure but don't give the same retry-then-escalate semantics; since Composer is already running, the operator is the fit."
+},
+{
+d: "Orchestration & Integration",
+q: "A Cloud Workflows workflow calls an API returning a small JSON payload and must apply business logic too complex for the Workflows standard library, then continue to a BigQuery load step. Optimizing for simplicity and speed, what do you add?",
+o: [
+"A Cloud Composer environment for the logic step.",
+"A Cloud Function (Python) invoked from the workflow to apply the logic and return the result.",
+"A Dataproc cluster running PySpark on the 1 KB payload.",
+"Rewrite everything as one giant BigQuery UDF."
+],
+a: 1,
+e: "For a small payload needing real code inside a Workflows sequence, invoking a Cloud Function is the lightweight, serverless answer. Spinning up Composer or a Spark cluster for 1 KB of JSON is the over-engineering the wrong options represent."
+},
+{
+d: "Security & Governance",
+q: "Two datasets must be joined on the email column, but analysts may never see real emails. Which de-identification approach keeps the join working?",
+o: [
+"DLP masking (replace characters with *).",
+"DLP deterministic tokenization / format-preserving encryption (FPE-FFX) — the same email always maps to the same token, so equality joins still match.",
+"Delete the email column from both datasets.",
+"Hash one dataset and mask the other."
+],
+a: 1,
+e: "Masking destroys linkage; deterministic FPE tokenization replaces each value consistently in both datasets, so joins on the tokenized field behave exactly like joins on the original — and re-identification requires the key. This masking-vs-tokenization distinction is a recurring exam trap."
+},
+{
+d: "Security & Governance",
+q: "You must share part of a CMEK-encrypted BigQuery dataset with a partner org that has no access to your KMS key. What's the supported pattern?",
+o: [
+"Send them an exported copy of the key.",
+"Copy the shareable tables into a dataset without CMEK and publish that via Analytics Hub (or an authorized view over the copy).",
+"Grant them roles/cloudkms.cryptoKeyDecrypter on your key.",
+"CMEK datasets simply cannot be shared with anyone."
+],
+a: 1,
+e: "Consumers of CMEK data need the key — which you don't hand to outside orgs. The pattern is a curated copy in a non-CMEK (Google-default-encrypted) dataset, shared through Analytics Hub. Granting external orgs your key or exporting it defeats CMEK's purpose."
+},
+{
+d: "Security & Governance",
+q: "In a Dataplex-based data mesh, data engineering teams need full control of their domain's lake while analysts should only consume curated data products. Which grants implement this cleanly?",
+o: [
+"BigQuery dataOwner on all datasets for everyone, filtered by etiquette.",
+"dataplex.dataOwner for the engineering teams on their lake, and dataplex.dataReader for analysts on the curated zone — Dataplex propagates access to the underlying assets.",
+"storage.admin for engineers and bigquery.user for analysts at the org level.",
+"Per-table IAM maintained by hand."
+],
+a: 1,
+e: "Dataplex's own roles applied at lake/zone level are the point of using Dataplex for a mesh: producers own their domain, consumers read the curated zone, and the grants propagate to the BigQuery datasets and GCS buckets underneath instead of being managed asset by asset."
+},
+{
+d: "Dataflow & Beam",
+q: "A batch Dataflow job starts, processes a few elements, then fails; the monitoring UI shows repeated errors attributed to one DoFn. What's the most likely cause?",
+o: [
+"A zonal outage.",
+"Unhandled exceptions in that DoFn's code — Dataflow retries the bundle (4 times in batch) and then fails the job; inspect worker logs and catch-and-dead-letter the offending records.",
+"Insufficient IAM permissions on the output bucket.",
+"The watermark advanced too quickly."
+],
+a: 1,
+e: "Errors pinned to a specific transform with retry-then-fail behavior are the signature of worker-code exceptions on certain records. Permission or infrastructure problems fail differently (at startup / at the sink). The fix: defensive parsing with a dead-letter side output."
+},
+{
+d: "Migration & Networking",
+q: "An Oracle database runs on a VM inside your VPC. You must continuously replicate 50 tables to BigQuery while minimizing infrastructure you manage. Which approach?",
+o: [
+"Deploy Kafka + Debezium + a BigQuery sink connector in the VPC.",
+"Datastream with a private connectivity configuration into the VPC and BigQuery as the destination.",
+"Cron-driven full exports every 15 minutes.",
+"A custom JDBC poller on GKE."
+],
+a: 1,
+e: "Datastream is the serverless CDC service: log-based capture from Oracle, direct BigQuery destination, and private connectivity keeps traffic inside the VPC. The Kafka/Debezium stack achieves the same result but is exactly the self-managed infrastructure the requirement rules out."
+},
+{
+d: "Reliability & Cost",
+q: "You need an instant notification whenever an insert job appends data to one specific BigQuery table — and no noise from other tables. What's the design?",
+o: [
+"Poll the logs API every minute and filter client-side.",
+"A Cloud Logging sink with an advanced filter scoped to that table's insert-job audit events, exporting to Pub/Sub, with your notifier subscribed to the topic.",
+"A log sink exporting everything to BigQuery.",
+"A Cloud Monitoring uptime check on the table."
+],
+a: 1,
+e: "The advanced log filter narrows to exactly the audit-log entries you care about; the Pub/Sub sink turns each match into a push event your tooling consumes immediately. Sinking to BigQuery stores logs (good for audits) but notifies no one; polling adds latency and cost."
+},
+{
+d: "Reliability & Cost",
+q: "You run MariaDB on Compute Engine VMs and need database metrics (connections, replication status) plus dashboards and alerts in Cloud Monitoring with minimal development. What do you do?",
+o: [
+"Nothing — GCE VMs export database metrics automatically.",
+"Install the Ops Agent on the VMs and enable its MySQL/MariaDB integration; add custom metrics via OpenTelemetry only for anything the integration doesn't cover.",
+"Build a custom exporter fleet from scratch first.",
+"Migrate to Cloud SQL tonight."
+],
+a: 1,
+e: "Self-managed databases need the Ops Agent; its MySQL-family integration ships the standard database metrics into Cloud Monitoring where dashboards/alerting work natively. Writing custom collection first is the high-effort distractor — reserve custom metrics for true gaps."
+},
+{
+d: "ML & Analytics",
+q: "Your data processing and cleaning for a sales-conversion model is complete. Following the model development lifecycle, what comes next?",
+o: [
+"Run predictions on fresh customer data.",
+"Split the data — decide what's used for training vs validation/testing — before any training or evaluation.",
+"Deploy the model to an endpoint.",
+"Monitor production performance."
+],
+a: 1,
+e: "Lifecycle order is tested directly: prepare data → split train/validation/test → train → evaluate on held-out data → tune → then predict/deploy/monitor. Evaluating or predicting before a principled split invalidates your metrics (leakage)."
+},
+{
+d: "ML & Analytics",
+q: "Executives say a Looker Studio dashboard doesn't show orders from the past hour, though the BigQuery table has them. Queries themselves are fast. What's the first thing to adjust?",
+o: [
+"Add more slots to the project.",
+"The report's data freshness (cache) setting — Looker Studio serves cached results; shorten the refresh interval or refresh manually.",
+"Rebuild the dashboard from scratch.",
+"Partition the underlying table."
+],
+a: 1,
+e: "Stale-but-fast is the cache signature: Looker Studio refreshes data on an interval (default 12 hours for BigQuery). Shortening data freshness fixes staleness. (Slow dashboards are the different problem — that's BI Engine / materialized-view territory.)"
+}
 ];

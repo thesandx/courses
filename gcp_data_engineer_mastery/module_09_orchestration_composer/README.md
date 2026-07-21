@@ -87,6 +87,39 @@ BigQueryInsertJobOperator(
 
 ---
 
+## 6. Choosing a Trigger, a Scheduler & a Cleansing Tool
+
+### The orchestrator decision (sharper)
+| Requirement | Answer |
+|---|---|
+| Multi-step pipeline with **dependencies** across Dataproc/Dataflow/BigQuery, managed | **Cloud Composer** |
+| One job on a fixed schedule (nightly Dataflow batch) | **Cloud Scheduler** (not a whole Composer env) |
+| Sequence a few HTTP/Cloud Run/Function calls, serverless, pay-per-step | **Cloud Workflows** — and when a step needs real code (complex logic the Workflows stdlib can't express), have Workflows **invoke a Cloud Function** |
+| Spark-only DAG, no external systems | **Dataproc Workflow Templates** |
+| BigQuery-only SQL on a schedule | **Scheduled queries**; graduate to Composer's `BigQueryInsertJobOperator` when you need `retries`, `retry_delay`, and `email_on_failure` semantics |
+
+### Event-driven DAG runs (no fixed arrival time)
+Files landing unpredictably in GCS should not be polled on a schedule: a Cloud
+Storage **object-finalize trigger** fires a **Cloud Function** (or Eventarc) that
+calls the **Airflow REST API to trigger one parameterized DAG**, passing the
+object name in the run conf. One DAG per pipeline shape — not per file, not per
+table when the logic is identical.
+
+### Cleansing dirty inputs (three tiers)
+1. **Data Fusion Wrangler** (historically "Dataprep" in exam answers): visual,
+   interactive prep for analysts — profile a sample, build recipes/directives,
+   run at scale on a schedule; handles recurring schema drift without code.
+2. **ELT staging pattern**: load raw CSVs into an all-`STRING` staging table
+   (never fails to parse), fix with SQL (`SAFE_CAST`, `REGEXP_REPLACE`), then
+   `MERGE` into the typed production table.
+3. **Dataflow with a dead-letter output** when cleansing needs real code or
+   runs in-stream (Module 7).
+
+### No-code load paths worth knowing
+**BigQuery Data Transfer Service** also loads **from GCS to BigQuery on a
+schedule** — pair with a scheduled SQL transform for a fully managed, no-code
+daily ingest an analyst can own.
+
 ## 🎯 Exam Focus
 
 | Scenario | Answer |

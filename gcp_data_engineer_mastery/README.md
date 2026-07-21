@@ -34,21 +34,21 @@ decision table and 4–6 practice questions modeled on the real item style.
 
 | # | Module | You Will Master |
 |---|--------|-----------------|
-| 01 | **[Foundations & GCP Data Landscape](module_01_foundations/README.md)** | Projects, IAM, APIs, resource hierarchy, `gcloud`/`bq`/`gsutil`, the exam blueprint, and a service-selection mental model |
-| 02 | **[Cloud Storage & Data Lakes](module_02_cloud_storage_data_lake/README.md)** | Storage classes, lifecycle, autoclass, object versioning, and lakehouse zoning (raw/curated/consumer) |
-| 03 | **[BigQuery Fundamentals](module_03_bigquery_fundamentals/README.md)** | Datasets, schemas, loading, external/BigLake tables, and standard SQL |
-| 04 | **[BigQuery at Scale](module_04_bigquery_at_scale/README.md)** | Partitioning, clustering, slots vs on-demand, materialized views, cost & performance tuning |
-| 05 | **[Choosing the Right Database](module_05_choosing_a_database/README.md)** | Cloud SQL, Spanner, Bigtable, Firestore, Memorystore — CAP tradeoffs and a decision tree |
-| 06 | **[Streaming Ingestion with Pub/Sub](module_06_pubsub_streaming_ingestion/README.md)** | Topics, subscriptions, ordering, dead-letter, exactly-once, schemas, and BigQuery/GCS subscriptions |
-| 07 | **[Dataflow & Apache Beam](module_07_dataflow_beam/README.md)** | Unified batch/stream, windowing, watermarks, triggers, and exactly-once processing |
-| 08 | **[Dataproc & Spark](module_08_dataproc_spark/README.md)** | Ephemeral clusters, Serverless Spark, autoscaling, and Hadoop→GCP migration |
-| 09 | **[Orchestration with Cloud Composer](module_09_orchestration_composer/README.md)** | Airflow DAGs, operators, sensors, backfills, and idempotent pipelines |
-| 10 | **[Governance, Security & Quality](module_10_governance_security/README.md)** | IAM deep-dive, CMEK/KMS, DLP, Dataplex, VPC Service Controls, and lineage |
-| 11 | **[ML & Analytics Integration](module_11_ml_analytics/README.md)** | BigQuery ML, Vertex AI, feature pipelines, and Looker / Looker Studio |
-| 12 | **[Reliability, Monitoring & Cost](module_12_reliability_cost/README.md)** | SLOs, Cloud Monitoring, budgets/quotas, and CI/CD for data pipelines |
+| 01 | **[Foundations & GCP Data Landscape](module_01_foundations/README.md)** | Projects, IAM, APIs, resource hierarchy, `gcloud`/`bq`/`gsutil`, the exam blueprint, a service-selection mental model, and the open-source ↔ GCP service map (Kafka/HBase/Cassandra/Hive → Pub/Sub/Bigtable/BigQuery) |
+| 02 | **[Cloud Storage & Data Lakes](module_02_cloud_storage_data_lake/README.md)** | Storage classes, lifecycle, autoclass, versioning, lakehouse zoning, transfer-tool selection with bandwidth math, and locked-retention archive patterns |
+| 03 | **[BigQuery Fundamentals](module_03_bigquery_fundamentals/README.md)** | Datasets, schemas, loading (Avro vs CSV), external/BigLake tables, standard vs legacy SQL, authorized views & Analytics Hub, and BigQuery Omni multi-cloud |
+| 04 | **[BigQuery at Scale](module_04_bigquery_at_scale/README.md)** | Partitioning vs sharding (wildcard tables), clustering, slots/reservations for mixed workloads, materialized views, BI Engine, search indexes, and continuous queries |
+| 05 | **[Choosing the Right Database](module_05_choosing_a_database/README.md)** | Cloud SQL, Spanner (keys & interleaving), Bigtable (Key Visualizer, SSD/HDD, HBase API), AlloyDB HTAP, Firestore, Memorystore — tradeoffs and a decision tree |
+| 06 | **[Streaming Ingestion with Pub/Sub](module_06_pubsub_streaming_ingestion/README.md)** | Topics, subscriptions, ordering, dead-letter + exponential-backoff retry design, exactly-once, schemas, BigQuery/GCS subscriptions, and Kafka bridges |
+| 07 | **[Dataflow & Apache Beam](module_07_dataflow_beam/README.md)** | Unified batch/stream, windowing, watermarks, triggers, exactly-once, side outputs & dead-letter handling, debugging DoFn failures, and private/Shared-VPC networking |
+| 08 | **[Dataproc & Spark](module_08_dataproc_spark/README.md)** | Ephemeral clusters, Serverless Spark, autoscaling with graceful decommission & EFM, local-SSD tuning, Dataproc Metastore, and Hadoop→GCP migration |
+| 09 | **[Orchestration with Cloud Composer](module_09_orchestration_composer/README.md)** | Airflow DAGs, operators (retry/email params), sensors, backfills, idempotency, event-driven triggering, Scheduler vs Workflows vs Composer, and Wrangler/ELT cleansing |
+| 10 | **[Governance, Security & Quality](module_10_governance_security/README.md)** | IAM deep-dive (groups!), CMEK/KMS & CMEK-sharing patterns, DLP incl. joinable FPE tokenization, Dataplex data-mesh roles, VPC Service Controls, and lineage |
+| 11 | **[ML & Analytics Integration](module_11_ml_analytics/README.md)** | BigQuery ML, Vertex AI, feature pipelines, classic ML theory (feature crosses, wide & deep, embeddings, L1/L2, tuning), and Looker / Looker Studio freshness |
+| 12 | **[Reliability, Monitoring & Cost](module_12_reliability_cost/README.md)** | SLOs, Cloud Monitoring, log-based alerting, Ops Agent, budgets/quotas, and CI/CD for data pipelines |
+| 13 | **[Migration & Hybrid Connectivity](module_13_migration_hybrid_connectivity/README.md)** | Transfer Appliance & the bandwidth math, Interconnect/VPN, Private Google Access, Datastream private-connectivity CDC, Shared VPC roles, and Kafka/Hadoop estate migration |
 | 🏆 | **[Capstone: RideShare Analytics Platform](capstone/README.md)** | A complete streaming + batch lakehouse that applies every module |
-| 📎 | **[Exam Topics Appendix](EXAM_TOPICS_APPENDIX.md)** | Gap-closing notes mapped to the real exam's question bank: AlloyDB, BI Engine, sharded vs partitioned tables, interleaved tables, Key Visualizer, Transfer Appliance, private connectivity, side outputs, feature crosses/embeddings, and more |
-| 🎯 | **[Mock Exam](mock_exam/README.md)** | An interactive, browser-based practice exam — 141 original PDE-style questions with instant feedback, explanations, and a per-domain score breakdown (open `mock_exam/index.html`) |
+| 🎯 | **[Mock Exam](mock_exam/README.md)** | An interactive, browser-based practice exam — 159 original PDE-style questions with instant feedback, explanations, and a per-domain score breakdown (open `mock_exam/index.html`) |
 
 ## Prerequisites & Tooling
 
@@ -95,7 +95,8 @@ flowchart LR
     I --> J[10 Governance]
     J --> K[11 ML & BI]
     K --> L[12 Reliability & Cost]
-    L --> Z[🏆 Capstone]
+    L --> M[13 Migration & Hybrid]
+    M --> Z[🏆 Capstone]
 ```
 
 Storage → analytics → databases forms the **"store"** foundation; Pub/Sub → Dataflow →

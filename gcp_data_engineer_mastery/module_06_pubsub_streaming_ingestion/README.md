@@ -80,6 +80,30 @@ dead_letter_policy {
 
 ---
 
+## 6. Push Resilience, Retry Policies & Kafka Bridges
+
+### Designing a resilient push subscription
+When a push consumer (Cloud Run, an HTTP endpoint) has downtime or gets
+overwhelmed, three knobs combine into the standard design:
+1. **Retry policy = exponential backoff** (not immediate redelivery) — failed
+   messages return gradually, so a recovering consumer isn't stampeded.
+2. **Dead-letter topic with a max delivery attempts** (e.g., 10) — messages that
+   keep failing park in a *different* topic (never the source topic — that would
+   loop) for inspection and replay.
+3. Unacked messages are retained (default 7 days), so consumer downtime alone
+   loses nothing — the backlog drains on recovery.
+
+The trio "survive downtime + retry gradually + capture poison messages after N
+attempts" maps 1:1 to backoff policy + DLQ + retention.
+
+### Replay & the Kafka boundary
+Pub/Sub replays acked messages via **topic retention / retain-acked + seek**
+(timestamp or snapshot) — within the retention window. If the requirement is
+*seek to any offset back to the beginning of all history ever captured*, that's
+**Kafka's** log model; keep Kafka (or Managed Service for Apache Kafka) and
+bridge to GCP with the **Pub/Sub Kafka connector** or Dataflow `KafkaIO` rather
+than forcing a migration.
+
 ## 🎯 Exam Focus
 
 | Scenario | Answer |

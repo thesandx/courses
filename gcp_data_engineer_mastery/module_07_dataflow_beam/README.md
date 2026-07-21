@@ -97,6 +97,40 @@ with beam.Pipeline(options=opts) as p:
 
 ---
 
+## 6. Side Outputs, Debugging & Pipeline Networking
+
+### Tagged (side) outputs — the dead-letter pattern
+A single `ParDo` can emit to **multiple tagged outputs** (`TupleTag`s): valid
+records to the main `PCollection`, corrupt/unparseable ones — with error context —
+to a **dead-letter output** written to a BigQuery table or GCS for inspection and
+replay. This is the exam's answer to "divert malformed records without dropping
+them or crashing." Don't confuse with **side inputs**, which broadcast small
+lookup data *into* a ParDo.
+
+### Debugging a failing job
+A batch job that starts, processes a few elements, then fails with errors pointing
+at a specific `DoFn` almost always means **unhandled exceptions in your worker
+code** — Dataflow retries the bundle (4× in batch) and then fails the job. Read
+the worker logs in the monitoring UI, fix or catch-and-dead-letter the offending
+records. Infrastructure explanations (zones, quotas) come with different error
+signatures.
+
+### Monitoring: the metric names matter
+- Source: `subscription/num_undelivered_messages` growing and
+  `subscription/oldest_unacked_message_age` rising = pipeline not consuming.
+- Pipeline: **system lag** and **data watermark age** growing = falling behind.
+- Sink: output write rate flat-lining confirms stalled production.
+A "healthy-looking" job (status Running, normal CPU) can still be stuck — alert on
+these user-facing signals, not on worker counts.
+
+### Networking the workers
+- **No public IPs**: launch with public IPs disabled and rely on **Private Google
+  Access** on the subnetwork so workers reach GCS/BigQuery/Pub/Sub privately.
+- **Shared VPC**: workers run in a host-project subnetwork; grant the **Dataflow
+  service agent** (and worker SA) the **`compute.networkUser`** role on that
+  subnetwork in the host project — the classic missing-permission failure when
+  jobs won't start on Shared VPC.
+
 ## 🎯 Exam Focus
 
 | Scenario | Answer |

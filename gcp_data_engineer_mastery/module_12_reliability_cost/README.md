@@ -85,6 +85,34 @@ flowchart LR
 
 ---
 
+## 6. Monitoring Patterns the Exam Asks By Name
+
+### Log-based notifications with advanced filters
+"Notify me the instant an insert job appends to *this specific table* — and no
+others" is a **Cloud Logging** problem: create a **log sink with an advanced
+filter** scoped to the exact resource/method, export to **Pub/Sub**, and subscribe
+your notification tool. Listing/polling logs via API or sinking everything to
+BigQuery doesn't *notify*; the sink→Pub/Sub push does.
+
+### Self-managed databases on GCE
+A MariaDB/MySQL you run on Compute Engine isn't monitored by default. Install the
+**Ops Agent** and enable its **MySQL/MariaDB integration** for database metrics
+(connections, replication status), and treat anything the integrations don't
+export as **custom metrics** (OpenTelemetry/OpenCensus exporters). Managed Cloud
+SQL ships these metrics natively — a reason the exam contrasts the two.
+
+### Streaming pipeline signals (memorize the metric names)
+`subscription/num_undelivered_messages` (backlog),
+`subscription/oldest_unacked_message_age` (freshness breach), Dataflow **system
+lag** / **data watermark age**, plus a sink-side output rate. Alert on
+*user-facing symptoms* (backlog, staleness), not worker counts or CPU.
+
+### Provisioning is code too
+"Efficiently provision GPU/local-SSD data infrastructure and manage deployments"
+→ **Terraform applied by Cloud Build** (CI/CD-driven IaC), the same pipeline
+that ships DAGs and Dataflow code. Startup scripts and hand-run gcloud are the
+distractor options.
+
 ## 🎯 Exam Focus
 
 | Scenario | Answer |

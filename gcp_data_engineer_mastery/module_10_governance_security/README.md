@@ -87,6 +87,39 @@ assets**, adding:
 
 ---
 
+## 6. Data Mesh IAM, CMEK Sharing & Joinable De-identification
+
+### Dataplex-powered data mesh (the current exam's pet architecture)
+Multiple domain teams build data products; a central platform governs. Dataplex
+organizes assets into **lakes and zones** (raw/curated), and access uses
+**Dataplex's own roles** so permissions propagate to the underlying BigQuery/GCS
+assets: producers (data engineers) get **`dataplex.dataOwner`** on their domain's
+lake; consumers (analysts) get **`dataplex.dataReader`** on the **curated zone**
+only. Granting raw BigQuery/GCS roles per asset is the anti-pattern the wrong
+options describe.
+
+### CMEK datasets can't be shared past the key
+A partner without access to your Cloud KMS key cannot read a CMEK-protected
+dataset — and you never hand out key copies. The pattern: **copy the shareable
+slice into a non-CMEK dataset and publish it via Analytics Hub** (or an
+authorized view over non-CMEK copies). Remember the reverse too: revoking the
+key is your data kill-switch.
+
+### De-identification that preserves joins
+DLP masking destroys joinability (`j***@x.com` ≠ deterministic). When analysts
+must **join on a de-identified field** (e.g., email across two datasets), use
+**format-preserving encryption (FPE-FFX)** or deterministic tokenization — the
+same input always yields the same token, so joins still work and the transform
+is reversible only with the key. Masking/redaction is for display, tokenization
+is for linkage.
+
+### IAM hygiene the exam rewards
+- Grant roles to **groups**, not individuals — membership handles joiners/leavers.
+- **Predefined roles** over primitive Owner/Editor/Viewer; custom only when
+  predefined over-grant.
+- Workloads use **attached service accounts** (one per pipeline, least privilege,
+  narrowest scope); never exported JSON keys.
+
 ## 🎯 Exam Focus
 
 | Scenario | Answer |

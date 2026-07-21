@@ -120,6 +120,30 @@ KV / document / analytical), **cost model** (serverless vs provisioned), and
 
 ---
 
+## 6. Open-Source ↔ GCP Service Map (a real-exam favorite)
+
+Many exam questions describe an **open-source stack** and ask for its GCP landing
+zone — or describe requirements that only one OSS tool satisfies. Know both
+directions cold:
+
+| Open source | GCP managed counterpart | Nuance the exam tests |
+|---|---|---|
+| Apache Kafka | **Pub/Sub** (or **Managed Service for Apache Kafka**) | Kafka is the answer when the requirement is *seek to an arbitrary offset / replay all history ever captured* with per-key ordering across hundreds of topics; Pub/Sub replays via retention + seek within its window. Bridge estates with the **Pub/Sub Kafka connector** or Dataflow `KafkaIO` |
+| Apache HBase | **Bigtable** | Bigtable exposes an **HBase-compatible API** — near-zero app change |
+| Apache Cassandra | **Bigtable** | Same wide-column model; partition-key thinking → row-key design |
+| MongoDB | **Firestore** | Document model, serverless scaling |
+| HDFS | **Cloud Storage** | The GCS connector makes `gs://` a drop-in for `hdfs://` |
+| Apache Hive | **BigQuery** (or Hive on Dataproc) | HiveQL over Parquet/ORC in GCS → BigQuery external/BigLake tables for minimal-ops SQL |
+| Apache Spark / Hadoop MR | **Dataproc / Dataproc Serverless** | Lift-and-shift jobs; Serverless removes cluster ops |
+| Apache Airflow | **Cloud Composer** | Existing DAGs port with minimal change |
+| Apache Beam | **Dataflow** | Beam is the SDK; Dataflow is the managed runner |
+| Redis / Memcached | **Memorystore** | Sub-ms cache, rebuildable data |
+
+When a question lists NoSQL candidates (HBase, Cassandra, MongoDB, Redis, Hive),
+match on *data model + latency + scale*: wide-column high-write → HBase/Cassandra
+(→ Bigtable); document → MongoDB (→ Firestore); in-memory cache → Redis
+(→ Memorystore); SQL-on-files → Hive (→ BigQuery).
+
 ## 🎯 Exam Focus
 
 | If the question says… | Reach for… | Because |
